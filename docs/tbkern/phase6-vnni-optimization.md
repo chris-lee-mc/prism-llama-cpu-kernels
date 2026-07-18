@@ -21,3 +21,4 @@ Validation gates for this phase are:
 * deterministic logits and generated-token parity against native Prism;
 * one-chunk `llama-perplexity` equality within the existing tolerance;
 * matched `llama-bench` measurements on the same host and thread count.
+Build validation: a temporary C3 c3-highmem-4 compiled llama-debug, llama-bench, and llama-perplexity with -march=native and AVX-512VNNI present; the VM was deleted afterward. Real-model parity and timing for this revision remain Phase 7 because the validation VM did not contain the 27B GGUF.
