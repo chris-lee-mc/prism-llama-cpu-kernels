@@ -4589,8 +4589,17 @@ static bool tbkern_q2_0_vnni64_enabled() {
 #endif
 }
 
+static bool tbkern_q2_0_vnni64_4r_enabled() {
+#if defined(__AVX512F__) && defined(__AVX512VNNI__)
+    const char * v = std::getenv("GGML_TBKERN_Q2_0_VNNI64_4R");
+    return v && (std::strcmp(v, "1") == 0 || std::strcmp(v, "true") == 0 || std::strcmp(v, "on") == 0) && ggml_cpu_has_avx512_vnni();
+#else
+    return false;
+#endif
+}
+
 static bool tbkern_q2_0_enabled() {
-    return tbkern_q2_0_scalar_enabled() || tbkern_q2_0_avx2_enabled() || tbkern_q2_0_vnni_enabled() || tbkern_q2_0_vnni64_enabled();
+    return tbkern_q2_0_scalar_enabled() || tbkern_q2_0_avx2_enabled() || tbkern_q2_0_vnni_enabled() || tbkern_q2_0_vnni64_enabled() || tbkern_q2_0_vnni64_4r_enabled();
 }
 
 static bool tbkern_q2_0_repackable(const ggml_tensor * t) {
@@ -4707,11 +4716,17 @@ static inline int32_t tbkern_q2_0_dot_vnni(const uint8_t * weight_row, int base,
 #endif
 
 #if defined(__AVX512F__) && defined(__AVX512VNNI__)
-// Decode one packed 64-weight subgroup once, then compute its two Q8_0
-// products together. The cache byte layout is four 16-byte 2-bit planes.
-static inline void tbkern_q2_0_dot2_vnni64(const uint8_t * weight_row, int base,
-                                            const int8_t * q8_lo, const int8_t * q8_hi,
-                                            int32_t * part_lo, int32_t * part_hi) {
+// The Q8 pair is shared by every output row for a single-token decode.
+static inline __m512i tbkern_q2_0_q8_pair_vnni64(const int8_t * q8_lo, const int8_t * q8_hi) {
+    const __m256i xlo = _mm256_loadu_si256(reinterpret_cast<const __m256i *>(q8_lo));
+    const __m256i xhi = _mm256_loadu_si256(reinterpret_cast<const __m256i *>(q8_hi));
+    __m512i x = _mm512_castsi256_si512(xlo);
+    return _mm512_inserti64x4(x, xhi, 1);
+}
+
+// Decode one packed 64-weight subgroup and dot it against a prepared Q8 pair.
+static inline void tbkern_q2_0_dot2_vnni64_x(const uint8_t * weight_row, int base, __m512i x,
+                                              int32_t * part_lo, int32_t * part_hi) {
     GGML_ASSERT((base & 63) == 0);
     const __m128i packed = _mm_loadu_si128(reinterpret_cast<const __m128i *>(
         weight_row + (size_t) (base / 64) * 16));
@@ -4724,11 +4739,6 @@ static inline void tbkern_q2_0_dot2_vnni64(const uint8_t * weight_row, int base,
     codes = _mm512_inserti32x4(codes, c1, 1);
     codes = _mm512_inserti32x4(codes, c2, 2);
     codes = _mm512_inserti32x4(codes, c3, 3);
-
-    const __m256i xlo = _mm256_loadu_si256(reinterpret_cast<const __m256i *>(q8_lo));
-    const __m256i xhi = _mm256_loadu_si256(reinterpret_cast<const __m256i *>(q8_hi));
-    __m512i x = _mm512_castsi256_si512(xlo);
-    x = _mm512_inserti64x4(x, xhi, 1);
     const __m512i prod = _mm512_dpbusd_epi32(_mm512_setzero_si512(), codes, x);
     const __m256i lo = _mm512_castsi512_si256(prod);
     const __m256i hi = _mm512_extracti64x4_epi64(prod, 1);
@@ -4740,6 +4750,14 @@ static inline void tbkern_q2_0_dot2_vnni64(const uint8_t * weight_row, int base,
     };
     *part_lo = reduce(lo);
     *part_hi = reduce(hi);
+}
+
+// Decode one packed 64-weight subgroup once, then compute its two Q8_0
+// products together. The cache byte layout is four 16-byte 2-bit planes.
+static inline void tbkern_q2_0_dot2_vnni64(const uint8_t * weight_row, int base,
+                                            const int8_t * q8_lo, const int8_t * q8_hi,
+                                            int32_t * part_lo, int32_t * part_hi) {
+    tbkern_q2_0_dot2_vnni64_x(weight_row, base, tbkern_q2_0_q8_pair_vnni64(q8_lo, q8_hi), part_lo, part_hi);
 }
 #endif
 
@@ -4809,12 +4827,51 @@ class tbkern_q2_0_traits : public tensor_traits_base {
         const bool use_vnni = tbkern_q2_0_vnni_enabled();
 #endif
 #if defined(__AVX512F__) && defined(__AVX512VNNI__)
-        const bool use_vnni64 = tbkern_q2_0_vnni64_enabled();
+        const bool use_vnni64_4r = tbkern_q2_0_vnni64_4r_enabled();
+        // A four-row tile's final 1--3 rows retain the Phase 8 VNNI64 route.
+        const bool use_vnni64 = tbkern_q2_0_vnni64_enabled() || use_vnni64_4r;
 #endif
         const int row_begin = M * params->ith / params->nth;
         const int row_end   = M * (params->ith + 1) / params->nth;
         float * y = reinterpret_cast<float *>(tbkern_q2_0_row_ptr(dst, 0));
-        for (int row = row_begin; row < row_end; ++row) {
+        int tiled_row = row_begin;
+#if defined(__AVX512F__) && defined(__AVX512VNNI__)
+        if (use_vnni64_4r) {
+            for (; tiled_row + 3 < row_end; tiled_row += 4) {
+                const uint8_t * weight_rows[4] = {
+                    cache + (size_t) (tiled_row + 0) * row_stride,
+                    cache + (size_t) (tiled_row + 1) * row_stride,
+                    cache + (size_t) (tiled_row + 2) * row_stride,
+                    cache + (size_t) (tiled_row + 3) * row_stride,
+                };
+                float acc[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+                for (int g = 0; g < NG; ++g) {
+                    const int base = g * G;
+                    float gacc[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+                    for (int b = 0; b < G / 64; ++b) {
+                        const int base_b = base + b * 64;
+                        const int ib = base_b / QK8_0;
+                        const __m512i xpair = tbkern_q2_0_q8_pair_vnni64(xq[ib].qs, xq[ib + 1].qs);
+                        for (int r = 0; r < 4; ++r) {
+                            int32_t part_lo;
+                            int32_t part_hi;
+                            tbkern_q2_0_dot2_vnni64_x(weight_rows[r], base_b, xpair, &part_lo, &part_hi);
+                            gacc[r] += GGML_CPU_FP16_TO_FP32(xq[ib].d) * (float) (part_lo - q8_sums[ib]);
+                            gacc[r] += GGML_CPU_FP16_TO_FP32(xq[ib + 1].d) * (float) (part_hi - q8_sums[ib + 1]);
+                        }
+                    }
+                    for (int r = 0; r < 4; ++r) {
+                        acc[r] += GGML_CPU_FP16_TO_FP32(native[(size_t) (tiled_row + r) * NG + g].d) * gacc[r];
+                    }
+                }
+                y[tiled_row + 0] = acc[0];
+                y[tiled_row + 1] = acc[1];
+                y[tiled_row + 2] = acc[2];
+                y[tiled_row + 3] = acc[3];
+            }
+        }
+#endif
+        for (int row = tiled_row; row < row_end; ++row) {
             const uint8_t * weight_row = cache + (size_t) row * row_stride;
             float acc = 0.0f;
             for (int g = 0; g < NG; ++g) {
