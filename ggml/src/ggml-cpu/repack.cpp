@@ -4670,24 +4670,33 @@ static inline int32_t tbkern_q2_0_dot_avx2(const uint8_t * weight_row, int base,
 // groups. Subtracting a second dot with an all-ones vector applies Prism's
 // signed (code - 1) mapping without changing the native quantizer.
 static inline int32_t tbkern_q2_0_dot_vnni(const uint8_t * weight_row, int base, const int8_t * q8) {
-    alignas(32) uint8_t codes[QK8_0];
-    for (int j = 0; j < QK8_0; ++j) {
-        codes[j] = (uint8_t) tbkern_q2_0_code_at(weight_row, base + j);
-    }
-    const __m256i c = _mm256_load_si256(reinterpret_cast<const __m256i *>(codes));
+    // A Prism Q2_0 row stores four 2-bit planes per 64 weights. A Q8_0
+    // dot covers either the first or second half of that group, so one
+    // unaligned 16-byte load contains all 32 codes. Expand the two planes
+    // in registers rather than materializing one byte at a time.
+    const int within_64 = base & 63;
+    GGML_ASSERT(within_64 == 0 || within_64 == 32);
+    const __m128i packed = _mm_loadu_si128(reinterpret_cast<const __m128i *>(
+        weight_row + (size_t) (base / 64) * 16));
+    const int shift_lo = (within_64 >> 4) * 2;
+    const int shift_hi = shift_lo + 2;
+    const __m128i mask = _mm_set1_epi8(3);
+    // A 16-bit shift is safe here: after masking with 0x03 per byte, bits
+    // shifted in from the neighbouring byte are outside the two low bits.
+    const __m128i lo = _mm_and_si128(_mm_srl_epi16(packed, _mm_cvtsi32_si128(shift_lo)), mask);
+    const __m128i hi = _mm_and_si128(_mm_srl_epi16(packed, _mm_cvtsi32_si128(shift_hi)), mask);
+    const __m256i c = _mm256_set_m128i(hi, lo);
     const __m256i x = _mm256_loadu_si256(reinterpret_cast<const __m256i *>(q8));
     const __m256i zero = _mm256_setzero_si256();
     const __m256i one = _mm256_set1_epi8(1);
     const __m256i prod = _mm256_dpbusd_epi32(zero, c, x);
     const __m256i bias = _mm256_dpbusd_epi32(zero, one, x);
     const __m256i diff = _mm256_sub_epi32(prod, bias);
-    alignas(32) int32_t lanes[8];
-    _mm256_store_si256(reinterpret_cast<__m256i *>(lanes), diff);
-    int32_t sum = 0;
-    for (int i = 0; i < 8; ++i) {
-        sum += lanes[i];
-    }
-    return sum;
+    __m128i total = _mm_add_epi32(_mm256_castsi256_si128(diff),
+                                  _mm256_extracti128_si256(diff, 1));
+    total = _mm_hadd_epi32(total, total);
+    total = _mm_hadd_epi32(total, total);
+    return _mm_cvtsi128_si32(total);
 }
 #endif
 
