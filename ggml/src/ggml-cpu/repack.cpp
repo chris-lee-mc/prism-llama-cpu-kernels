@@ -17,6 +17,9 @@
 #include <cassert>
 #include <cstdio>  // for GGML_ASSERT
 #include <cstdlib>
+#if defined(__AVX2__) || (defined(_MSC_VER) && defined(GGML_AVX2))
+#include <immintrin.h>
+#endif
 #include "tbkern/tbkern.h"
 
 #include "repack.h"
@@ -4554,9 +4557,22 @@ class tensor_traits_base : public ggml::cpu::tensor_traits {
   public:
     virtual int repack(struct ggml_tensor * t, const void * data, size_t data_size) = 0;
 };
-static bool tbkern_q2_0_enabled() {
+static bool tbkern_q2_0_scalar_enabled() {
     const char * v = std::getenv("GGML_TBKERN_Q2_0");
     return v && (std::strcmp(v, "1") == 0 || std::strcmp(v, "true") == 0 || std::strcmp(v, "on") == 0);
+}
+
+static bool tbkern_q2_0_avx2_enabled() {
+#if defined(__AVX2__) || (defined(_MSC_VER) && defined(GGML_AVX2))
+    const char * v = std::getenv("GGML_TBKERN_Q2_0_AVX2");
+    return v && (std::strcmp(v, "1") == 0 || std::strcmp(v, "true") == 0 || std::strcmp(v, "on") == 0);
+#else
+    return false;
+#endif
+}
+
+static bool tbkern_q2_0_enabled() {
+    return tbkern_q2_0_scalar_enabled() || tbkern_q2_0_avx2_enabled();
 }
 
 static bool tbkern_q2_0_repackable(const ggml_tensor * t) {
@@ -4617,6 +4633,27 @@ static inline int tbkern_q2_0_code_at(const uint8_t * row, int k) {
     const uint8_t packed = row[(size_t) (k / 64) * 16 + (within_64 & 15)];
     return (packed >> (2 * (within_64 / 16))) & 0x3;
 }
+#if defined(__AVX2__) || (defined(_MSC_VER) && defined(GGML_AVX2))
+// Compute sum((code - 1) * q8) for one QK8_0 block.  The unsigned code
+// values allow maddubs to perform the code*q8 products; subtracting sum(q8)
+// applies Prism's signed code mapping without an unsigned/signed mismatch.
+static inline int32_t tbkern_q2_0_dot_avx2(const uint8_t * weight_row, int base, const int8_t * q8) {
+    alignas(32) uint8_t codes[QK8_0];
+    int32_t sum_q8 = 0;
+    for (int j = 0; j < QK8_0; ++j) {
+        codes[j] = (uint8_t) tbkern_q2_0_code_at(weight_row, base + j);
+        sum_q8 += (int32_t) q8[j];
+    }
+    const __m256i c = _mm256_load_si256(reinterpret_cast<const __m256i *>(codes));
+    const __m256i x = _mm256_loadu_si256(reinterpret_cast<const __m256i *>(q8));
+    const __m256i pairs = _mm256_maddubs_epi16(c, x);
+    const __m256i sums = _mm256_madd_epi16(pairs, _mm256_set1_epi16(1));
+    __m128i total = _mm_add_epi32(_mm256_castsi256_si128(sums), _mm256_extracti128_si256(sums, 1));
+    total = _mm_hadd_epi32(total, total);
+    total = _mm_hadd_epi32(total, total);
+    return _mm_cvtsi128_si32(total) - sum_q8;
+}
+#endif
 
 class tbkern_q2_0_traits : public tensor_traits_base {
   public:
@@ -4687,6 +4724,10 @@ class tbkern_q2_0_traits : public tensor_traits_base {
         }
         ggml_barrier(params->threadpool);
 
+
+#if defined(__AVX2__) || (defined(_MSC_VER) && defined(GGML_AVX2))
+        const bool use_avx2 = tbkern_q2_0_avx2_enabled();
+#endif
         // Decode is latency-critical (n_tokens == 1), so partition output rows
         // rather than tokens. This disjoint static partition covers each row
         // exactly once and remains entirely within the ggml threadpool.
@@ -4703,9 +4744,17 @@ class tbkern_q2_0_traits : public tensor_traits_base {
                     float gacc = 0.0f;
                     for (int b = 0; b < G / QK8_0; ++b) {
                         const int base_b = base + b * QK8_0;
-                        int32_t part = 0;
-                        for (int j = 0; j < QK8_0; ++j) {
-                            part += (tbkern_q2_0_code_at(weight_row, base_b + j) - 1) * (int32_t) xq[base_b / QK8_0].qs[j];
+                        int32_t part;
+#if defined(__AVX2__) || (defined(_MSC_VER) && defined(GGML_AVX2))
+                        if (use_avx2) {
+                            part = tbkern_q2_0_dot_avx2(weight_row, base_b, xq[base_b / QK8_0].qs);
+                        } else
+#endif
+                        {
+                            part = 0;
+                            for (int j = 0; j < QK8_0; ++j) {
+                                part += (tbkern_q2_0_code_at(weight_row, base_b + j) - 1) * (int32_t) xq[base_b / QK8_0].qs[j];
+                            }
                         }
                         gacc += GGML_CPU_FP16_TO_FP32(xq[base_b / QK8_0].d) * (float) part;
                     }
