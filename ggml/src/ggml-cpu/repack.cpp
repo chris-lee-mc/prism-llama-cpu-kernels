@@ -17,7 +17,7 @@
 #include <cassert>
 #include <cstdio>  // for GGML_ASSERT
 #include <cstdlib>
-#if defined(__AVX2__) || (defined(_MSC_VER) && defined(GGML_AVX2))
+#if defined(__AVX2__) || defined(__AVX512F__) || defined(__AVX512VNNI__) || (defined(_MSC_VER) && (defined(GGML_AVX2) || defined(GGML_AVX512)))
 #include <immintrin.h>
 #endif
 #include "tbkern/tbkern.h"
@@ -4571,8 +4571,17 @@ static bool tbkern_q2_0_avx2_enabled() {
 #endif
 }
 
+static bool tbkern_q2_0_vnni_enabled() {
+#if defined(__AVX512VNNI__) && defined(__AVX512VL__)
+    const char * v = std::getenv("GGML_TBKERN_Q2_0_VNNI");
+    return v && (std::strcmp(v, "1") == 0 || std::strcmp(v, "true") == 0 || std::strcmp(v, "on") == 0) && ggml_cpu_has_avx512_vnni();
+#else
+    return false;
+#endif
+}
+
 static bool tbkern_q2_0_enabled() {
-    return tbkern_q2_0_scalar_enabled() || tbkern_q2_0_avx2_enabled();
+    return tbkern_q2_0_scalar_enabled() || tbkern_q2_0_avx2_enabled() || tbkern_q2_0_vnni_enabled();
 }
 
 static bool tbkern_q2_0_repackable(const ggml_tensor * t) {
@@ -4655,6 +4664,33 @@ static inline int32_t tbkern_q2_0_dot_avx2(const uint8_t * weight_row, int base,
 }
 #endif
 
+#if defined(__AVX512VNNI__) && defined(__AVX512VL__)
+// Compute sum((code - 1) * q8) for one QK8_0 block with AVX-512 VNNI.
+// dpbusd consumes unsigned code bytes and signed q8 bytes in four-byte
+// groups. Subtracting a second dot with an all-ones vector applies Prism's
+// signed (code - 1) mapping without changing the native quantizer.
+static inline int32_t tbkern_q2_0_dot_vnni(const uint8_t * weight_row, int base, const int8_t * q8) {
+    alignas(32) uint8_t codes[QK8_0];
+    for (int j = 0; j < QK8_0; ++j) {
+        codes[j] = (uint8_t) tbkern_q2_0_code_at(weight_row, base + j);
+    }
+    const __m256i c = _mm256_load_si256(reinterpret_cast<const __m256i *>(codes));
+    const __m256i x = _mm256_loadu_si256(reinterpret_cast<const __m256i *>(q8));
+    const __m256i zero = _mm256_setzero_si256();
+    const __m256i one = _mm256_set1_epi8(1);
+    const __m256i prod = _mm256_dpbusd_epi32(zero, c, x);
+    const __m256i bias = _mm256_dpbusd_epi32(zero, one, x);
+    const __m256i diff = _mm256_sub_epi32(prod, bias);
+    alignas(32) int32_t lanes[8];
+    _mm256_store_si256(reinterpret_cast<__m256i *>(lanes), diff);
+    int32_t sum = 0;
+    for (int i = 0; i < 8; ++i) {
+        sum += lanes[i];
+    }
+    return sum;
+}
+#endif
+
 class tbkern_q2_0_traits : public tensor_traits_base {
   public:
     bool work_size(int, const ggml_tensor * op, size_t & size) override {
@@ -4728,6 +4764,9 @@ class tbkern_q2_0_traits : public tensor_traits_base {
 #if defined(__AVX2__) || (defined(_MSC_VER) && defined(GGML_AVX2))
         const bool use_avx2 = tbkern_q2_0_avx2_enabled();
 #endif
+#if defined(__AVX512VNNI__) && defined(__AVX512VL__)
+        const bool use_vnni = tbkern_q2_0_vnni_enabled();
+#endif
         // Decode is latency-critical (n_tokens == 1), so partition output rows
         // rather than tokens. This disjoint static partition covers each row
         // exactly once and remains entirely within the ggml threadpool.
@@ -4745,6 +4784,11 @@ class tbkern_q2_0_traits : public tensor_traits_base {
                     for (int b = 0; b < G / QK8_0; ++b) {
                         const int base_b = base + b * QK8_0;
                         int32_t part;
+#if defined(__AVX512VNNI__) && defined(__AVX512VL__)
+                        if (use_vnni) {
+                            part = tbkern_q2_0_dot_vnni(weight_row, base_b, xq[base_b / QK8_0].qs);
+                        } else
+#endif
 #if defined(__AVX2__) || (defined(_MSC_VER) && defined(GGML_AVX2))
                         if (use_avx2) {
                             part = tbkern_q2_0_dot_avx2(weight_row, base_b, xq[base_b / QK8_0].qs);

@@ -1,0 +1,7 @@
+# Phase 4: opt-in AVX-512/VNNI Q2_0 dispatch
+
+`GGML_TBKERN_Q2_0_VNNI=1` enables the AVX-512/VNNI implementation for eligible Prism Q2_0 matrices. It is independent of `GGML_TBKERN_Q2_0_AVX2=1` and `GGML_TBKERN_Q2_0=1`; the VNNI selector wins only when explicitly enabled and the binary was compiled with `__AVX512VNNI__` and `__AVX512VL__` on a host reported by `ggml_cpu_has_avx512_vnni()`. Otherwise no cache is claimed and Prism's native Q2_0 vec-dot remains the fallback.
+
+The implementation keeps Phase 1 cache ownership, native `quantize_row_q8_0` activation blocks, raw binary16 Q2 scales, and ggml threadpool row partitioning. For each 32-value Q8 block it decodes packed codes to unsigned bytes and uses `_mm256_dpbusd_epi32` twice: once for `code * q8`, and once with an all-ones vector for `sum(q8)`. Subtraction applies Prism's signed `(code - 1)` mapping. Four partials form each 128-value Q2 group, preserving native scale boundaries and accumulation order.
+
+No global tbkern VNNI quantizer, nested OpenMP, or per-operation heap allocation is used. The path is opt-in so scalar and AVX2 behavior remain unchanged. Validate deterministic logits/tokens and perplexity against the native Prism path before collecting matched AVX-512/VNNI benchmarks.
