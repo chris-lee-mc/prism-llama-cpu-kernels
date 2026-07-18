@@ -4877,6 +4877,19 @@ static inline void tbkern_q2_0_dot2_native_vnni64_vbmi_x(const block_q2_0 * bloc
     *part_hi = reduce(hi);
 }
 #endif
+
+static inline void tbkern_q2_0_dot2_native_vnni64_select_x(const block_q2_0 * block, int base, __m512i x,
+                                                            bool use_vbmi, int32_t * part_lo, int32_t * part_hi) {
+#if defined(__AVX512VBMI__)
+    if (use_vbmi) {
+        tbkern_q2_0_dot2_native_vnni64_vbmi_x(block, base, x, part_lo, part_hi);
+        return;
+    }
+#else
+    GGML_UNUSED(use_vbmi);
+#endif
+    tbkern_q2_0_dot2_native_vnni64_x(block, base, x, part_lo, part_hi);
+}
 #endif
 #endif
 
@@ -4954,9 +4967,7 @@ class tbkern_q2_0_traits : public tensor_traits_base {
         // Native-direct mode has precedence over all cache-backed selectors.
         const bool use_vnni64_native_4r = tbkern_q2_0_vnni64_native_4r_enabled();
         const bool use_vnni64_native = tbkern_q2_0_vnni64_native_enabled();
-#if defined(__AVX512VBMI__)
         const bool use_vnni64_native_vbmi = tbkern_q2_0_vnni64_native_vbmi_enabled();
-#endif
 #endif
         const int row_begin = M * params->ith / params->nth;
         const int row_end   = M * (params->ith + 1) / params->nth;
@@ -4978,10 +4989,10 @@ class tbkern_q2_0_traits : public tensor_traits_base {
                         const int ib = base_b / QK8_0;
                         const __m512i xpair = tbkern_q2_0_q8_pair_vnni64(xq[ib].qs, xq[ib + 1].qs);
                         int32_t lo0, hi0, lo1, hi1, lo2, hi2, lo3, hi3;
-                        tbkern_q2_0_dot2_native_vnni64_x(block0, b * 64, xpair, &lo0, &hi0);
-                        tbkern_q2_0_dot2_native_vnni64_x(block1, b * 64, xpair, &lo1, &hi1);
-                        tbkern_q2_0_dot2_native_vnni64_x(block2, b * 64, xpair, &lo2, &hi2);
-                        tbkern_q2_0_dot2_native_vnni64_x(block3, b * 64, xpair, &lo3, &hi3);
+                        tbkern_q2_0_dot2_native_vnni64_select_x(block0, b * 64, xpair, use_vnni64_native_vbmi, &lo0, &hi0);
+                        tbkern_q2_0_dot2_native_vnni64_select_x(block1, b * 64, xpair, use_vnni64_native_vbmi, &lo1, &hi1);
+                        tbkern_q2_0_dot2_native_vnni64_select_x(block2, b * 64, xpair, use_vnni64_native_vbmi, &lo2, &hi2);
+                        tbkern_q2_0_dot2_native_vnni64_select_x(block3, b * 64, xpair, use_vnni64_native_vbmi, &lo3, &hi3);
                         const float d0 = GGML_CPU_FP16_TO_FP32(xq[ib].d);
                         const float d1 = GGML_CPU_FP16_TO_FP32(xq[ib + 1].d);
                         gacc0 += d0 * (float) (lo0 - q8_sums[ib]);
