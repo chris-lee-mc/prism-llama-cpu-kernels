@@ -4598,8 +4598,21 @@ static bool tbkern_q2_0_vnni64_4r_enabled() {
 #endif
 }
 
-static bool tbkern_q2_0_enabled() {
+static bool tbkern_q2_0_vnni64_native_enabled() {
+#if defined(__AVX2__) && defined(__AVX512F__) && defined(__AVX512VNNI__)
+    const char * v = std::getenv("GGML_TBKERN_Q2_0_VNNI64_NATIVE");
+    return v && (std::strcmp(v, "1") == 0 || std::strcmp(v, "true") == 0 || std::strcmp(v, "on") == 0) && ggml_cpu_has_avx512_vnni();
+#else
+    return false;
+#endif
+}
+
+static bool tbkern_q2_0_cache_enabled() {
     return tbkern_q2_0_scalar_enabled() || tbkern_q2_0_avx2_enabled() || tbkern_q2_0_vnni_enabled() || tbkern_q2_0_vnni64_enabled() || tbkern_q2_0_vnni64_4r_enabled();
+}
+
+static bool tbkern_q2_0_enabled() {
+    return tbkern_q2_0_cache_enabled() || tbkern_q2_0_vnni64_native_enabled();
 }
 
 static bool tbkern_q2_0_repackable(const ggml_tensor * t) {
@@ -4759,6 +4772,48 @@ static inline void tbkern_q2_0_dot2_vnni64(const uint8_t * weight_row, int base,
                                             int32_t * part_lo, int32_t * part_hi) {
     tbkern_q2_0_dot2_vnni64_x(weight_row, base, tbkern_q2_0_q8_pair_vnni64(q8_lo, q8_hi), part_lo, part_hi);
 }
+
+#if defined(__AVX2__)
+// Prism's native Q2_0 bytes hold four consecutive 2-bit codes per byte.
+// Expand eight bytes to a 32-code vector using the same mapping as its
+// reference vec-dot path, without allocating a second weight representation.
+static inline __m256i tbkern_q2_0_native_codes32(const uint8_t * qs) {
+    const __m128i idxlo = _mm_setr_epi8(0,0,0,0,1,1,1,1,2,2,2,2,3,3,3,3);
+    const __m128i idxhi = _mm_setr_epi8(4,4,4,4,5,5,5,5,6,6,6,6,7,7,7,7);
+    const __m256i mul = _mm256_setr_epi16(64,16,4,1, 64,16,4,1, 64,16,4,1, 64,16,4,1);
+    const __m256i three = _mm256_set1_epi16(3);
+    const __m128i src = _mm_loadl_epi64(reinterpret_cast<const __m128i *>(qs));
+    const __m256i rep = _mm256_set_m128i(_mm_shuffle_epi8(src, idxhi), _mm_shuffle_epi8(src, idxlo));
+    __m256i r0 = _mm256_cvtepu8_epi16(_mm256_castsi256_si128(rep));
+    __m256i r1 = _mm256_cvtepu8_epi16(_mm256_extracti128_si256(rep, 1));
+    r0 = _mm256_and_si256(_mm256_srli_epi16(_mm256_mullo_epi16(r0, mul), 6), three);
+    r1 = _mm256_and_si256(_mm256_srli_epi16(_mm256_mullo_epi16(r1, mul), 6), three);
+    return _mm256_permute4x64_epi64(_mm256_packus_epi16(r0, r1), 0xD8);
+}
+
+static inline void tbkern_q2_0_dot2_native_vnni64(const block_q2_0 * block, int base,
+                                                   const int8_t * q8_lo, const int8_t * q8_hi,
+                                                   int32_t * part_lo, int32_t * part_hi) {
+    GGML_ASSERT(base == 0 || base == 64);
+    const uint8_t * qs = block->qs + base / 4;
+    const __m256i clo = tbkern_q2_0_native_codes32(qs);
+    const __m256i chi = tbkern_q2_0_native_codes32(qs + 8);
+    __m512i codes = _mm512_castsi256_si512(clo);
+    codes = _mm512_inserti64x4(codes, chi, 1);
+    const __m512i prod = _mm512_dpbusd_epi32(_mm512_setzero_si512(), codes,
+                                               tbkern_q2_0_q8_pair_vnni64(q8_lo, q8_hi));
+    const __m256i lo = _mm512_castsi512_si256(prod);
+    const __m256i hi = _mm512_extracti64x4_epi64(prod, 1);
+    auto reduce = [](__m256i v) {
+        __m128i total = _mm_add_epi32(_mm256_castsi256_si128(v), _mm256_extracti128_si256(v, 1));
+        total = _mm_hadd_epi32(total, total);
+        total = _mm_hadd_epi32(total, total);
+        return _mm_cvtsi128_si32(total);
+    };
+    *part_lo = reduce(lo);
+    *part_hi = reduce(hi);
+}
+#endif
 #endif
 
 class tbkern_q2_0_traits : public tensor_traits_base {
@@ -4831,12 +4886,16 @@ class tbkern_q2_0_traits : public tensor_traits_base {
         // A four-row tile's final 1--3 rows retain the Phase 8 VNNI64 route.
         const bool use_vnni64 = tbkern_q2_0_vnni64_enabled() || use_vnni64_4r;
 #endif
+#if defined(__AVX2__) && defined(__AVX512F__) && defined(__AVX512VNNI__)
+        // Native-direct mode has precedence over all cache-backed selectors.
+        const bool use_vnni64_native = tbkern_q2_0_vnni64_native_enabled();
+#endif
         const int row_begin = M * params->ith / params->nth;
         const int row_end   = M * (params->ith + 1) / params->nth;
         float * y = reinterpret_cast<float *>(tbkern_q2_0_row_ptr(dst, 0));
         int tiled_row = row_begin;
 #if defined(__AVX512F__) && defined(__AVX512VNNI__)
-        if (use_vnni64_4r) {
+        if (use_vnni64_4r && !tbkern_q2_0_vnni64_native_enabled()) {
             for (; tiled_row + 3 < row_end; tiled_row += 4) {
                 const uint8_t * weight_rows[4] = {
                     cache + (size_t) (tiled_row + 0) * row_stride,
@@ -4872,6 +4931,26 @@ class tbkern_q2_0_traits : public tensor_traits_base {
         }
 #endif
         for (int row = tiled_row; row < row_end; ++row) {
+#if defined(__AVX2__) && defined(__AVX512F__) && defined(__AVX512VNNI__)
+            if (use_vnni64_native) {
+                float acc = 0.0f;
+                for (int g = 0; g < NG; ++g) {
+                    const block_q2_0 * block = &native[(size_t) row * NG + g];
+                    float gacc = 0.0f;
+                    for (int b = 0; b < G / 64; ++b) {
+                        const int ib = (g * G + b * 64) / QK8_0;
+                        int32_t part_lo;
+                        int32_t part_hi;
+                        tbkern_q2_0_dot2_native_vnni64(block, b * 64, xq[ib].qs, xq[ib + 1].qs, &part_lo, &part_hi);
+                        gacc += GGML_CPU_FP16_TO_FP32(xq[ib].d) * (float) (part_lo - q8_sums[ib]);
+                        gacc += GGML_CPU_FP16_TO_FP32(xq[ib + 1].d) * (float) (part_hi - q8_sums[ib + 1]);
+                    }
+                    acc += GGML_CPU_FP16_TO_FP32(block->d) * gacc;
+                }
+                y[row] = acc;
+                continue;
+            }
+#endif
             const uint8_t * weight_row = cache + (size_t) row * row_stride;
             float acc = 0.0f;
             for (int g = 0; g < NG; ++g) {
@@ -4934,6 +5013,10 @@ class tbkern_q2_0_traits : public tensor_traits_base {
             return TBK_EINVAL;
         }
         std::memmove(t->data, data, native_bytes);
+        // Native-direct VNNI64 keeps only the copied native Prism payload.
+        if (tbkern_q2_0_vnni64_native_enabled()) {
+            return TBK_OK;
+        }
         tbk_mat packed{};
         const int rc = tbk_pack_from_q2(reinterpret_cast<const uint8_t *>(t->data), M, K, QK2_0, TBK_LAYOUT_CODES, &packed);
         if (rc != TBK_OK) {
@@ -5559,7 +5642,8 @@ static const char * ggml_backend_cpu_repack_buffer_type_get_name(ggml_backend_bu
 
 static size_t ggml_backend_cpu_repack_buffer_type_get_alloc_size(ggml_backend_buffer_type_t, const ggml_tensor * tensor) {
     const size_t native_bytes = ggml_nbytes(tensor);
-    if (ggml::cpu::repack::tbkern_q2_0_repackable(tensor)) {
+    if (ggml::cpu::repack::tbkern_q2_0_repackable(tensor) &&
+        !ggml::cpu::repack::tbkern_q2_0_vnni64_native_enabled()) {
         const size_t K = (size_t) tensor->ne[0];
         const size_t M = (size_t) tensor->ne[1];
         const size_t row_stride = tbk_row_stride_bytes((int) K);
