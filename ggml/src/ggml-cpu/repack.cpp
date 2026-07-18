@@ -4598,10 +4598,30 @@ static bool tbkern_q2_0_vnni64_4r_enabled() {
 #endif
 }
 
+static bool tbkern_q2_0_vnni64_native_4r_enabled() {
+#if defined(__AVX2__) && defined(__AVX512F__) && defined(__AVX512VNNI__)
+    const char * v = std::getenv("GGML_TBKERN_Q2_0_VNNI64_NATIVE_4R");
+    return v && (std::strcmp(v, "1") == 0 || std::strcmp(v, "true") == 0 || std::strcmp(v, "on") == 0) && ggml_cpu_has_avx512_vnni();
+#else
+    return false;
+#endif
+}
+
+static bool tbkern_q2_0_vnni64_native_vbmi_enabled() {
+#if defined(__AVX2__) && defined(__AVX512F__) && defined(__AVX512VNNI__) && defined(__AVX512VBMI__)
+    const char * v = std::getenv("GGML_TBKERN_Q2_0_VNNI64_NATIVE_VBMI");
+    return v && (std::strcmp(v, "1") == 0 || std::strcmp(v, "true") == 0 || std::strcmp(v, "on") == 0) &&
+           ggml_cpu_has_avx512_vnni() && ggml_cpu_has_avx512_vbmi();
+#else
+    return false;
+#endif
+}
+
 static bool tbkern_q2_0_vnni64_native_enabled() {
 #if defined(__AVX2__) && defined(__AVX512F__) && defined(__AVX512VNNI__)
     const char * v = std::getenv("GGML_TBKERN_Q2_0_VNNI64_NATIVE");
-    return v && (std::strcmp(v, "1") == 0 || std::strcmp(v, "true") == 0 || std::strcmp(v, "on") == 0) && ggml_cpu_has_avx512_vnni();
+    const bool direct = v && (std::strcmp(v, "1") == 0 || std::strcmp(v, "true") == 0 || std::strcmp(v, "on") == 0) && ggml_cpu_has_avx512_vnni();
+    return direct || tbkern_q2_0_vnni64_native_4r_enabled() || tbkern_q2_0_vnni64_native_vbmi_enabled();
 #else
     return false;
 #endif
@@ -4791,17 +4811,15 @@ static inline __m256i tbkern_q2_0_native_codes32(const uint8_t * qs) {
     return _mm256_permute4x64_epi64(_mm256_packus_epi16(r0, r1), 0xD8);
 }
 
-static inline void tbkern_q2_0_dot2_native_vnni64(const block_q2_0 * block, int base,
-                                                   const int8_t * q8_lo, const int8_t * q8_hi,
-                                                   int32_t * part_lo, int32_t * part_hi) {
+static inline void tbkern_q2_0_dot2_native_vnni64_x(const block_q2_0 * block, int base, __m512i x,
+                                                     int32_t * part_lo, int32_t * part_hi) {
     GGML_ASSERT(base == 0 || base == 64);
     const uint8_t * qs = block->qs + base / 4;
     const __m256i clo = tbkern_q2_0_native_codes32(qs);
     const __m256i chi = tbkern_q2_0_native_codes32(qs + 8);
     __m512i codes = _mm512_castsi256_si512(clo);
     codes = _mm512_inserti64x4(codes, chi, 1);
-    const __m512i prod = _mm512_dpbusd_epi32(_mm512_setzero_si512(), codes,
-                                               tbkern_q2_0_q8_pair_vnni64(q8_lo, q8_hi));
+    const __m512i prod = _mm512_dpbusd_epi32(_mm512_setzero_si512(), codes, x);
     const __m256i lo = _mm512_castsi512_si256(prod);
     const __m256i hi = _mm512_extracti64x4_epi64(prod, 1);
     auto reduce = [](__m256i v) {
@@ -4813,6 +4831,52 @@ static inline void tbkern_q2_0_dot2_native_vnni64(const block_q2_0 * block, int 
     *part_lo = reduce(lo);
     *part_hi = reduce(hi);
 }
+
+static inline void tbkern_q2_0_dot2_native_vnni64(const block_q2_0 * block, int base,
+                                                   const int8_t * q8_lo, const int8_t * q8_hi,
+                                                   int32_t * part_lo, int32_t * part_hi) {
+    tbkern_q2_0_dot2_native_vnni64_x(block, base, tbkern_q2_0_q8_pair_vnni64(q8_lo, q8_hi), part_lo, part_hi);
+}
+
+#if defined(__AVX512VBMI__)
+static inline __m512i tbkern_q2_0_native_codes64_vbmi(const uint8_t * qs) {
+    // Four 16-byte planes are interleaved with VBMI into sequential Q2 codes.
+    alignas(64) static const uint8_t order[64] = {
+         0,16,32,48, 1,17,33,49, 2,18,34,50, 3,19,35,51,
+         4,20,36,52, 5,21,37,53, 6,22,38,54, 7,23,39,55,
+         8,24,40,56, 9,25,41,57,10,26,42,58,11,27,43,59,
+        12,28,44,60,13,29,45,61,14,30,46,62,15,31,47,63,
+    };
+    const __m128i packed = _mm_loadu_si128(reinterpret_cast<const __m128i *>(qs));
+    const __m128i mask = _mm_set1_epi8(3);
+    const __m128i c0 = _mm_and_si128(packed, mask);
+    const __m128i c1 = _mm_and_si128(_mm_srl_epi16(packed, _mm_cvtsi32_si128(2)), mask);
+    const __m128i c2 = _mm_and_si128(_mm_srl_epi16(packed, _mm_cvtsi32_si128(4)), mask);
+    const __m128i c3 = _mm_and_si128(_mm_srl_epi16(packed, _mm_cvtsi32_si128(6)), mask);
+    __m512i planes = _mm512_castsi128_si512(c0);
+    planes = _mm512_inserti32x4(planes, c1, 1);
+    planes = _mm512_inserti32x4(planes, c2, 2);
+    planes = _mm512_inserti32x4(planes, c3, 3);
+    return _mm512_permutexvar_epi8(_mm512_load_si512(reinterpret_cast<const __m512i *>(order)), planes);
+}
+
+static inline void tbkern_q2_0_dot2_native_vnni64_vbmi_x(const block_q2_0 * block, int base, __m512i x,
+                                                          int32_t * part_lo, int32_t * part_hi) {
+    GGML_ASSERT(base == 0 || base == 64);
+    const __m512i codes = tbkern_q2_0_native_codes64_vbmi(block->qs + base / 4);
+    const __m512i prod = _mm512_dpbusd_epi32(_mm512_setzero_si512(), codes, x);
+    const __m256i lo = _mm512_castsi512_si256(prod);
+    const __m256i hi = _mm512_extracti64x4_epi64(prod, 1);
+    auto reduce = [](__m256i v) {
+        __m128i total = _mm_add_epi32(_mm256_castsi256_si128(v), _mm256_extracti128_si256(v, 1));
+        total = _mm_hadd_epi32(total, total);
+        total = _mm_hadd_epi32(total, total);
+        return _mm_cvtsi128_si32(total);
+    };
+    *part_lo = reduce(lo);
+    *part_hi = reduce(hi);
+}
+#endif
 #endif
 #endif
 
@@ -4888,12 +4952,59 @@ class tbkern_q2_0_traits : public tensor_traits_base {
 #endif
 #if defined(__AVX2__) && defined(__AVX512F__) && defined(__AVX512VNNI__)
         // Native-direct mode has precedence over all cache-backed selectors.
+        const bool use_vnni64_native_4r = tbkern_q2_0_vnni64_native_4r_enabled();
         const bool use_vnni64_native = tbkern_q2_0_vnni64_native_enabled();
+#if defined(__AVX512VBMI__)
+        const bool use_vnni64_native_vbmi = tbkern_q2_0_vnni64_native_vbmi_enabled();
+#endif
 #endif
         const int row_begin = M * params->ith / params->nth;
         const int row_end   = M * (params->ith + 1) / params->nth;
         float * y = reinterpret_cast<float *>(tbkern_q2_0_row_ptr(dst, 0));
         int tiled_row = row_begin;
+#if defined(__AVX2__) && defined(__AVX512F__) && defined(__AVX512VNNI__)
+        if (use_vnni64_native_4r) {
+            for (; tiled_row + 3 < row_end; tiled_row += 4) {
+                float acc0 = 0.0f, acc1 = 0.0f, acc2 = 0.0f, acc3 = 0.0f;
+                for (int g = 0; g < NG; ++g) {
+                    const int base = g * G;
+                    const block_q2_0 * block0 = &native[(size_t) (tiled_row + 0) * NG + g];
+                    const block_q2_0 * block1 = &native[(size_t) (tiled_row + 1) * NG + g];
+                    const block_q2_0 * block2 = &native[(size_t) (tiled_row + 2) * NG + g];
+                    const block_q2_0 * block3 = &native[(size_t) (tiled_row + 3) * NG + g];
+                    float gacc0 = 0.0f, gacc1 = 0.0f, gacc2 = 0.0f, gacc3 = 0.0f;
+                    for (int b = 0; b < G / 64; ++b) {
+                        const int base_b = base + b * 64;
+                        const int ib = base_b / QK8_0;
+                        const __m512i xpair = tbkern_q2_0_q8_pair_vnni64(xq[ib].qs, xq[ib + 1].qs);
+                        int32_t lo0, hi0, lo1, hi1, lo2, hi2, lo3, hi3;
+                        tbkern_q2_0_dot2_native_vnni64_x(block0, b * 64, xpair, &lo0, &hi0);
+                        tbkern_q2_0_dot2_native_vnni64_x(block1, b * 64, xpair, &lo1, &hi1);
+                        tbkern_q2_0_dot2_native_vnni64_x(block2, b * 64, xpair, &lo2, &hi2);
+                        tbkern_q2_0_dot2_native_vnni64_x(block3, b * 64, xpair, &lo3, &hi3);
+                        const float d0 = GGML_CPU_FP16_TO_FP32(xq[ib].d);
+                        const float d1 = GGML_CPU_FP16_TO_FP32(xq[ib + 1].d);
+                        gacc0 += d0 * (float) (lo0 - q8_sums[ib]);
+                        gacc0 += d1 * (float) (hi0 - q8_sums[ib + 1]);
+                        gacc1 += d0 * (float) (lo1 - q8_sums[ib]);
+                        gacc1 += d1 * (float) (hi1 - q8_sums[ib + 1]);
+                        gacc2 += d0 * (float) (lo2 - q8_sums[ib]);
+                        gacc2 += d1 * (float) (hi2 - q8_sums[ib + 1]);
+                        gacc3 += d0 * (float) (lo3 - q8_sums[ib]);
+                        gacc3 += d1 * (float) (hi3 - q8_sums[ib + 1]);
+                    }
+                    acc0 += GGML_CPU_FP16_TO_FP32(block0->d) * gacc0;
+                    acc1 += GGML_CPU_FP16_TO_FP32(block1->d) * gacc1;
+                    acc2 += GGML_CPU_FP16_TO_FP32(block2->d) * gacc2;
+                    acc3 += GGML_CPU_FP16_TO_FP32(block3->d) * gacc3;
+                }
+                y[tiled_row + 0] = acc0;
+                y[tiled_row + 1] = acc1;
+                y[tiled_row + 2] = acc2;
+                y[tiled_row + 3] = acc3;
+            }
+        }
+#endif
 #if defined(__AVX512F__) && defined(__AVX512VNNI__)
         if (use_vnni64_4r && !tbkern_q2_0_vnni64_native_enabled()) {
             for (; tiled_row + 3 < row_end; tiled_row += 4) {
@@ -4941,7 +5052,14 @@ class tbkern_q2_0_traits : public tensor_traits_base {
                         const int ib = (g * G + b * 64) / QK8_0;
                         int32_t part_lo;
                         int32_t part_hi;
-                        tbkern_q2_0_dot2_native_vnni64(block, b * 64, xq[ib].qs, xq[ib + 1].qs, &part_lo, &part_hi);
+#if defined(__AVX512VBMI__)
+                        if (use_vnni64_native_vbmi) {
+                            tbkern_q2_0_dot2_native_vnni64_vbmi_x(block, b * 64, tbkern_q2_0_q8_pair_vnni64(xq[ib].qs, xq[ib + 1].qs), &part_lo, &part_hi);
+                        } else
+#endif
+                        {
+                            tbkern_q2_0_dot2_native_vnni64(block, b * 64, xq[ib].qs, xq[ib + 1].qs, &part_lo, &part_hi);
+                        }
                         gacc += GGML_CPU_FP16_TO_FP32(xq[ib].d) * (float) (part_lo - q8_sums[ib]);
                         gacc += GGML_CPU_FP16_TO_FP32(xq[ib + 1].d) * (float) (part_hi - q8_sums[ib + 1]);
                     }
