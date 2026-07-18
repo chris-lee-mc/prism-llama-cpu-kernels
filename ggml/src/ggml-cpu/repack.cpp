@@ -8,6 +8,7 @@
 #include "ggml-cpu-impl.h"
 #include "simd-mappings.h"
 #include "traits.h"
+#include "quants.h"
 
 #include "arch-fallback.h"
 
@@ -15,6 +16,8 @@
 #include <cstring>
 #include <cassert>
 #include <cstdio>  // for GGML_ASSERT
+#include <cstdlib>
+#include "tbkern/tbkern.h"
 
 #include "repack.h"
 
@@ -4551,6 +4554,206 @@ class tensor_traits_base : public ggml::cpu::tensor_traits {
   public:
     virtual int repack(struct ggml_tensor * t, const void * data, size_t data_size) = 0;
 };
+static bool tbkern_q2_0_enabled() {
+    const char * v = std::getenv("GGML_TBKERN_Q2_0");
+    return v && (std::strcmp(v, "1") == 0 || std::strcmp(v, "true") == 0 || std::strcmp(v, "on") == 0);
+}
+
+static bool tbkern_q2_0_repackable(const ggml_tensor * t) {
+    if (!t || t->type != GGML_TYPE_Q2_0 || !tbkern_q2_0_enabled()) {
+        return false;
+    }
+    // Token embeddings are consumed by GET_ROWS and must retain native Prism layout.
+    const char * name = t->name;
+    if (name && (std::strstr(name, "token_embd") || std::strstr(name, "embeddings"))) {
+        return false;
+    }
+    // Phase 1 calls the native Q8_0 quantizer on the source row.  Restrict
+    // cache ownership to complete, 2D Q2_0 blocks so Kp == K and it never
+    // reads past the logical activation row.
+    return t->ne[0] > 0 && t->ne[1] > 0 &&
+           t->ne[0] <= INT32_MAX && t->ne[1] <= INT32_MAX &&
+           t->ne[2] == 1 && t->ne[3] == 1 &&
+           t->ne[0] % QK2_0 == 0;
+}
+
+struct alignas(64) tbkern_q2_cache_header {
+    uint64_t magic;
+    int32_t  M;
+    int32_t  K;
+    int32_t  Kp;
+    int32_t  G;
+    size_t   row_stride;
+    size_t   scale_count;
+    size_t   data_bytes;
+};
+
+static constexpr uint64_t TBKERN_Q2_CACHE_MAGIC = UINT64_C(0x54424b5142303132);
+
+// The CPU backend owns temporary activations through params->wdata. Keeping
+// this format identical to Prism's native Q8_0 input preserves the fp16 scale
+// and int8 quantization semantics of the fallback vec-dot path.
+static inline size_t tbkern_q2_0_q8_scratch_bytes(const tbkern_q2_cache_header * h) {
+    return (size_t) (h->Kp / QK8_0) * sizeof(block_q8_0);
+}
+
+static inline uint8_t * tbkern_q2_0_row_ptr(ggml_tensor * t, int64_t row) {
+    const int64_t i1 = row % t->ne[1];
+    row /= t->ne[1];
+    const int64_t i2 = row % t->ne[2];
+    const int64_t i3 = row / t->ne[2];
+    return reinterpret_cast<uint8_t *>(t->data) + i1*t->nb[1] + i2*t->nb[2] + i3*t->nb[3];
+}
+
+static inline const uint8_t * tbkern_q2_0_row_ptr(const ggml_tensor * t, int64_t row) {
+    return tbkern_q2_0_row_ptr(const_cast<ggml_tensor *>(t), row);
+}
+
+// Layout B packs each 64 weights into 16 bytes. Byte b holds k=b,b+16,b+32,
+// and b+48, respectively. Decode directly from the cache: no per-call row
+// expansion or heap allocation is needed.
+static inline int tbkern_q2_0_code_at(const uint8_t * row, int k) {
+    const int within_64 = k & 63;
+    const uint8_t packed = row[(size_t) (k / 64) * 16 + (within_64 & 15)];
+    return (packed >> (2 * (within_64 / 16))) & 0x3;
+}
+
+class tbkern_q2_0_traits : public tensor_traits_base {
+  public:
+    bool work_size(int, const ggml_tensor * op, size_t & size) override {
+        if (!op || op->op != GGML_OP_MUL_MAT || !op->src[0] || !op->src[1]) {
+            return false;
+        }
+        const auto * h = reinterpret_cast<const tbkern_q2_cache_header *>(op->src[0]->data);
+        if (!h || h->magic != TBKERN_Q2_CACHE_MAGIC || op->src[1]->type != GGML_TYPE_F32) {
+            return false;
+        }
+        const size_t rows = (size_t) ggml_nrows(op->src[1]);
+        const size_t per_row = tbkern_q2_0_q8_scratch_bytes(h);
+        if (rows == 0 || per_row > SIZE_MAX / rows) {
+            return false;
+        }
+        size = GGML_PAD(rows * per_row, GGML_MEM_ALIGN);
+        return true;
+    }
+
+    bool compute_forward(ggml_compute_params * params, ggml_tensor * op) override {
+        if (op->op != GGML_OP_MUL_MAT) {
+            return false;
+        }
+        const ggml_tensor * src0 = op->src[0];
+        const ggml_tensor * src1 = op->src[1];
+        ggml_tensor * dst = op;
+        const auto * h = reinterpret_cast<const tbkern_q2_cache_header *>(src0->data);
+        if (!h || h->magic != TBKERN_Q2_CACHE_MAGIC) {
+            return false;
+        }
+        // A recognized cache is never safe for the generic Q2_0 path. Its
+        // layout is an invariant established by the common eligibility check.
+        GGML_ASSERT(src1->type == GGML_TYPE_F32);
+        GGML_ASSERT(h->M > 0 && h->K > 0 && h->K == h->Kp);
+        GGML_ASSERT(h->K % QK2_0 == 0 && h->G == QK2_0);
+        GGML_ASSERT(src0->ne[0] == h->K && src0->ne[1] == h->M);
+        GGML_ASSERT(src0->ne[2] == 1 && src0->ne[3] == 1);
+        GGML_ASSERT(src1->ne[0] == h->K && dst->ne[0] == h->M);
+        const int M = h->M;
+        const int K = h->K;
+        const int Kp = h->Kp;
+        const int G = h->G;
+        const int NG = Kp / G;
+        tbk_mat mat{};
+        mat.M = M; mat.K = K; mat.Kp = Kp; mat.G = G; mat.layout = TBK_LAYOUT_CODES;
+        mat.row_stride_bytes = h->row_stride;
+        mat.data = const_cast<uint8_t *>(reinterpret_cast<const uint8_t *>(h) + sizeof(*h));
+        // Preserve Prism's native binary16 Q2 scale encoding in the cache.
+        // Widen it at the same point in the accumulation order as the native
+        // Q2_0 x Q8_0 vec-dot implementation.
+        const auto * q2_scales = reinterpret_cast<const ggml_fp16_t *>(
+            reinterpret_cast<const uint8_t *>(mat.data) + h->data_bytes);
+
+        const int64_t n_tokens = ggml_nrows(src1);
+        const size_t q8_bytes = tbkern_q2_0_q8_scratch_bytes(h);
+        GGML_ASSERT(n_tokens > 0 && q8_bytes <= SIZE_MAX / (size_t) n_tokens);
+        GGML_ASSERT(params->wdata && params->wsize >= q8_bytes * (size_t) n_tokens);
+        GGML_ASSERT(src1->nb[0] == sizeof(float) && dst->nb[0] == sizeof(float));
+
+        // Quantize activation rows into the ggml work buffer. This invokes the
+        // CPU backend's native Q8_0 quantizer, producing fp16 scales and int8
+        // values exactly as Prism's Q2_0 vec-dot input path does.
+        for (int64_t token = params->ith; token < n_tokens; token += params->nth) {
+            const float * x = reinterpret_cast<const float *>(tbkern_q2_0_row_ptr(src1, token));
+            auto * xq = reinterpret_cast<block_q8_0 *>(static_cast<uint8_t *>(params->wdata) + (size_t) token * q8_bytes);
+            quantize_row_q8_0(x, xq, Kp);
+        }
+        ggml_barrier(params->threadpool);
+
+        // Decode is latency-critical (n_tokens == 1), so partition output rows
+        // rather than tokens. This disjoint static partition covers each row
+        // exactly once and remains entirely within the ggml threadpool.
+        const int row_begin = M * params->ith / params->nth;
+        const int row_end   = M * (params->ith + 1) / params->nth;
+        for (int64_t token = 0; token < n_tokens; ++token) {
+            const auto * xq = reinterpret_cast<const block_q8_0 *>(static_cast<const uint8_t *>(params->wdata) + (size_t) token * q8_bytes);
+            float * y = reinterpret_cast<float *>(tbkern_q2_0_row_ptr(dst, token));
+            for (int row = row_begin; row < row_end; ++row) {
+                const uint8_t * weight_row = static_cast<const uint8_t *>(mat.data) + (size_t) row * mat.row_stride_bytes;
+                float acc = 0.0f;
+                for (int g = 0; g < NG; ++g) {
+                    const int base = g * G;
+                    float gacc = 0.0f;
+                    for (int b = 0; b < G / QK8_0; ++b) {
+                        const int base_b = base + b * QK8_0;
+                        int32_t part = 0;
+                        for (int j = 0; j < QK8_0; ++j) {
+                            part += (tbkern_q2_0_code_at(weight_row, base_b + j) - 1) * (int32_t) xq[base_b / QK8_0].qs[j];
+                        }
+                        gacc += GGML_CPU_FP16_TO_FP32(xq[base_b / QK8_0].d) * (float) part;
+                    }
+                    acc += GGML_CPU_FP16_TO_FP32(q2_scales[(size_t) row * NG + g]) * gacc;
+                }
+                y[row] = acc;
+            }
+        }
+        return true;
+    }
+
+    int repack(ggml_tensor * t, const void * data, size_t data_size) override {
+        if (!t || !data || !tbkern_q2_0_repackable(t)) {
+            return TBK_EINVAL;
+        }
+        const int K = (int) t->ne[0];
+        const int M = (int) t->ne[1];
+        const int G = 128;
+        const size_t native_bytes = ggml_nbytes(t);
+        if (data_size != native_bytes || K != ((K + QK2_0 - 1) / QK2_0) * QK2_0) {
+            return TBK_EINVAL;
+        }
+        tbk_mat packed{};
+        const int rc = tbk_pack_from_q2(reinterpret_cast<const uint8_t *>(data), M, K, G, TBK_LAYOUT_CODES, &packed);
+        if (rc != TBK_OK) {
+            return rc;
+        }
+        auto * h = reinterpret_cast<tbkern_q2_cache_header *>(t->data);
+        h->magic = TBKERN_Q2_CACHE_MAGIC;
+        h->M = M; h->K = K; h->Kp = packed.Kp; h->G = G;
+        h->row_stride = packed.row_stride_bytes;
+        h->scale_count = (size_t) M * (packed.Kp / G);
+        h->data_bytes = (size_t) M * packed.row_stride_bytes;
+        std::memcpy(reinterpret_cast<uint8_t *>(h) + sizeof(*h), packed.data, h->data_bytes);
+        // Do not pre-widen the source scale. Native Prism Q2_0 arithmetic
+        // converts this exact binary16 field immediately before multiplying
+        // its four Q8 partial sums, and Phase 1 keeps that representation and
+        // ordering intact.
+        const auto * native = reinterpret_cast<const block_q2_0 *>(data);
+        auto * q2_scales = reinterpret_cast<ggml_fp16_t *>(
+            reinterpret_cast<uint8_t *>(h) + sizeof(*h) + h->data_bytes);
+        for (size_t i = 0; i < h->scale_count; ++i) {
+            q2_scales[i] = native[i].d;
+        }
+        tbk_mat_free(&packed);
+        return TBK_OK;
+    }
+};
 
 template <typename BLOC_TYPE, int64_t INTER_SIZE, int64_t NB_COLS, ggml_type PARAM_TYPE> class tensor_traits : public tensor_traits_base {
 
@@ -4923,6 +5126,7 @@ template <typename BLOC_TYPE, int64_t INTER_SIZE, int64_t NB_COLS, ggml_type PAR
 }  // namespace ggml::cpu::repack
 
 static const ggml::cpu::tensor_traits * ggml_repack_get_optimal_repack_type(const struct ggml_tensor * cur) {
+    static const ggml::cpu::repack::tbkern_q2_0_traits tbkern_q2_0;
     // instance for Q4
     static const ggml::cpu::repack::tensor_traits<block_q4_0, 4, 4, GGML_TYPE_Q8_0> q4_0_4x4_q8_0;
     static const ggml::cpu::repack::tensor_traits<block_q4_0, 8, 4, GGML_TYPE_Q8_0> q4_0_4x8_q8_0;
@@ -4971,7 +5175,9 @@ static const ggml::cpu::tensor_traits * ggml_repack_get_optimal_repack_type(cons
     static const ggml::cpu::repack::tensor_traits<block_q2_K, 1, 16, GGML_TYPE_Q8_K> q2_K_16x1_q8_K;
 #endif
 
-    if (cur->type == GGML_TYPE_Q4_0) {
+    if (ggml::cpu::repack::tbkern_q2_0_repackable(cur)) {
+        return &tbkern_q2_0;
+    } else if (cur->type == GGML_TYPE_Q4_0) {
         if (ggml_cpu_has_avx2() || (ggml_cpu_has_sve() && ggml_cpu_has_matmul_int8() && ggml_cpu_get_sve_cnt() == QK8_0)) {
             if (cur->ne[1] % 8 == 0) {
                 return &q4_0_8x8_q8_0;
@@ -5160,6 +5366,20 @@ static const char * ggml_backend_cpu_repack_buffer_type_get_name(ggml_backend_bu
     GGML_UNUSED(buft);
 }
 
+static size_t ggml_backend_cpu_repack_buffer_type_get_alloc_size(ggml_backend_buffer_type_t, const ggml_tensor * tensor) {
+    if (ggml::cpu::repack::tbkern_q2_0_repackable(tensor)) {
+        const size_t K = (size_t) tensor->ne[0];
+        const size_t M = (size_t) tensor->ne[1];
+        const size_t row_stride = tbk_row_stride_bytes((int) K);
+        const size_t groups = K / QK2_0;
+        GGML_ASSERT(M <= (SIZE_MAX - sizeof(ggml::cpu::repack::tbkern_q2_cache_header)) / row_stride);
+        const size_t weight_bytes = M * row_stride;
+        GGML_ASSERT(M <= (SIZE_MAX - sizeof(ggml::cpu::repack::tbkern_q2_cache_header) - weight_bytes) / (groups * sizeof(ggml_fp16_t)));
+        return sizeof(ggml::cpu::repack::tbkern_q2_cache_header) + weight_bytes + M * groups * sizeof(ggml_fp16_t);
+    }
+    return ggml_nbytes(tensor);
+}
+
 static ggml_backend_buffer_t ggml_backend_cpu_repack_buffer_type_alloc_buffer(ggml_backend_buffer_type_t buft, size_t size) {
     ggml_backend_buffer_t buffer = ggml_backend_buft_alloc_buffer(ggml_backend_cpu_buffer_type(), size);
 
@@ -5237,7 +5457,7 @@ ggml_backend_buffer_type_t ggml_backend_cpu_repack_buffer_type(void) {
                            /* .alloc_buffer     = */ ggml_backend_cpu_repack_buffer_type_alloc_buffer,
                            /* .get_alignment    = */ ggml_backend_cpu_repack_buffer_type_get_alignment,
                            /* .get_max_size     = */ nullptr,  // defaults to SIZE_MAX
-                           /* .get_alloc_size   = */ nullptr,  // defaults to ggml_nbytes
+                           /* .get_alloc_size   = */ ggml_backend_cpu_repack_buffer_type_get_alloc_size,
                            /* .is_host          = */ nullptr,
                            },
         /* .device  = */ ggml_backend_reg_dev_get(ggml_backend_cpu_reg(), 0),
