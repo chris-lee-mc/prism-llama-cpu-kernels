@@ -4580,8 +4580,17 @@ static bool tbkern_q2_0_vnni_enabled() {
 #endif
 }
 
+static bool tbkern_q2_0_vnni64_enabled() {
+#if defined(__AVX512F__) && defined(__AVX512VNNI__)
+    const char * v = std::getenv("GGML_TBKERN_Q2_0_VNNI64");
+    return v && (std::strcmp(v, "1") == 0 || std::strcmp(v, "true") == 0 || std::strcmp(v, "on") == 0) && ggml_cpu_has_avx512_vnni();
+#else
+    return false;
+#endif
+}
+
 static bool tbkern_q2_0_enabled() {
-    return tbkern_q2_0_scalar_enabled() || tbkern_q2_0_avx2_enabled() || tbkern_q2_0_vnni_enabled();
+    return tbkern_q2_0_scalar_enabled() || tbkern_q2_0_avx2_enabled() || tbkern_q2_0_vnni_enabled() || tbkern_q2_0_vnni64_enabled();
 }
 
 static bool tbkern_q2_0_repackable(const ggml_tensor * t) {
@@ -4697,6 +4706,43 @@ static inline int32_t tbkern_q2_0_dot_vnni(const uint8_t * weight_row, int base,
 }
 #endif
 
+#if defined(__AVX512F__) && defined(__AVX512VNNI__)
+// Decode one packed 64-weight subgroup once, then compute its two Q8_0
+// products together. The cache byte layout is four 16-byte 2-bit planes.
+static inline void tbkern_q2_0_dot2_vnni64(const uint8_t * weight_row, int base,
+                                            const int8_t * q8_lo, const int8_t * q8_hi,
+                                            int32_t * part_lo, int32_t * part_hi) {
+    GGML_ASSERT((base & 63) == 0);
+    const __m128i packed = _mm_loadu_si128(reinterpret_cast<const __m128i *>(
+        weight_row + (size_t) (base / 64) * 16));
+    const __m128i mask = _mm_set1_epi8(3);
+    const __m128i c0 = _mm_and_si128(packed, mask);
+    const __m128i c1 = _mm_and_si128(_mm_srl_epi16(packed, _mm_cvtsi32_si128(2)), mask);
+    const __m128i c2 = _mm_and_si128(_mm_srl_epi16(packed, _mm_cvtsi32_si128(4)), mask);
+    const __m128i c3 = _mm_and_si128(_mm_srl_epi16(packed, _mm_cvtsi32_si128(6)), mask);
+    __m512i codes = _mm512_castsi128_si512(c0);
+    codes = _mm512_inserti32x4(codes, c1, 1);
+    codes = _mm512_inserti32x4(codes, c2, 2);
+    codes = _mm512_inserti32x4(codes, c3, 3);
+
+    const __m256i xlo = _mm256_loadu_si256(reinterpret_cast<const __m256i *>(q8_lo));
+    const __m256i xhi = _mm256_loadu_si256(reinterpret_cast<const __m256i *>(q8_hi));
+    __m512i x = _mm512_castsi256_si512(xlo);
+    x = _mm512_inserti64x4(x, xhi, 1);
+    const __m512i prod = _mm512_dpbusd_epi32(_mm512_setzero_si512(), codes, x);
+    const __m256i lo = _mm512_castsi512_si256(prod);
+    const __m256i hi = _mm512_extracti64x4_epi64(prod, 1);
+    auto reduce = [](__m256i v) {
+        __m128i total = _mm_add_epi32(_mm256_castsi256_si128(v), _mm256_extracti128_si256(v, 1));
+        total = _mm_hadd_epi32(total, total);
+        total = _mm_hadd_epi32(total, total);
+        return _mm_cvtsi128_si32(total);
+    };
+    *part_lo = reduce(lo);
+    *part_hi = reduce(hi);
+}
+#endif
+
 class tbkern_q2_0_traits : public tensor_traits_base {
   public:
     bool work_size(int, const ggml_tensor * op, size_t & size) override {
@@ -4762,6 +4808,9 @@ class tbkern_q2_0_traits : public tensor_traits_base {
 #if defined(__AVX512VNNI__) && defined(__AVX512VL__)
         const bool use_vnni = tbkern_q2_0_vnni_enabled();
 #endif
+#if defined(__AVX512F__) && defined(__AVX512VNNI__)
+        const bool use_vnni64 = tbkern_q2_0_vnni64_enabled();
+#endif
         const int row_begin = M * params->ith / params->nth;
         const int row_end   = M * (params->ith + 1) / params->nth;
         float * y = reinterpret_cast<float *>(tbkern_q2_0_row_ptr(dst, 0));
@@ -4771,27 +4820,44 @@ class tbkern_q2_0_traits : public tensor_traits_base {
             for (int g = 0; g < NG; ++g) {
                 const int base = g * G;
                 float gacc = 0.0f;
-                for (int b = 0; b < G / QK8_0; ++b) {
-                    const int base_b = base + b * QK8_0;
-                    const int ib = base_b / QK8_0;
-                    int32_t part;
+#if defined(__AVX512F__) && defined(__AVX512VNNI__)
+                if (use_vnni64) {
+                    // Keep Q8_0 scales and floating-point accumulation in the
+                    // native 32-element order even though code expansion is 64-wide.
+                    for (int b = 0; b < G / 64; ++b) {
+                        const int base_b = base + b * 64;
+                        const int ib = base_b / QK8_0;
+                        int32_t part_lo;
+                        int32_t part_hi;
+                        tbkern_q2_0_dot2_vnni64(weight_row, base_b, xq[ib].qs, xq[ib + 1].qs, &part_lo, &part_hi);
+                        gacc += GGML_CPU_FP16_TO_FP32(xq[ib].d) * (float) (part_lo - q8_sums[ib]);
+                        gacc += GGML_CPU_FP16_TO_FP32(xq[ib + 1].d) * (float) (part_hi - q8_sums[ib + 1]);
+                    }
+                } else
+#endif
+                {
+                    for (int b = 0; b < G / QK8_0; ++b) {
+                        const int base_b = base + b * QK8_0;
+                        const int ib = base_b / QK8_0;
+                        int32_t part;
 #if defined(__AVX512VNNI__) && defined(__AVX512VL__)
-                    if (use_vnni) {
-                        part = tbkern_q2_0_dot_vnni(weight_row, base_b, xq[ib].qs);
-                    } else
+                        if (use_vnni) {
+                            part = tbkern_q2_0_dot_vnni(weight_row, base_b, xq[ib].qs);
+                        } else
 #endif
 #if defined(__AVX2__) || (defined(_MSC_VER) && defined(GGML_AVX2))
-                    if (use_avx2) {
-                        part = tbkern_q2_0_dot_avx2(weight_row, base_b, xq[ib].qs);
-                    } else
+                        if (use_avx2) {
+                            part = tbkern_q2_0_dot_avx2(weight_row, base_b, xq[ib].qs);
+                        } else
 #endif
-                    {
-                        part = 0;
-                        for (int j = 0; j < QK8_0; ++j) {
-                            part += tbkern_q2_0_code_at(weight_row, base_b + j) * (int32_t) xq[ib].qs[j];
+                        {
+                            part = 0;
+                            for (int j = 0; j < QK8_0; ++j) {
+                                part += tbkern_q2_0_code_at(weight_row, base_b + j) * (int32_t) xq[ib].qs[j];
+                            }
                         }
+                        gacc += GGML_CPU_FP16_TO_FP32(xq[ib].d) * (float) (part - q8_sums[ib]);
                     }
-                    gacc += GGML_CPU_FP16_TO_FP32(xq[ib].d) * (float) (part - q8_sums[ib]);
                 }
                 acc += GGML_CPU_FP16_TO_FP32(native[(size_t) row * NG + g].d) * gacc;
             }
