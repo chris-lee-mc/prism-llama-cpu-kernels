@@ -4629,6 +4629,38 @@ static bool tbkern_q2_0_vnni64_native_enabled() {
 #endif
 }
 
+static bool tbkern_q2_0_env_enabled(const char * name) {
+    const char * v = std::getenv(name);
+    return v && (std::strcmp(v, "1") == 0 || std::strcmp(v, "true") == 0 || std::strcmp(v, "on") == 0);
+}
+
+// Phase 16 is deliberately an opt-in activation-side optimization. Snapshot
+// its control inputs once so a caller cannot change the effective ABI midway
+// through a graph execution by mutating the process environment.
+struct tbkern_q2_0_q8prep_config {
+    bool requested;
+    bool phase9_4r;
+    bool cpu_vnni;
+};
+
+static const tbkern_q2_0_q8prep_config & tbkern_q2_0_q8prep_snapshot() {
+    static const tbkern_q2_0_q8prep_config config = [] {
+        tbkern_q2_0_q8prep_config result = { false, false, false };
+        result.requested = tbkern_q2_0_env_enabled("GGML_TBKERN_Q2_0_VNNI64_Q8PREP");
+#if defined(__AVX512F__) && defined(__AVX512VNNI__)
+        result.phase9_4r = tbkern_q2_0_env_enabled("GGML_TBKERN_Q2_0_VNNI64_4R");
+        result.cpu_vnni = ggml_cpu_has_avx512_vnni();
+#endif
+        return result;
+    }();
+    return config;
+}
+
+static bool tbkern_q2_0_q8prep_enabled() {
+    const auto & config = tbkern_q2_0_q8prep_snapshot();
+    return config.requested && config.phase9_4r && config.cpu_vnni;
+}
+
 static bool tbkern_q2_0_cache_enabled() {
     return tbkern_q2_0_scalar_enabled() || tbkern_q2_0_avx2_enabled() || tbkern_q2_0_vnni_enabled() || tbkern_q2_0_vnni64_enabled() || tbkern_q2_0_vnni64_4r_enabled();
 }
@@ -4735,6 +4767,10 @@ static bool tbkern_q2_0_cache_for_tensor(const ggml_tensor * t) {
     return tbkern_q2_0_cache_enabled();
 }
 
+static bool tbkern_q2_0_q8prep_for_tensor(const ggml_tensor * t) {
+    return tbkern_q2_0_q8prep_enabled() && tbkern_q2_0_cache_for_tensor(t);
+}
+
 static bool tbkern_q2_0_native_for_tensor(const ggml_tensor * t) {
     return tbkern_q2_0_native_snapshot() && !tbkern_q2_0_cache_for_tensor(t);
 }
@@ -4771,8 +4807,23 @@ static inline size_t tbkern_q2_0_sum_offset(int K) {
     return GGML_PAD(tbkern_q2_0_q8_bytes(K), alignof(int32_t));
 }
 
-static inline size_t tbkern_q2_0_scratch_bytes(int K) {
-    return tbkern_q2_0_sum_offset(K) + (size_t) (K / QK8_0) * sizeof(int32_t);
+static inline size_t tbkern_q2_0_base_scratch_bytes(int K) {
+    return GGML_PAD(tbkern_q2_0_sum_offset(K) + (size_t) (K / QK8_0) * sizeof(int32_t), GGML_MEM_ALIGN);
+}
+
+static inline size_t tbkern_q2_0_q8prep_pair_count(int K) {
+    return (size_t) (K / QK8_0) / 2;
+}
+
+static inline size_t tbkern_q2_0_q8prep_offset(int K) {
+    return GGML_PAD(tbkern_q2_0_base_scratch_bytes(K), 64);
+}
+
+static inline size_t tbkern_q2_0_scratch_bytes(int K, bool q8prep) {
+    if (!q8prep) {
+        return tbkern_q2_0_base_scratch_bytes(K);
+    }
+    return tbkern_q2_0_q8prep_offset(K) + tbkern_q2_0_q8prep_pair_count(K) * 64;
 }
 
 // Native Q2_0 bytes remain at tensor->data for generic ggml fallback. The
@@ -5012,7 +5063,8 @@ class tbkern_q2_0_traits : public tensor_traits_base {
         if (K <= 0 || K > INT32_MAX || K % QK2_0 != 0) {
             return false;
         }
-        size = GGML_PAD(tbkern_q2_0_scratch_bytes((int) K), GGML_MEM_ALIGN);
+        const bool q8prep = tbkern_q2_0_q8prep_for_tensor(op->src[0]);
+        size = GGML_PAD(tbkern_q2_0_scratch_bytes((int) K, q8prep), GGML_MEM_ALIGN);
         return true;
     }
 
@@ -5038,8 +5090,11 @@ class tbkern_q2_0_traits : public tensor_traits_base {
         const int NG = K / G;
         const int n_q8 = K / QK8_0;
         const size_t sum_offset = tbkern_q2_0_sum_offset(K);
-        const size_t scratch_bytes = tbkern_q2_0_scratch_bytes(K);
-        GGML_ASSERT(params->wdata && params->wsize >= scratch_bytes);
+        const bool q8prep_requested = tbkern_q2_0_q8prep_for_tensor(src0);
+        const size_t base_scratch_bytes = tbkern_q2_0_scratch_bytes(K, false);
+        const size_t q8prep_scratch_bytes = tbkern_q2_0_scratch_bytes(K, true);
+        GGML_ASSERT(params->wdata && params->wsize >= base_scratch_bytes);
+        const bool use_q8prep = q8prep_requested && params->wsize >= q8prep_scratch_bytes;
         const bool use_cache = tbkern_q2_0_cache_for_tensor(src0);
         const bool use_native = tbkern_q2_0_native_for_tensor(src0);
         const uint8_t * cache = use_cache ? tbkern_q2_0_cache_data(src0) : nullptr;
@@ -5051,6 +5106,7 @@ class tbkern_q2_0_traits : public tensor_traits_base {
 
         auto * xq = reinterpret_cast<block_q8_0 *>(params->wdata);
         auto * q8_sums = reinterpret_cast<int32_t *>(static_cast<uint8_t *>(params->wdata) + sum_offset);
+        auto * q8prep_pairs = use_q8prep ? static_cast<uint8_t *>(params->wdata) + tbkern_q2_0_q8prep_offset(K) : nullptr;
         if (params->ith == 0) {
             const float * x = reinterpret_cast<const float *>(tbkern_q2_0_row_ptr(src1, 0));
             quantize_row_q8_0(x, xq, K);
@@ -5061,8 +5117,31 @@ class tbkern_q2_0_traits : public tensor_traits_base {
                 }
                 q8_sums[ib] = sum;
             }
+            if (use_q8prep) {
+                for (size_t pair = 0; pair < tbkern_q2_0_q8prep_pair_count(K); ++pair) {
+                    uint8_t * dst_pair = q8prep_pairs + pair * 64;
+                    const int ib = (int) (pair * 2);
+                    std::memcpy(dst_pair, xq[ib].qs, QK8_0);
+                    if (ib + 1 < n_q8) {
+                        std::memcpy(dst_pair + QK8_0, xq[ib + 1].qs, QK8_0);
+                    } else {
+                        std::memset(dst_pair + QK8_0, 0, QK8_0);
+                    }
+                }
+            }
         }
         ggml_barrier(params->threadpool);
+        if (params->ith == 0) {
+            static bool logged = false;
+            if (!logged) {
+                const auto & cfg = tbkern_q2_0_q8prep_snapshot();
+                const bool config_effective = cfg.requested && cfg.phase9_4r && cfg.cpu_vnni;
+                GGML_LOG_INFO("tbkern q2_0 q8prep: requested=%d phase9_4r=%d cpu_vnni=%d effective=%d tensor=%d\n",
+                              (int) cfg.requested, (int) cfg.phase9_4r, (int) cfg.cpu_vnni,
+                              (int) config_effective, (int) use_q8prep);
+                logged = true;
+            }
+        }
 
 #if defined(__AVX2__) || (defined(_MSC_VER) && defined(GGML_AVX2))
         const bool use_avx2 = tbkern_q2_0_avx2_enabled();
@@ -5144,7 +5223,9 @@ class tbkern_q2_0_traits : public tensor_traits_base {
                     for (int b = 0; b < G / 64; ++b) {
                         const int base_b = base + b * 64;
                         const int ib = base_b / QK8_0;
-                        const __m512i xpair = tbkern_q2_0_q8_pair_vnni64(xq[ib].qs, xq[ib + 1].qs);
+                        const __m512i xpair = use_q8prep
+                            ? _mm512_loadu_si512(reinterpret_cast<const void *>(q8prep_pairs + ((size_t) ib / 2) * 64))
+                            : tbkern_q2_0_q8_pair_vnni64(xq[ib].qs, xq[ib + 1].qs);
                         for (int r = 0; r < 4; ++r) {
                             int32_t part_lo;
                             int32_t part_hi;
@@ -5207,7 +5288,12 @@ class tbkern_q2_0_traits : public tensor_traits_base {
                         const int ib = base_b / QK8_0;
                         int32_t part_lo;
                         int32_t part_hi;
-                        tbkern_q2_0_dot2_vnni64(weight_row, base_b, xq[ib].qs, xq[ib + 1].qs, &part_lo, &part_hi);
+                        if (use_q8prep) {
+                            const __m512i xpair = _mm512_loadu_si512(reinterpret_cast<const void *>(q8prep_pairs + ((size_t) ib / 2) * 64));
+                            tbkern_q2_0_dot2_vnni64_x(weight_row, base_b, xpair, &part_lo, &part_hi);
+                        } else {
+                            tbkern_q2_0_dot2_vnni64(weight_row, base_b, xq[ib].qs, xq[ib + 1].qs, &part_lo, &part_hi);
+                        }
                         gacc += GGML_CPU_FP16_TO_FP32(xq[ib].d) * (float) (part_lo - q8_sums[ib]);
                         gacc += GGML_CPU_FP16_TO_FP32(xq[ib + 1].d) * (float) (part_hi - q8_sums[ib + 1]);
                     }
