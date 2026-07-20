@@ -4661,6 +4661,11 @@ static bool tbkern_q2_0_q8prep_enabled() {
     return config.requested && config.phase9_4r && config.cpu_vnni;
 }
 
+static bool tbkern_q2_0_shared_q8_enabled() {
+    static const bool enabled = tbkern_q2_0_env_enabled("GGML_TBKERN_Q2_0_SHARED_Q8");
+    return enabled;
+}
+
 static bool tbkern_q2_0_cache_enabled() {
     return tbkern_q2_0_scalar_enabled() || tbkern_q2_0_avx2_enabled() || tbkern_q2_0_vnni_enabled() || tbkern_q2_0_vnni64_enabled() || tbkern_q2_0_vnni64_4r_enabled();
 }
@@ -4765,6 +4770,10 @@ static bool tbkern_q2_0_cache_for_tensor(const ggml_tensor * t) {
         return tbkern_q2_0_hybrid_match(name);
     }
     return tbkern_q2_0_cache_enabled();
+}
+
+static bool tbkern_q2_0_shared_q8_for_tensor(const ggml_tensor * t) {
+    return tbkern_q2_0_shared_q8_enabled() && tbkern_q2_0_cache_for_tensor(t);
 }
 
 static bool tbkern_q2_0_q8prep_for_tensor(const ggml_tensor * t) {
@@ -5104,10 +5113,29 @@ class tbkern_q2_0_traits : public tensor_traits_base {
         const auto * native = reinterpret_cast<const block_q2_0 *>(src0->data);
         const size_t row_stride = tbk_row_stride_bytes(K);
 
-        auto * xq = reinterpret_cast<block_q8_0 *>(params->wdata);
-        auto * q8_sums = reinterpret_cast<int32_t *>(static_cast<uint8_t *>(params->wdata) + sum_offset);
-        auto * q8prep_pairs = use_q8prep ? static_cast<uint8_t *>(params->wdata) + tbkern_q2_0_q8prep_offset(K) : nullptr;
-        if (params->ith == 0) {
+        // Optional graph-shared activation cache. It is owned by the threadpool,
+        // not params->wdata, which is reused and may be cleared by other ops.
+        const bool shared_requested = tbkern_q2_0_shared_q8_for_tensor(src0) && !use_native;
+        const size_t shared_bytes = tbkern_q2_0_scratch_bytes(K, use_q8prep);
+        bool shared_needs_write = false;
+        if (shared_requested) {
+            if (params->ith == 0) {
+                ggml_threadpool_tbkern_q8_cache_reserve(
+                    params->threadpool, shared_bytes,
+                    ggml_threadpool_tbkern_q8_cache_epoch(params->threadpool),
+                    src1, src1->data, K, use_q8prep, &shared_needs_write);
+            }
+            ggml_barrier(params->threadpool);
+        }
+        uint8_t * shared_base = shared_requested
+            ? static_cast<uint8_t *>(ggml_threadpool_tbkern_q8_cache_get(params->threadpool))
+            : nullptr;
+        const bool shared_active = shared_base != nullptr;
+        uint8_t * scratch_base = shared_active ? shared_base : static_cast<uint8_t *>(params->wdata);
+        auto * xq = reinterpret_cast<block_q8_0 *>(scratch_base);
+        auto * q8_sums = reinterpret_cast<int32_t *>(scratch_base + sum_offset);
+        auto * q8prep_pairs = use_q8prep ? scratch_base + tbkern_q2_0_q8prep_offset(K) : nullptr;
+        if (params->ith == 0 && (!shared_active || shared_needs_write)) {
             const float * x = reinterpret_cast<const float *>(tbkern_q2_0_row_ptr(src1, 0));
             quantize_row_q8_0(x, xq, K);
             for (int ib = 0; ib < n_q8; ++ib) {

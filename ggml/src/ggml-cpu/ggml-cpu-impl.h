@@ -531,6 +531,12 @@ static __m256 __lasx_xvreplfr2vr_s(const float val) {
 // TODO: move to ggml-threading
 void ggml_barrier(struct ggml_threadpool * tp);
 
+void * ggml_threadpool_tbkern_q8_cache_reserve(struct ggml_threadpool * tp, size_t bytes,
+                                                uint64_t epoch, const void * src, const void * data, int64_t k,
+                                                bool q8prep, bool * needs_write);
+void * ggml_threadpool_tbkern_q8_cache_get(struct ggml_threadpool * tp);
+uint64_t ggml_threadpool_tbkern_q8_cache_epoch(struct ggml_threadpool * tp);
+
 void ggml_threadpool_chunk_set(struct ggml_threadpool * tp, int value);
 int  ggml_threadpool_chunk_add(struct ggml_threadpool * tp, int value);
 

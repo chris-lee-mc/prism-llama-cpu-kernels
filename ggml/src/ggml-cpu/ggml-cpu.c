@@ -502,6 +502,17 @@ struct ggml_threadpool {
     uint32_t     poll;        // Polling level (0 - no polling)
 
     enum ggml_status ec;
+
+    // Optional TBKERN activation cache; owned by this threadpool.
+    void *   tbkern_q8_cache;
+    size_t   tbkern_q8_cache_size;
+    uint64_t tbkern_q8_cache_epoch;
+    const void * tbkern_q8_cache_src;
+    const void * tbkern_q8_cache_data;
+    int64_t  tbkern_q8_cache_k;
+    bool     tbkern_q8_cache_q8prep;
+    bool     tbkern_q8_cache_valid;
+    uint64_t tbkern_q8_cache_magic;
 };
 
 // Per-thread state
@@ -609,6 +620,55 @@ void ggml_barrier(struct ggml_threadpool * tp) {
     atomic_thread_fence(memory_order_seq_cst);
     #endif
 #endif
+}
+
+void * ggml_threadpool_tbkern_q8_cache_reserve(struct ggml_threadpool * tp, size_t bytes,
+                                                       uint64_t epoch, const void * src, const void * data, int64_t k,
+                                                       bool q8prep, bool * needs_write) {
+    if (!tp || !needs_write || bytes == 0) {
+        if (needs_write) *needs_write = false;
+        return NULL;
+    }
+    const bool hit = tp->tbkern_q8_cache_valid &&
+                     tp->tbkern_q8_cache_epoch == epoch &&
+                     tp->tbkern_q8_cache_src == src &&
+                     tp->tbkern_q8_cache_data == data &&
+                     tp->tbkern_q8_cache_k == k &&
+                     tp->tbkern_q8_cache_q8prep == q8prep &&
+                     tp->tbkern_q8_cache_size >= bytes;
+    if (hit) {
+        *needs_write = false;
+        return tp->tbkern_q8_cache;
+    }
+    if (tp->tbkern_q8_cache_size < bytes) {
+        if (tp->tbkern_q8_cache) {
+            ggml_aligned_free(tp->tbkern_q8_cache, tp->tbkern_q8_cache_size);
+        }
+        tp->tbkern_q8_cache = ggml_aligned_malloc(bytes);
+        tp->tbkern_q8_cache_size = tp->tbkern_q8_cache ? bytes : 0;
+    }
+    if (!tp->tbkern_q8_cache) {
+        tp->tbkern_q8_cache_valid = false;
+        *needs_write = false;
+        return NULL;
+    }
+    tp->tbkern_q8_cache_epoch = epoch;
+    tp->tbkern_q8_cache_src = src;
+    tp->tbkern_q8_cache_data = data;
+    tp->tbkern_q8_cache_k = k;
+    tp->tbkern_q8_cache_q8prep = q8prep;
+    tp->tbkern_q8_cache_valid = true;
+    *needs_write = true;
+    return tp->tbkern_q8_cache;
+}
+
+void * ggml_threadpool_tbkern_q8_cache_get(struct ggml_threadpool * tp) {
+    return tp ? tp->tbkern_q8_cache : NULL;
+}
+
+uint64_t ggml_threadpool_tbkern_q8_cache_epoch(struct ggml_threadpool * tp) {
+    if (!tp) return 0;
+    return (uint64_t) (atomic_load_explicit(&tp->n_graph, memory_order_acquire) >> GGML_THREADPOOL_N_THREADS_BITS);
 }
 
 void ggml_threadpool_chunk_set(struct ggml_threadpool * tp, int value) {
@@ -2710,6 +2770,10 @@ void ggml_threadpool_free(struct ggml_threadpool* threadpool) {
     ggml_cond_destroy(&threadpool->cond);
 #endif // GGML_USE_OPENMP
 
+    if (threadpool->tbkern_q8_cache_magic == UINT64_C(0x54424b45524e5138) && threadpool->tbkern_q8_cache) {
+        ggml_aligned_free(threadpool->tbkern_q8_cache, threadpool->tbkern_q8_cache_size);
+    }
+
     const size_t workers_size = sizeof(struct ggml_compute_state) * n_threads;
     ggml_aligned_free(threadpool->workers, workers_size);
     ggml_aligned_free(threadpool, sizeof(struct ggml_threadpool));
@@ -3261,6 +3325,15 @@ static struct ggml_threadpool * ggml_threadpool_new_impl(
         threadpool->poll             = tpp->poll;
         threadpool->prio             = tpp->prio;
         threadpool->ec               = GGML_STATUS_SUCCESS;
+        threadpool->tbkern_q8_cache = NULL;
+        threadpool->tbkern_q8_cache_size = 0;
+        threadpool->tbkern_q8_cache_epoch = 0;
+        threadpool->tbkern_q8_cache_src = NULL;
+        threadpool->tbkern_q8_cache_data = NULL;
+        threadpool->tbkern_q8_cache_k = 0;
+        threadpool->tbkern_q8_cache_q8prep = false;
+        threadpool->tbkern_q8_cache_valid = false;
+        threadpool->tbkern_q8_cache_magic = UINT64_C(0x54424b45524e5138);
     }
 
     // Allocate and init workers state
@@ -3342,6 +3415,17 @@ enum ggml_status ggml_graph_compute(struct ggml_cgraph * cgraph, struct ggml_cpl
         threadpool->current_chunk    = 0;
         threadpool->abort            = -1;
         threadpool->ec               = GGML_STATUS_SUCCESS;
+        if (threadpool->tbkern_q8_cache_magic != UINT64_C(0x54424b45524e5138)) {
+            threadpool->tbkern_q8_cache = NULL;
+            threadpool->tbkern_q8_cache_size = 0;
+            threadpool->tbkern_q8_cache_epoch = 0;
+            threadpool->tbkern_q8_cache_src = NULL;
+            threadpool->tbkern_q8_cache_data = NULL;
+            threadpool->tbkern_q8_cache_k = 0;
+            threadpool->tbkern_q8_cache_q8prep = false;
+            threadpool->tbkern_q8_cache_valid = false;
+            threadpool->tbkern_q8_cache_magic = UINT64_C(0x54424b45524e5138);
+        }
     }
 
 #ifdef GGML_USE_OPENMP
@@ -3352,7 +3436,12 @@ enum ggml_status ggml_graph_compute(struct ggml_cgraph * cgraph, struct ggml_cpl
             {
                 // update the number of threads from the actual number of threads that we got from OpenMP
                 n_threads = omp_get_num_threads();
-                atomic_store_explicit(&threadpool->n_graph, n_threads, memory_order_relaxed);
+                const int previous_graph = atomic_load_explicit(&threadpool->n_graph, memory_order_relaxed);
+                const int graph_epoch = (previous_graph >> GGML_THREADPOOL_N_THREADS_BITS) + 1;
+                atomic_store_explicit(&threadpool->n_graph,
+                                      (graph_epoch << GGML_THREADPOOL_N_THREADS_BITS) |
+                                      (n_threads & GGML_THREADPOOL_N_THREADS_MASK),
+                                      memory_order_relaxed);
             }
 
             // Apply thread CPU mask and priority
@@ -3365,7 +3454,11 @@ enum ggml_status ggml_graph_compute(struct ggml_cgraph * cgraph, struct ggml_cpl
             ggml_graph_compute_thread(&threadpool->workers[ith]);
         }
     } else {
-        atomic_store_explicit(&threadpool->n_graph, 1, memory_order_relaxed);
+        const int previous_graph = atomic_load_explicit(&threadpool->n_graph, memory_order_relaxed);
+        const int graph_epoch = (previous_graph >> GGML_THREADPOOL_N_THREADS_BITS) + 1;
+        atomic_store_explicit(&threadpool->n_graph,
+                              (graph_epoch << GGML_THREADPOOL_N_THREADS_BITS) | 1,
+                              memory_order_relaxed);
         ggml_graph_compute_thread(&threadpool->workers[0]);
     }
 #else
