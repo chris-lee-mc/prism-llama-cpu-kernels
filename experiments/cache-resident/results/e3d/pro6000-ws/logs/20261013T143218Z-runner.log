@@ -1,0 +1,491 @@
+[bootstrap 14:32:18] apt install: cmake ninja-build ccache
+debconf: delaying package configuration, since apt-utils is not installed
+Selecting previously unselected package libicu70:amd64.
+(Reading database ... (Reading database ... 5%(Reading database ... 10%(Reading database ... 15%(Reading database ... 20%(Reading database ... 25%(Reading database ... 30%(Reading database ... 35%(Reading database ... 40%(Reading database ... 45%(Reading database ... 50%(Reading database ... 55%(Reading database ... 60%(Reading database ... 65%(Reading database ... 70%(Reading database ... 75%(Reading database ... 80%(Reading database ... 85%(Reading database ... 90%(Reading database ... 95%(Reading database ... 100%(Reading database ... 18159 files and directories currently installed.)
+Preparing to unpack .../00-libicu70_70.1-2_amd64.deb ...
+Unpacking libicu70:amd64 (70.1-2) ...
+Selecting previously unselected package libxml2:amd64.
+Preparing to unpack .../01-libxml2_2.9.13+dfsg-1ubuntu0.14_amd64.deb ...
+Unpacking libxml2:amd64 (2.9.13+dfsg-1ubuntu0.14) ...
+Selecting previously unselected package libuv1:amd64.
+Preparing to unpack .../02-libuv1_1.43.0-1ubuntu0.1_amd64.deb ...
+Unpacking libuv1:amd64 (1.43.0-1ubuntu0.1) ...
+Selecting previously unselected package libhiredis0.14:amd64.
+Preparing to unpack .../03-libhiredis0.14_0.14.1-2_amd64.deb ...
+Unpacking libhiredis0.14:amd64 (0.14.1-2) ...
+Selecting previously unselected package ccache.
+Preparing to unpack .../04-ccache_4.5.1-1_amd64.deb ...
+Unpacking ccache (4.5.1-1) ...
+Selecting previously unselected package libarchive13:amd64.
+Preparing to unpack .../05-libarchive13_3.6.0-1ubuntu1.9_amd64.deb ...
+Unpacking libarchive13:amd64 (3.6.0-1ubuntu1.9) ...
+Selecting previously unselected package libjsoncpp25:amd64.
+Preparing to unpack .../06-libjsoncpp25_1.9.5-3_amd64.deb ...
+Unpacking libjsoncpp25:amd64 (1.9.5-3) ...
+Selecting previously unselected package librhash0:amd64.
+Preparing to unpack .../07-librhash0_1.4.2-1ubuntu1_amd64.deb ...
+Unpacking librhash0:amd64 (1.4.2-1ubuntu1) ...
+Selecting previously unselected package dh-elpa-helper.
+Preparing to unpack .../08-dh-elpa-helper_2.0.9ubuntu1_all.deb ...
+Unpacking dh-elpa-helper (2.0.9ubuntu1) ...
+Selecting previously unselected package emacsen-common.
+Preparing to unpack .../09-emacsen-common_3.0.4_all.deb ...
+Unpacking emacsen-common (3.0.4) ...
+Selecting previously unselected package cmake-data.
+Preparing to unpack .../10-cmake-data_3.22.1-1ubuntu1.22.04.2_all.deb ...
+Unpacking cmake-data (3.22.1-1ubuntu1.22.04.2) ...
+Selecting previously unselected package cmake.
+Preparing to unpack .../11-cmake_3.22.1-1ubuntu1.22.04.2_amd64.deb ...
+Unpacking cmake (3.22.1-1ubuntu1.22.04.2) ...
+Selecting previously unselected package ninja-build.
+Preparing to unpack .../12-ninja-build_1.10.1-1_amd64.deb ...
+Unpacking ninja-build (1.10.1-1) ...
+Setting up ninja-build (1.10.1-1) ...
+Setting up libuv1:amd64 (1.43.0-1ubuntu0.1) ...
+Setting up emacsen-common (3.0.4) ...
+Setting up dh-elpa-helper (2.0.9ubuntu1) ...
+Setting up libjsoncpp25:amd64 (1.9.5-3) ...
+Setting up librhash0:amd64 (1.4.2-1ubuntu1) ...
+Setting up cmake-data (3.22.1-1ubuntu1.22.04.2) ...
+Setting up libicu70:amd64 (70.1-2) ...
+Setting up libhiredis0.14:amd64 (0.14.1-2) ...
+Setting up ccache (4.5.1-1) ...
+Updating symlinks in /usr/lib/ccache ...
+Setting up libxml2:amd64 (2.9.13+dfsg-1ubuntu0.14) ...
+Setting up libarchive13:amd64 (3.6.0-1ubuntu1.9) ...
+Setting up cmake (3.22.1-1ubuntu1.22.04.2) ...
+Processing triggers for libc-bin (2.35-0ubuntu3.8) ...
+[bootstrap 14:32:23] installing torch (cu128)
+Looking in indexes: https://download.pytorch.org/whl/cu128
+Collecting torch
+  Downloading https://download-r2.pytorch.org/whl/cu128/torch-2.11.0%2Bcu128-cp310-cp310-manylinux_2_28_x86_64.whl (820.2 MB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 820.2/820.2 MB 6.9 MB/s eta 0:00:00
+Collecting nvidia-nvshmem-cu12==3.4.5
+  Downloading https://pypi.nvidia.com/nvidia-nvshmem-cu12/nvidia_nvshmem_cu12-3.4.5-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64.whl (139.1 MB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 139.1/139.1 MB 166.4 MB/s eta 0:00:00
+Collecting filelock
+  Downloading filelock-3.32.3-py3-none-any.whl (98 kB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 98.9/98.9 KB 3.8 MB/s eta 0:00:00
+Collecting triton==3.6.0
+  Downloading https://download-r2.pytorch.org/whl/triton-3.6.0-cp310-cp310-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl (188.1 MB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 188.1/188.1 MB 25.6 MB/s eta 0:00:00
+Collecting jinja2
+  Downloading https://download.pytorch.org/whl/jinja2-3.1.6-py3-none-any.whl (134 kB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 134.9/134.9 KB 11.4 MB/s eta 0:00:00
+Collecting typing-extensions>=4.10.0
+  Downloading typing_extensions-4.16.0-py3-none-any.whl (45 kB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 45.6/45.6 KB 6.5 MB/s eta 0:00:00
+Collecting cuda-toolkit[cublas,cudart,cufft,cufile,cupti,curand,cusolver,cusparse,nvjitlink,nvrtc,nvtx]==12.8.1
+  Downloading https://pypi.nvidia.com/cuda-toolkit/cuda_toolkit-12.8.1-py2.py3-none-any.whl (2.3 kB)
+Collecting cuda-bindings<13,>=12.9.4
+  Downloading cuda_bindings-12.9.7-cp310-cp310-manylinux_2_24_x86_64.manylinux_2_28_x86_64.whl (7.7 MB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 7.7/7.7 MB 76.7 MB/s eta 0:00:00
+Collecting nvidia-cusparselt-cu12==0.7.1
+  Downloading https://pypi.nvidia.com/nvidia-cusparselt-cu12/nvidia_cusparselt_cu12-0.7.1-py3-none-manylinux2014_x86_64.whl (287.2 MB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 287.2/287.2 MB 120.9 MB/s eta 0:00:00
+Collecting fsspec>=0.8.5
+  Downloading fsspec-2026.7.0-py3-none-any.whl (206 kB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 206.6/206.6 KB 41.9 MB/s eta 0:00:00
+Collecting nvidia-cudnn-cu12==9.19.0.56
+  Downloading https://pypi.nvidia.com/nvidia-cudnn-cu12/nvidia_cudnn_cu12-9.19.0.56-py3-none-manylinux_2_27_x86_64.whl (657.9 MB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 657.9/657.9 MB 80.8 MB/s eta 0:00:00
+Collecting sympy>=1.13.3
+  Downloading sympy-1.14.0-py3-none-any.whl (6.3 MB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 6.3/6.3 MB 174.8 MB/s eta 0:00:00
+Collecting networkx>=2.5.1
+  Downloading networkx-3.4.2-py3-none-any.whl (1.7 MB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 1.7/1.7 MB 165.0 MB/s eta 0:00:00
+Requirement already satisfied: setuptools<82 in /usr/lib/python3/dist-packages (from torch) (59.6.0)
+Collecting nvidia-nccl-cu12==2.28.9
+  Downloading https://pypi.nvidia.com/nvidia-nccl-cu12/nvidia_nccl_cu12-2.28.9-py3-none-manylinux_2_18_x86_64.whl (296.8 MB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 296.8/296.8 MB 132.0 MB/s eta 0:00:00
+Collecting nvidia-cufile-cu12==1.13.1.3.*
+  Downloading https://pypi.nvidia.com/nvidia-cufile-cu12/nvidia_cufile_cu12-1.13.1.3-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64.whl (1.2 MB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 1.2/1.2 MB 347.1 MB/s eta 0:00:00
+Collecting nvidia-cusparse-cu12==12.5.8.93.*
+  Downloading https://pypi.nvidia.com/nvidia-cusparse-cu12/nvidia_cusparse_cu12-12.5.8.93-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64.whl (288.2 MB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 288.2/288.2 MB 126.4 MB/s eta 0:00:00
+Collecting nvidia-cufft-cu12==11.3.3.83.*
+  Downloading https://pypi.nvidia.com/nvidia-cufft-cu12/nvidia_cufft_cu12-11.3.3.83-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64.whl (193.1 MB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 193.1/193.1 MB 143.7 MB/s eta 0:00:00
+Collecting nvidia-cuda-cupti-cu12==12.8.90.*
+  Downloading https://pypi.nvidia.com/nvidia-cuda-cupti-cu12/nvidia_cuda_cupti_cu12-12.8.90-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64.whl (10.2 MB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 10.2/10.2 MB 257.4 MB/s eta 0:00:00
+Collecting nvidia-cuda-nvrtc-cu12==12.8.93.*
+  Downloading https://pypi.nvidia.com/nvidia-cuda-nvrtc-cu12/nvidia_cuda_nvrtc_cu12-12.8.93-py3-none-manylinux2010_x86_64.manylinux_2_12_x86_64.whl (88.0 MB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 88.0/88.0 MB 198.9 MB/s eta 0:00:00
+Collecting nvidia-nvtx-cu12==12.8.90.*
+  Downloading https://pypi.nvidia.com/nvidia-nvtx-cu12/nvidia_nvtx_cu12-12.8.90-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64.whl (89 kB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 90.0/90.0 KB 180.9 MB/s eta 0:00:00
+Collecting nvidia-cublas-cu12==12.8.4.1.*
+  Downloading https://pypi.nvidia.com/nvidia-cublas-cu12/nvidia_cublas_cu12-12.8.4.1-py3-none-manylinux_2_27_x86_64.whl (594.3 MB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 594.3/594.3 MB 81.4 MB/s eta 0:00:00
+Collecting nvidia-cusolver-cu12==11.7.3.90.*
+  Downloading https://pypi.nvidia.com/nvidia-cusolver-cu12/nvidia_cusolver_cu12-11.7.3.90-py3-none-manylinux_2_27_x86_64.whl (267.5 MB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 267.5/267.5 MB 131.5 MB/s eta 0:00:00
+Collecting nvidia-curand-cu12==10.3.9.90.*
+  Downloading https://pypi.nvidia.com/nvidia-curand-cu12/nvidia_curand_cu12-10.3.9.90-py3-none-manylinux_2_27_x86_64.whl (63.6 MB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 63.6/63.6 MB 204.2 MB/s eta 0:00:00
+Collecting nvidia-nvjitlink-cu12==12.8.93.*
+  Downloading https://pypi.nvidia.com/nvidia-nvjitlink-cu12/nvidia_nvjitlink_cu12-12.8.93-py3-none-manylinux2010_x86_64.manylinux_2_12_x86_64.whl (39.3 MB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 39.3/39.3 MB 212.3 MB/s eta 0:00:00
+Collecting nvidia-cuda-runtime-cu12==12.8.90.*
+  Downloading https://pypi.nvidia.com/nvidia-cuda-runtime-cu12/nvidia_cuda_runtime_cu12-12.8.90-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64.whl (954 kB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 954.8/954.8 KB 340.2 MB/s eta 0:00:00
+Collecting cuda-pathfinder~=1.1
+  Downloading cuda_pathfinder-1.6.0-py3-none-any.whl (54 kB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 54.6/54.6 KB 2.6 MB/s eta 0:00:00
+Collecting mpmath<1.4,>=1.1.0
+  Downloading mpmath-1.3.0-py3-none-any.whl (536 kB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 536.2/536.2 KB 84.2 MB/s eta 0:00:00
+Collecting MarkupSafe>=2.0
+  Downloading https://download.pytorch.org/whl/markupsafe-3.0.3-cp310-cp310-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (20 kB)
+Installing collected packages: nvidia-cusparselt-cu12, mpmath, cuda-toolkit, typing-extensions, triton, sympy, nvidia-nvtx-cu12, nvidia-nvshmem-cu12, nvidia-nvjitlink-cu12, nvidia-nccl-cu12, nvidia-curand-cu12, nvidia-cufile-cu12, nvidia-cuda-runtime-cu12, nvidia-cuda-nvrtc-cu12, nvidia-cuda-cupti-cu12, nvidia-cublas-cu12, networkx, MarkupSafe, fsspec, filelock, cuda-pathfinder, nvidia-cusparse-cu12, nvidia-cufft-cu12, nvidia-cudnn-cu12, jinja2, cuda-bindings, nvidia-cusolver-cu12, torch
+Successfully installed MarkupSafe-3.0.3 cuda-bindings-12.9.7 cuda-pathfinder-1.6.0 cuda-toolkit-12.8.1 filelock-3.32.3 fsspec-2026.7.0 jinja2-3.1.6 mpmath-1.3.0 networkx-3.4.2 nvidia-cublas-cu12-12.8.4.1 nvidia-cuda-cupti-cu12-12.8.90 nvidia-cuda-nvrtc-cu12-12.8.93 nvidia-cuda-runtime-cu12-12.8.90 nvidia-cudnn-cu12-9.19.0.56 nvidia-cufft-cu12-11.3.3.83 nvidia-cufile-cu12-1.13.1.3 nvidia-curand-cu12-10.3.9.90 nvidia-cusolver-cu12-11.7.3.90 nvidia-cusparse-cu12-12.5.8.93 nvidia-cusparselt-cu12-0.7.1 nvidia-nccl-cu12-2.28.9 nvidia-nvjitlink-cu12-12.8.93 nvidia-nvshmem-cu12-3.4.5 nvidia-nvtx-cu12-12.8.90 sympy-1.14.0 torch-2.11.0+cu128 triton-3.6.0 typing-extensions-4.16.0
+WARNING: Running pip as the 'root' user can result in broken permissions and conflicting behaviour with the system package manager. It is recommended to use a virtual environment instead: https://pip.pypa.io/warnings/venv
+[bootstrap 14:33:26] pip install -r requirements-pod.txt
+Collecting cuda-python<13,>=12.8
+  Downloading cuda_python-12.9.7-py3-none-any.whl (7.6 kB)
+Collecting cupy-cuda12x
+  Downloading cupy_cuda12x-14.2.0-cp310-cp310-manylinux2014_x86_64.whl (135.3 MB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 135.3/135.3 MB 36.0 MB/s eta 0:00:00
+Collecting nvidia-ml-py
+  Downloading nvidia_ml_py-13.615.71-py3-none-any.whl (58 kB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 58.1/58.1 KB 9.7 MB/s eta 0:00:00
+Collecting numpy
+  Downloading numpy-2.2.6-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (16.8 MB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 16.8/16.8 MB 150.3 MB/s eta 0:00:00
+Collecting matplotlib
+  Downloading matplotlib-3.10.9-cp310-cp310-manylinux2014_x86_64.manylinux_2_17_x86_64.whl (8.8 MB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 8.8/8.8 MB 213.2 MB/s eta 0:00:00
+Collecting requests
+  Downloading requests-2.34.2-py3-none-any.whl (73 kB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 73.1/73.1 KB 2.3 MB/s eta 0:00:00
+Collecting pytest
+  Downloading pytest-9.1.1-py3-none-any.whl (386 kB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 386.5/386.5 KB 64.1 MB/s eta 0:00:00
+Collecting transformers==5.19.0
+  Downloading transformers-5.19.0-py3-none-any.whl (12.6 MB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 12.6/12.6 MB 152.0 MB/s eta 0:00:00
+Collecting accelerate
+  Downloading accelerate-1.15.0-py3-none-any.whl (394 kB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 394.3/394.3 KB 64.8 MB/s eta 0:00:00
+Collecting huggingface_hub[hf_transfer]
+  Downloading huggingface_hub-2.2.0-py3-none-any.whl (839 kB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 839.9/839.9 KB 118.7 MB/s eta 0:00:00
+Collecting einops
+  Downloading einops-0.8.2-py3-none-any.whl (65 kB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 65.6/65.6 KB 11.8 MB/s eta 0:00:00
+Collecting fla-core==0.5.2
+  Downloading fla_core-0.5.2-py3-none-any.whl (819 kB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 819.2/819.2 KB 105.9 MB/s eta 0:00:00
+Collecting safetensors>=0.8.0
+  Downloading safetensors-0.8.0-cp310-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (516 kB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 516.0/516.0 KB 83.8 MB/s eta 0:00:00
+Collecting packaging>=20.0
+  Downloading packaging-26.3-py3-none-any.whl (129 kB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 130.0/130.0 KB 24.4 MB/s eta 0:00:00
+Collecting tqdm>=4.60
+  Downloading tqdm-4.70.1-py3-none-any.whl (80 kB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 80.2/80.2 KB 12.8 MB/s eta 0:00:00
+Collecting typer
+  Downloading typer-0.27.3-py3-none-any.whl (123 kB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 123.3/123.3 KB 23.2 MB/s eta 0:00:00
+Collecting tokenizers<0.24.0,>=0.23.1
+  Downloading tokenizers-0.23.3-cp310-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (3.4 MB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 3.4/3.4 MB 206.8 MB/s eta 0:00:00
+Collecting pyyaml>=5.1
+  Downloading pyyaml-6.0.3-cp310-cp310-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (770 kB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 770.3/770.3 KB 117.5 MB/s eta 0:00:00
+Collecting regex>=2025.10.22
+  Downloading regex-2026.9.29-cp310-cp310-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (797 kB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 797.6/797.6 KB 38.2 MB/s eta 0:00:00
+Requirement already satisfied: cuda-bindings~=12.9.7 in /usr/local/lib/python3.10/dist-packages (from cuda-python<13,>=12.8->-r /workspace/repo/experiments/cache-resident/infra/requirements-pod.txt (line 3)) (12.9.7)
+Requirement already satisfied: cuda-pathfinder==1.*,>=1.3.4 in /usr/local/lib/python3.10/dist-packages (from cupy-cuda12x->-r /workspace/repo/experiments/cache-resident/infra/requirements-pod.txt (line 4)) (1.6.0)
+Collecting pillow>=8
+  Downloading pillow-12.3.0-cp310-cp310-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl (6.9 MB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 6.9/6.9 MB 146.5 MB/s eta 0:00:00
+Collecting cycler>=0.10
+  Downloading cycler-0.12.1-py3-none-any.whl (8.3 kB)
+Collecting pyparsing>=3
+  Downloading pyparsing-3.3.3-py3-none-any.whl (126 kB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 126.4/126.4 KB 23.9 MB/s eta 0:00:00
+Collecting python-dateutil>=2.7
+  Downloading python_dateutil-2.9.0.post0-py2.py3-none-any.whl (229 kB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 229.9/229.9 KB 49.3 MB/s eta 0:00:00
+Collecting contourpy>=1.0.1
+  Downloading contourpy-1.3.2-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (325 kB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 325.0/325.0 KB 16.9 MB/s eta 0:00:00
+Collecting kiwisolver>=1.3.1
+  Downloading kiwisolver-1.5.1-cp310-cp310-manylinux_2_12_x86_64.manylinux2010_x86_64.whl (1.6 MB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 1.6/1.6 MB 174.7 MB/s eta 0:00:00
+Collecting fonttools>=4.22.0
+  Downloading fonttools-4.65.0-cp310-cp310-manylinux2014_x86_64.manylinux_2_17_x86_64.whl (5.3 MB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 5.3/5.3 MB 117.1 MB/s eta 0:00:00
+Collecting urllib3<3,>=1.26
+  Downloading urllib3-2.8.0-py3-none-any.whl (135 kB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 135.7/135.7 KB 22.4 MB/s eta 0:00:00
+Collecting certifi>=2023.5.7
+  Downloading certifi-2026.7.22-py3-none-any.whl (136 kB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 137.0/137.0 KB 39.3 MB/s eta 0:00:00
+Collecting charset_normalizer<4,>=2
+  Downloading charset_normalizer-3.5.2-cp310-cp310-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (271 kB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 271.1/271.1 KB 14.2 MB/s eta 0:00:00
+Collecting idna<4,>=2.5
+  Downloading idna-3.20-py3-none-any.whl (69 kB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 69.6/69.6 KB 12.8 MB/s eta 0:00:00
+Collecting exceptiongroup>=1
+  Downloading exceptiongroup-1.3.1-py3-none-any.whl (16 kB)
+Collecting pluggy<2,>=1.5
+  Downloading pluggy-1.6.0-py3-none-any.whl (20 kB)
+Collecting iniconfig>=1.0.1
+  Downloading iniconfig-2.3.1-py3-none-any.whl (7.6 kB)
+Collecting tomli>=1
+  Downloading tomli-2.5.0-py3-none-any.whl (14 kB)
+Collecting pygments>=2.7.2
+  Downloading pygments-2.21.0-py3-none-any.whl (1.3 MB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 1.3/1.3 MB 120.2 MB/s eta 0:00:00
+Collecting psutil
+  Downloading psutil-7.2.2-cp36-abi3-manylinux2010_x86_64.manylinux_2_12_x86_64.manylinux_2_28_x86_64.whl (155 kB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 155.6/155.6 KB 8.1 MB/s eta 0:00:00
+Requirement already satisfied: torch>=2.0.0 in /usr/local/lib/python3.10/dist-packages (from accelerate->-r /workspace/repo/experiments/cache-resident/infra/requirements-pod.txt (line 11)) (2.11.0+cu128)
+WARNING: huggingface-hub 2.2.0 does not provide the extra 'hf_transfer'
+Collecting click<9.0.0,>=8.4.2
+  Downloading click-8.5.0-py3-none-any.whl (125 kB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 125.3/125.3 KB 27.2 MB/s eta 0:00:00
+Requirement already satisfied: typing-extensions>=4.1.0 in /usr/local/lib/python3.10/dist-packages (from huggingface_hub[hf_transfer]->-r /workspace/repo/experiments/cache-resident/infra/requirements-pod.txt (line 12)) (4.16.0)
+Collecting hf-xet<2.0.0,>=1.6.0
+  Downloading hf_xet-1.7.0-cp38-abi3-manylinux2014_x86_64.manylinux_2_17_x86_64.whl (4.2 MB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 4.2/4.2 MB 238.4 MB/s eta 0:00:00
+Collecting httpx2<3,>=2.0.0
+  Downloading httpx2-2.13.1-py3-none-any.whl (95 kB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 95.6/95.6 KB 18.0 MB/s eta 0:00:00
+Requirement already satisfied: fsspec>=2023.5.0 in /usr/local/lib/python3.10/dist-packages (from huggingface_hub[hf_transfer]->-r /workspace/repo/experiments/cache-resident/infra/requirements-pod.txt (line 12)) (2026.7.0)
+Requirement already satisfied: filelock>=3.10.0 in /usr/local/lib/python3.10/dist-packages (from huggingface_hub[hf_transfer]->-r /workspace/repo/experiments/cache-resident/infra/requirements-pod.txt (line 12)) (3.32.3)
+Collecting anyio>=4.10
+  Downloading anyio-4.15.1-py3-none-any.whl (132 kB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 132.1/132.1 KB 24.5 MB/s eta 0:00:00
+Collecting httpcore2==2.13.1
+  Downloading httpcore2-2.13.1-py3-none-any.whl (83 kB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 83.4/83.4 KB 18.1 MB/s eta 0:00:00
+Collecting truststore>=0.10
+  Downloading truststore-0.10.5-py3-none-any.whl (19 kB)
+Collecting h11>=0.16
+  Downloading h11-0.16.0-py3-none-any.whl (37 kB)
+Collecting six>=1.5
+  Downloading six-1.17.0-py2.py3-none-any.whl (11 kB)
+Requirement already satisfied: nvidia-cusparselt-cu12==0.7.1 in /usr/local/lib/python3.10/dist-packages (from torch>=2.0.0->accelerate->-r /workspace/repo/experiments/cache-resident/infra/requirements-pod.txt (line 11)) (0.7.1)
+Requirement already satisfied: networkx>=2.5.1 in /usr/local/lib/python3.10/dist-packages (from torch>=2.0.0->accelerate->-r /workspace/repo/experiments/cache-resident/infra/requirements-pod.txt (line 11)) (3.4.2)
+Requirement already satisfied: sympy>=1.13.3 in /usr/local/lib/python3.10/dist-packages (from torch>=2.0.0->accelerate->-r /workspace/repo/experiments/cache-resident/infra/requirements-pod.txt (line 11)) (1.14.0)
+Requirement already satisfied: cuda-toolkit[cublas,cudart,cufft,cufile,cupti,curand,cusolver,cusparse,nvjitlink,nvrtc,nvtx]==12.8.1 in /usr/local/lib/python3.10/dist-packages (from torch>=2.0.0->accelerate->-r /workspace/repo/experiments/cache-resident/infra/requirements-pod.txt (line 11)) (12.8.1)
+Requirement already satisfied: nvidia-nccl-cu12==2.28.9 in /usr/local/lib/python3.10/dist-packages (from torch>=2.0.0->accelerate->-r /workspace/repo/experiments/cache-resident/infra/requirements-pod.txt (line 11)) (2.28.9)
+Requirement already satisfied: jinja2 in /usr/local/lib/python3.10/dist-packages (from torch>=2.0.0->accelerate->-r /workspace/repo/experiments/cache-resident/infra/requirements-pod.txt (line 11)) (3.1.6)
+Requirement already satisfied: triton==3.6.0 in /usr/local/lib/python3.10/dist-packages (from torch>=2.0.0->accelerate->-r /workspace/repo/experiments/cache-resident/infra/requirements-pod.txt (line 11)) (3.6.0)
+Requirement already satisfied: nvidia-nvshmem-cu12==3.4.5 in /usr/local/lib/python3.10/dist-packages (from torch>=2.0.0->accelerate->-r /workspace/repo/experiments/cache-resident/infra/requirements-pod.txt (line 11)) (3.4.5)
+Requirement already satisfied: setuptools<82 in /usr/lib/python3/dist-packages (from torch>=2.0.0->accelerate->-r /workspace/repo/experiments/cache-resident/infra/requirements-pod.txt (line 11)) (59.6.0)
+Requirement already satisfied: nvidia-cudnn-cu12==9.19.0.56 in /usr/local/lib/python3.10/dist-packages (from torch>=2.0.0->accelerate->-r /workspace/repo/experiments/cache-resident/infra/requirements-pod.txt (line 11)) (9.19.0.56)
+Requirement already satisfied: nvidia-cufft-cu12==11.3.3.83.* in /usr/local/lib/python3.10/dist-packages (from cuda-toolkit[cublas,cudart,cufft,cufile,cupti,curand,cusolver,cusparse,nvjitlink,nvrtc,nvtx]==12.8.1->torch>=2.0.0->accelerate->-r /workspace/repo/experiments/cache-resident/infra/requirements-pod.txt (line 11)) (11.3.3.83)
+Requirement already satisfied: nvidia-cufile-cu12==1.13.1.3.* in /usr/local/lib/python3.10/dist-packages (from cuda-toolkit[cublas,cudart,cufft,cufile,cupti,curand,cusolver,cusparse,nvjitlink,nvrtc,nvtx]==12.8.1->torch>=2.0.0->accelerate->-r /workspace/repo/experiments/cache-resident/infra/requirements-pod.txt (line 11)) (1.13.1.3)
+Requirement already satisfied: nvidia-cuda-cupti-cu12==12.8.90.* in /usr/local/lib/python3.10/dist-packages (from cuda-toolkit[cublas,cudart,cufft,cufile,cupti,curand,cusolver,cusparse,nvjitlink,nvrtc,nvtx]==12.8.1->torch>=2.0.0->accelerate->-r /workspace/repo/experiments/cache-resident/infra/requirements-pod.txt (line 11)) (12.8.90)
+Requirement already satisfied: nvidia-cusolver-cu12==11.7.3.90.* in /usr/local/lib/python3.10/dist-packages (from cuda-toolkit[cublas,cudart,cufft,cufile,cupti,curand,cusolver,cusparse,nvjitlink,nvrtc,nvtx]==12.8.1->torch>=2.0.0->accelerate->-r /workspace/repo/experiments/cache-resident/infra/requirements-pod.txt (line 11)) (11.7.3.90)
+Requirement already satisfied: nvidia-cuda-runtime-cu12==12.8.90.* in /usr/local/lib/python3.10/dist-packages (from cuda-toolkit[cublas,cudart,cufft,cufile,cupti,curand,cusolver,cusparse,nvjitlink,nvrtc,nvtx]==12.8.1->torch>=2.0.0->accelerate->-r /workspace/repo/experiments/cache-resident/infra/requirements-pod.txt (line 11)) (12.8.90)
+Requirement already satisfied: nvidia-nvjitlink-cu12==12.8.93.* in /usr/local/lib/python3.10/dist-packages (from cuda-toolkit[cublas,cudart,cufft,cufile,cupti,curand,cusolver,cusparse,nvjitlink,nvrtc,nvtx]==12.8.1->torch>=2.0.0->accelerate->-r /workspace/repo/experiments/cache-resident/infra/requirements-pod.txt (line 11)) (12.8.93)
+Requirement already satisfied: nvidia-nvtx-cu12==12.8.90.* in /usr/local/lib/python3.10/dist-packages (from cuda-toolkit[cublas,cudart,cufft,cufile,cupti,curand,cusolver,cusparse,nvjitlink,nvrtc,nvtx]==12.8.1->torch>=2.0.0->accelerate->-r /workspace/repo/experiments/cache-resident/infra/requirements-pod.txt (line 11)) (12.8.90)
+Requirement already satisfied: nvidia-curand-cu12==10.3.9.90.* in /usr/local/lib/python3.10/dist-packages (from cuda-toolkit[cublas,cudart,cufft,cufile,cupti,curand,cusolver,cusparse,nvjitlink,nvrtc,nvtx]==12.8.1->torch>=2.0.0->accelerate->-r /workspace/repo/experiments/cache-resident/infra/requirements-pod.txt (line 11)) (10.3.9.90)
+Requirement already satisfied: nvidia-cuda-nvrtc-cu12==12.8.93.* in /usr/local/lib/python3.10/dist-packages (from cuda-toolkit[cublas,cudart,cufft,cufile,cupti,curand,cusolver,cusparse,nvjitlink,nvrtc,nvtx]==12.8.1->torch>=2.0.0->accelerate->-r /workspace/repo/experiments/cache-resident/infra/requirements-pod.txt (line 11)) (12.8.93)
+Requirement already satisfied: nvidia-cublas-cu12==12.8.4.1.* in /usr/local/lib/python3.10/dist-packages (from cuda-toolkit[cublas,cudart,cufft,cufile,cupti,curand,cusolver,cusparse,nvjitlink,nvrtc,nvtx]==12.8.1->torch>=2.0.0->accelerate->-r /workspace/repo/experiments/cache-resident/infra/requirements-pod.txt (line 11)) (12.8.4.1)
+Requirement already satisfied: nvidia-cusparse-cu12==12.5.8.93.* in /usr/local/lib/python3.10/dist-packages (from cuda-toolkit[cublas,cudart,cufft,cufile,cupti,curand,cusolver,cusparse,nvjitlink,nvrtc,nvtx]==12.8.1->torch>=2.0.0->accelerate->-r /workspace/repo/experiments/cache-resident/infra/requirements-pod.txt (line 11)) (12.5.8.93)
+Collecting shellingham>=1.3.0
+  Downloading shellingham-1.5.4-py2.py3-none-any.whl (9.8 kB)
+Collecting rich>=13.8.0
+  Downloading rich-15.0.0-py3-none-any.whl (310 kB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 310.7/310.7 KB 59.9 MB/s eta 0:00:00
+Collecting annotated-doc>=0.0.2
+  Downloading annotated_doc-0.0.5-py3-none-any.whl (5.3 kB)
+Collecting markdown-it-py>=2.2.0
+  Downloading markdown_it_py-4.2.0-py3-none-any.whl (91 kB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 91.7/91.7 KB 17.2 MB/s eta 0:00:00
+Requirement already satisfied: mpmath<1.4,>=1.1.0 in /usr/local/lib/python3.10/dist-packages (from sympy>=1.13.3->torch>=2.0.0->accelerate->-r /workspace/repo/experiments/cache-resident/infra/requirements-pod.txt (line 11)) (1.3.0)
+Requirement already satisfied: MarkupSafe>=2.0 in /usr/local/lib/python3.10/dist-packages (from jinja2->torch>=2.0.0->accelerate->-r /workspace/repo/experiments/cache-resident/infra/requirements-pod.txt (line 11)) (3.0.3)
+Collecting mdurl~=0.1
+  Downloading mdurl-0.1.2-py3-none-any.whl (10.0 kB)
+Installing collected packages: nvidia-ml-py, urllib3, truststore, tqdm, tomli, six, shellingham, safetensors, regex, pyyaml, pyparsing, pygments, psutil, pluggy, pillow, packaging, numpy, mdurl, kiwisolver, iniconfig, idna, hf-xet, h11, fonttools, exceptiongroup, einops, cycler, click, charset_normalizer, certifi, annotated-doc, requests, python-dateutil, pytest, markdown-it-py, httpcore2, fla-core, cupy-cuda12x, cuda-python, contourpy, anyio, rich, matplotlib, httpx2, typer, huggingface_hub, tokenizers, accelerate, transformers
+Successfully installed accelerate-1.15.0 annotated-doc-0.0.5 anyio-4.15.1 certifi-2026.7.22 charset_normalizer-3.5.2 click-8.5.0 contourpy-1.3.2 cuda-python-12.9.7 cupy-cuda12x-14.2.0 cycler-0.12.1 einops-0.8.2 exceptiongroup-1.3.1 fla-core-0.5.2 fonttools-4.65.0 h11-0.16.0 hf-xet-1.7.0 httpcore2-2.13.1 httpx2-2.13.1 huggingface_hub-2.2.0 idna-3.20 iniconfig-2.3.1 kiwisolver-1.5.1 markdown-it-py-4.2.0 matplotlib-3.10.9 mdurl-0.1.2 numpy-2.2.6 nvidia-ml-py-13.615.71 packaging-26.3 pillow-12.3.0 pluggy-1.6.0 psutil-7.2.2 pygments-2.21.0 pyparsing-3.3.3 pytest-9.1.1 python-dateutil-2.9.0.post0 pyyaml-6.0.3 regex-2026.9.29 requests-2.34.2 rich-15.0.0 safetensors-0.8.0 shellingham-1.5.4 six-1.17.0 tokenizers-0.23.3 tomli-2.5.0 tqdm-4.70.1 transformers-5.19.0 truststore-0.10.5 typer-0.27.3 urllib3-2.8.0
+WARNING: Running pip as the 'root' user can result in broken permissions and conflicting behaviour with the system package manager. It is recommended to use a virtual environment instead: https://pip.pypa.io/warnings/venv
+[bootstrap 14:33:46] transformers: 5.19.0
+[bootstrap 14:34:00] ncu: /usr/local/cuda/bin/ncu
+[bootstrap 14:34:00] OK in 102s
+[l2persist] NVIDIA RTX PRO 6000 Blackwell Workstation Edition sm_120 L2=128.0 MiB persisting_max=80.0 MiB window_max=128.0 MiB limit=24.0 MiB backend=cuda-python
+[e3d] calibration {'peak_gbps': 1792.0, 'copy_gbps': 1279.531457614337, 'nvml_idle': {'sm_mhz': 2610, 'mem_mhz': 13365, 'max_sm_mhz': 3090, 'max_mem_mhz': 14001, 'power_w': 309.775, 'power_limit_w': 350.0, 'temp_c': 29, 'pstate': 1, 'event_reasons': '0x0'}, 'nvml_copy_busy': {'sm_mhz': 2610, 'mem_mhz': 13365, 'max_sm_mhz': 3090, 'max_mem_mhz': 14001, 'power_w': 309.775, 'power_limit_w': 350.0, 'temp_c': 29, 'pstate': 1, 'event_reasons': '0x4'}, 'graph_node_gap_us': 0.707224989309907, 'bench': [{'N': 17408, 'K': 5120, 'us_cold': 174.32919002714613, 'us_hot': 68.93207345690045, 'gbps_cold': 136.06405213209783, 'pct_peak_cold': 0.07592860052014387, 'ok': True}, {'N': 5120, 'K': 17408, 'us_cold': 200.61200857162476, 'us_hot': 86.4687291058627, 'gbps_cold': 118.23786705934525, 'pct_peak_cold': 0.06598095260008105, 'ok': True}, {'N': 49152, 'K': 1024, 'us_cold': 69.03314590454102, 'us_hot': 39.6888330578804, 'gbps_cold': 195.11925501158365, 'pct_peak_cold': 0.10888351284128552, 'ok': True}]}
+[e3d] pdl=0 D=16 S1 K=4 off step=188.0199983716011 first=None later=None cycle=None
+[e3d] pdl=0 D=16 S1 K=4 on step=180.10399490594864 first=None later=None cycle=None
+[e3d] pdl=0 D=16 S1 K=8 off step=173.16800355911255 first=None later=None cycle=None
+[e3d] pdl=0 D=16 S1 K=8 on step=173.30799996852875 first=None later=None cycle=None
+[e3d] pdl=0 D=16 S2 K=4 off step=234.06799882650375 first=320.99199295043945 later=207.866666217645 cycle=49188.89617919922
+[e3d] pdl=0 D=16 S2 K=4 on step=231.91199637949467 first=302.047997713089 later=207.16799795627594 cycle=48999.55177307129
+[e3d] pdl=0 D=16 S2 K=8 off step=212.2520012781024 first=317.903995513916 later=197.62971571513583 cycle=49830.543518066406
+[e3d] pdl=0 D=16 S2 K=8 on step=205.62199968844652 first=296.88000679016113 later=191.92000052758624 cycle=49850.175857543945
+[e3d] pdl=0 D=16 S3 K=4 off step=225.28799809515476 first=286.8960052728653 later=203.42933386564255 cycle=49180.75180053711
+[e3d] pdl=0 D=16 S3 K=4 on step=223.7039990723133 first=286.73599660396576 later=203.7653351823489 cycle=49413.72871398926
+[e3d] pdl=0 D=16 S3 K=8 off step=205.54999820888042 first=289.71199691295624 later=193.74628471476692 cycle=50105.80825805664
+[e3d] pdl=0 D=16 S3 K=8 on step=205.35599905997515 first=287.7119928598404 later=193.49942888532365 cycle=50171.504974365234
+[e3d] pdl=0 D=32 S1 K=4 off step=401.7919898033142 first=None later=None cycle=None
+[e3d] pdl=0 D=32 S1 K=4 on step=384.3799978494644 first=None later=None cycle=None
+[e3d] pdl=0 D=32 S1 K=8 off step=388.3560001850128 first=None later=None cycle=None
+[e3d] pdl=0 D=32 S1 K=8 on step=387.52199709415436 first=None later=None cycle=None
+[e3d] pdl=0 D=32 S2 K=4 off step=480.7399995625019 first=635.5040073394775 later=430.90133368968964 cycle=52023.47183227539
+[e3d] pdl=0 D=32 S2 K=4 on step=458.7559960782528 first=576.9120156764984 later=422.73066441218054 cycle=51911.24725341797
+[e3d] pdl=0 D=32 S2 K=8 off step=448.3700003474951 first=630.1440000534058 later=421.30743180002486 cycle=53523.55194091797
+[e3d] pdl=0 D=32 S2 K=8 on step=435.33399887382984 first=572.3359882831573 later=415.9542875630515 cycle=53394.432067871094
+[e3d] pdl=0 D=32 S3 K=4 off step=462.5840000808239 first=565.7120048999786 later=428.1546622514725 cycle=51710.06393432617
+[e3d] pdl=0 D=32 S3 K=4 on step=457.1879990398884 first=558.5759878158569 later=423.4133313099543 cycle=51710.51216125488
+[e3d] pdl=0 D=32 S3 K=8 off step=434.9439963698387 first=562.7039968967438 later=417.19771283013483 cycle=53450.89530944824
+[e3d] pdl=0 D=32 S3 K=8 on step=435.9440002590418 first=555.9519827365875 later=418.4365698269436 cycle=53293.72787475586
+[e3d] pdl=0 D=48 S1 K=4 off step=722.7160036563873 first=None later=None cycle=None
+[e3d] pdl=0 D=48 S1 K=4 on step=718.0799841880798 first=None later=None cycle=None
+[e3d] pdl=0 D=48 S1 K=8 off step=713.0259871482849 first=None later=None cycle=None
+[e3d] pdl=0 D=48 S1 K=8 on step=714.1139805316925 first=None later=None cycle=None
+[e3d] pdl=0 D=48 S2 K=4 off step=854.1359901428223 first=1079.6639919281006 later=778.2400051752727 cycle=54033.55026245117
+[e3d] pdl=0 D=48 S2 K=4 on step=817.2639980912209 first=968.0320024490356 later=769.4613337516785 cycle=54219.3603515625
+[e3d] pdl=0 D=48 S2 K=8 off step=806.8040050566196 first=1075.9519934654236 later=767.6297128200531 cycle=56941.646575927734
+[e3d] pdl=0 D=48 S2 K=8 on step=786.0400006175041 first=962.5279903411865 later=763.243419783456 cycle=56964.99061584473
+[e3d] pdl=0 D=48 S3 K=4 off step=812.5520050525665 first=948.0960071086884 later=767.9786781469982 cycle=53847.63145446777
+[e3d] pdl=0 D=48 S3 K=4 on step=809.2399910092354 first=933.3440065383911 later=768.6986724535624 cycle=53913.16795349121
+[e3d] pdl=0 D=48 S3 K=8 off step=789.1100011765957 first=948.4319984912872 later=766.5325701236725 cycle=56685.12153625488
+[e3d] pdl=0 D=48 S3 K=8 on step=785.2739989757538 first=936.5919828414917 later=763.8331396239143 cycle=56735.31150817871
+[e3d] pdl=0 D=60 S1 K=4 off step=771.0599899291992 first=None later=None cycle=None
+[e3d] pdl=0 D=60 S1 K=4 on step=763.6359930038452 first=None later=None cycle=None
+[e3d] pdl=0 D=60 S1 K=8 off step=762.4520063400269 first=None later=None cycle=None
+[e3d] pdl=0 D=60 S1 K=8 on step=760.8899772167206 first=None later=None cycle=None
+[e3d] pdl=0 D=60 S2 K=4 off step=902.3879989981651 first=1140.2559876441956 later=823.28533132871 cycle=54558.33625793457
+[e3d] pdl=0 D=60 S2 K=4 on step=857.960008084774 first=997.8559911251068 later=811.0240002473196 cycle=54519.31190490723
+[e3d] pdl=0 D=60 S2 K=8 off step=860.2820001542568 first=1136.639952659607 later=820.7199914114816 cycle=57273.95248413086
+[e3d] pdl=0 D=60 S2 K=8 on step=826.2679986655712 first=982.9760193824768 later=804.7908587115152 cycle=57449.520111083984
+[e3d] pdl=0 D=60 S3 K=4 off step=856.2199920415878 first=991.9040203094482 later=812.3466670513153 cycle=54370.81527709961
+[e3d] pdl=0 D=60 S3 K=4 on step=850.7119938731194 first=974.2880165576935 later=807.1199953556061 cycle=54470.12710571289
+[e3d] pdl=0 D=60 S3 K=8 off step=827.5080062448978 first=986.272007226944 later=807.7897216592517 cycle=57365.11993408203
+[e3d] pdl=0 D=60 S3 K=8 on step=826.7439939081669 first=973.8239943981171 later=805.1565715244838 cycle=57189.24903869629
+[e3d] pdl=0 D=72 S1 K=4 off step=950.2800107002258 first=None later=None cycle=None
+[e3d] pdl=0 D=72 S1 K=4 on step=945.7919895648956 first=None later=None cycle=None
+[e3d] pdl=0 D=72 S1 K=8 off step=942.2280192375183 first=None later=None cycle=None
+[e3d] pdl=0 D=72 S1 K=8 on step=943.1659877300262 first=None later=None cycle=None
+[e3d] pdl=0 D=72 S2 K=4 off step=1118.7560111284256 first=1396.3040113449097 later=1032.5599908828735 cycle=55494.70329284668
+[e3d] pdl=0 D=72 S2 K=4 on step=1073.643997311592 first=1220.5600142478943 later=1021.621326605479 cycle=55322.2713470459
+[e3d] pdl=0 D=72 S2 K=8 off step=1070.203997194767 first=1389.1839981079102 later=1026.9302810941422 cycle=59080.352783203125
+[e3d] pdl=0 D=72 S2 K=8 on step=1039.5800098776817 first=1216.4480090141296 later=1013.7005618640355 cycle=58844.8486328125
+[e3d] pdl=0 D=72 S3 K=4 off step=1073.9079862833023 first=1214.3360376358032 later=1027.247985204061 cycle=55052.72102355957
+[e3d] pdl=0 D=72 S3 K=4 on step=1072.7799981832504 first=1207.69602060318 later=1026.7573396364846 cycle=55211.08818054199
+[e3d] pdl=0 D=72 S3 K=8 off step=1047.4079921841621 first=1217.2800302505493 later=1022.7908406938825 cycle=58709.3448638916
+[e3d] pdl=0 D=72 S3 K=8 on step=1048.6900061368942 first=1198.0159878730774 later=1031.7234311785016 cycle=58609.1194152832
+[e3d] pdl=0 D=96 S1 K=4 off step=857.2160005569458 first=None later=None cycle=None
+[e3d] pdl=0 D=96 S1 K=4 on step=855.9319972991943 first=None later=None cycle=None
+[e3d] pdl=0 D=96 S1 K=8 off step=857.1119904518127 first=None later=None cycle=None
+[e3d] pdl=0 D=96 S1 K=8 on step=855.0679981708527 first=None later=None cycle=None
+[e3d] pdl=0 D=96 S2 K=4 off step=1033.204011619091 first=1311.519980430603 later=940.1866793632507 cycle=55180.015563964844
+[e3d] pdl=0 D=96 S2 K=4 on step=1030.9679955244064 first=1188.86399269104 later=979.6053369839985 cycle=55033.552169799805
+[e3d] pdl=0 D=96 S2 K=8 off step=982.0439964532852 first=1312.7040266990662 later=932.89829151971 cycle=58274.8966217041
+[e3d] pdl=0 D=96 S2 K=8 on step=992.7640035748482 first=1178.608000278473 later=966.9371460165296 cycle=58360.89515686035
+[e3d] pdl=0 D=96 S3 K=4 off step=964.9680107831955 first=1096.1120128631592 later=926.8000026543934 cycle=54484.479904174805
+[e3d] pdl=0 D=96 S3 K=4 on step=989.7919967770576 first=1146.720051765442 later=939.8666719595592 cycle=54701.28059387207
+[e3d] pdl=0 D=96 S3 K=8 off step=949.5980106294155 first=1091.040015220642 later=928.1805668558393 cycle=58027.5993347168
+[e3d] pdl=0 D=96 S3 K=8 on step=954.2980082333088 first=1135.0719928741455 later=928.0320022787366 cycle=58362.27226257324
+[e3d] pdl=0 D=160 S1 K=4 off step=1994.7479963302612 first=None later=None cycle=None
+[e3d] pdl=0 D=160 S1 K=4 on step=1996.2839484214783 first=None later=None cycle=None
+[e3d] pdl=0 D=160 S1 K=8 off step=1987.659990787506 first=None later=None cycle=None
+[e3d] pdl=0 D=160 S1 K=8 on step=1988.733947277069 first=None later=None cycle=None
+[e3d] pdl=0 D=160 S2 K=4 off step=2186.6759955883026 first=2222.880005836487 later=2172.943989435832 cycle=58945.58525085449
+[e3d] pdl=0 D=160 S2 K=4 on step=2174.6599972248077 first=2228.2079458236694 later=2161.253333091736 cycle=59096.57669067383
+[e3d] pdl=0 D=160 S2 K=8 off step=2134.5240026712418 first=2184.191942214966 later=2127.707430294582 cycle=66780.73501586914
+[e3d] pdl=0 D=160 S2 K=8 on step=2138.2419914007187 first=2188.5119676589966 later=2132.2628600256785 cycle=66827.42309570312
+[e3d] pdl=0 D=160 S3 K=4 off step=2186.4959597587585 first=2263.1518840789795 later=2156.533320744832 cycle=59179.63218688965
+[e3d] pdl=0 D=160 S3 K=4 on step=2183.7520003318787 first=2254.639983177185 later=2160.538713137309 cycle=59175.201416015625
+[e3d] pdl=0 D=160 S3 K=8 off step=2140.527993440628 first=2226.096034049988 later=2129.773701940264 cycle=66961.5707397461
+[e3d] pdl=0 D=160 S3 K=8 on step=2161.647990345955 first=2247.615933418274 later=2147.3280021122523 cycle=66833.98056030273
+[l2persist] NVIDIA RTX PRO 6000 Blackwell Workstation Edition sm_120 L2=128.0 MiB persisting_max=80.0 MiB window_max=128.0 MiB limit=24.0 MiB backend=cuda-python
+[e3d] pdl=1 D=16 S1 K=4 off step=179.9599975347519 first=None later=None cycle=None
+[e3d] pdl=1 D=16 S1 K=4 on step=177.68800258636475 first=None later=None cycle=None
+[e3d] pdl=1 D=16 S1 K=8 off step=175.5559965968132 first=None later=None cycle=None
+[e3d] pdl=1 D=16 S1 K=8 on step=176.89000070095062 first=None later=None cycle=None
+[e3d] pdl=1 D=16 S2 K=4 off step=243.3879990130663 first=351.19999945163727 later=207.69066860278446 cycle=54945.36018371582
+[e3d] pdl=1 D=16 S2 K=4 on step=235.87599769234657 first=327.64799892902374 later=203.61066609621048 cycle=54714.91050720215
+[e3d] pdl=1 D=16 S2 K=8 off step=215.09800106287003 first=356.32000863552094 later=196.83657160827093 cycle=55645.12062072754
+[e3d] pdl=1 D=16 S2 K=8 on step=214.26399983465672 first=333.26399326324463 later=195.18171357257026 cycle=55774.88136291504
+[e3d] pdl=1 D=16 S3 K=4 off step=228.44799980521202 first=304.079994559288 later=203.42933386564255 cycle=54925.85563659668
+[e3d] pdl=1 D=16 S3 K=4 on step=228.31600159406662 first=305.58399856090546 later=202.3786703745524 cycle=54848.94561767578
+[e3d] pdl=1 D=16 S3 K=8 off step=208.88400077819824 first=308.23999643325806 later=194.48228606155942 cycle=55850.95977783203
+[e3d] pdl=1 D=16 S3 K=8 on step=208.74999836087227 first=309.2319965362549 later=194.6765716586794 cycle=55413.6962890625
+[e3d] pdl=1 D=32 S1 K=4 off step=375.81199407577515 first=None later=None cycle=None
+[e3d] pdl=1 D=32 S1 K=4 on step=371.4440017938614 first=None later=None cycle=None
+[e3d] pdl=1 D=32 S1 K=8 off step=376.1940002441406 first=None later=None cycle=None
+[e3d] pdl=1 D=32 S1 K=8 on step=375.3039985895157 first=None later=None cycle=None
+[e3d] pdl=1 D=32 S2 K=4 off step=468.2240001857281 first=634.0799927711487 later=408.4000041087469 cycle=55910.911560058594
+[e3d] pdl=1 D=32 S2 K=4 on step=444.7760060429573 first=579.4240236282349 later=398.18133413791656 cycle=55868.52836608887
+[e3d] pdl=1 D=32 S2 K=8 off step=432.11400136351585 first=646.1119949817657 later=401.25028789043427 cycle=57303.03955078125
+[e3d] pdl=1 D=32 S2 K=8 on step=422.1759997308254 first=585.2159857749939 later=396.224000624248 cycle=57265.90347290039
+[e3d] pdl=1 D=32 S3 K=4 off step=446.0719972848892 first=561.1520111560822 later=405.5199970801671 cycle=55373.90327453613
+[e3d] pdl=1 D=32 S3 K=4 on step=441.25599786639214 first=553.9200007915497 later=403.53600184122723 cycle=55940.65475463867
+[e3d] pdl=1 D=32 S3 K=8 off step=419.9340008199215 first=564.7520124912262 later=398.5257148742676 cycle=57199.920654296875
+[e3d] pdl=1 D=32 S3 K=8 on step=416.75599850714207 first=550.8959889411926 later=396.36571279593875 cycle=56869.47250366211
+[e3d] pdl=1 D=48 S1 K=4 off step=690.6040012836456 first=None later=None cycle=None
+[e3d] pdl=1 D=48 S1 K=4 on step=685.699999332428 first=None later=None cycle=None
+[e3d] pdl=1 D=48 S1 K=8 off step=680.7040274143219 first=None later=None cycle=None
+[e3d] pdl=1 D=48 S1 K=8 on step=681.7100048065186 first=None later=None cycle=None
+[e3d] pdl=1 D=48 S2 K=4 off step=813.4279996156693 first=1054.7199845314026 later=732.2986622651417 cycle=57086.03096008301
+[e3d] pdl=1 D=48 S2 K=4 on step=775.9240046143532 first=944.5440173149109 later=718.506673971812 cycle=56922.70469665527
+[e3d] pdl=1 D=48 S2 K=8 off step=765.3999999165535 first=1070.9440112113953 later=722.6399992193494 cycle=59687.66403198242
+[e3d] pdl=1 D=48 S2 K=8 on step=744.2340031266212 first=943.263977766037 later=712.6194323812213 cycle=59610.71968078613
+[e3d] pdl=1 D=48 S3 K=4 off step=774.9880030751228 first=927.7440011501312 later=726.0160048802693 cycle=56933.91990661621
+[e3d] pdl=1 D=48 S3 K=4 on step=767.1319991350174 first=908.816009759903 later=717.1626587708791 cycle=56915.64750671387
+[e3d] pdl=1 D=48 S3 K=8 off step=748.2720017433167 first=923.7599968910217 later=721.6159956795829 cycle=59569.36073303223
+[e3d] pdl=1 D=48 S3 K=8 on step=746.3799975812435 first=910.8000099658966 later=719.7577059268951 cycle=59381.439208984375
+[e3d] pdl=1 D=60 S1 K=4 off step=735.4159951210022 first=None later=None cycle=None
+[e3d] pdl=1 D=60 S1 K=4 on step=732.475996017456 first=None later=None cycle=None
+[e3d] pdl=1 D=60 S1 K=8 off step=727.6780009269714 first=None later=None cycle=None
+[e3d] pdl=1 D=60 S1 K=8 on step=730.6620180606842 first=None later=None cycle=None
+[e3d] pdl=1 D=60 S2 K=4 off step=863.3000031113625 first=1116.1919832229614 later=774.9973336855571 cycle=57304.62455749512
+[e3d] pdl=1 D=60 S2 K=4 on step=825.7479965686798 first=978.8479804992676 later=768.3359980583191 cycle=56922.7352142334
+[e3d] pdl=1 D=60 S2 K=8 off step=809.5359988510609 first=1118.4639930725098 later=767.6159994942801 cycle=60295.616149902344
+[e3d] pdl=1 D=60 S2 K=8 on step=797.787994146347 first=995.279997587204 later=768.9211411135537 cycle=60037.649154663086
+[e3d] pdl=1 D=60 S3 K=4 off step=816.3879960775375 first=973.7440049648285 later=766.9653197129568 cycle=56917.63114929199
+[e3d] pdl=1 D=60 S3 K=4 on step=816.8879970908165 first=958.8479995727539 later=770.735998948415 cycle=57177.934646606445
+[e3d] pdl=1 D=60 S3 K=8 off step=792.3320010304451 first=973.7600088119507 later=765.0720051356725 cycle=59884.592056274414
+[e3d] pdl=1 D=60 S3 K=8 on step=785.1340062916279 first=950.5119919776917 later=762.8228536673955 cycle=59802.080154418945
+[e3d] pdl=1 D=72 S1 K=4 off step=904.6280086040497 first=None later=None cycle=None
+[e3d] pdl=1 D=72 S1 K=4 on step=901.636004447937 first=None later=None cycle=None
+[e3d] pdl=1 D=72 S1 K=8 off step=898.3739912509918 first=None later=None cycle=None
+[e3d] pdl=1 D=72 S1 K=8 on step=901.309996843338 first=None later=None cycle=None
+[e3d] pdl=1 D=72 S2 K=4 off step=1058.2879856228828 first=1333.1679701805115 later=952.6453415552776 cycle=57987.728118896484
+[e3d] pdl=1 D=72 S2 K=4 on step=1002.4679899215698 first=1180.5920004844666 later=939.2159978548685 cycle=57856.62269592285
+[e3d] pdl=1 D=72 S2 K=8 off step=1001.7920024693012 first=1354.1600108146667 later=949.9794329915728 cycle=61701.24816894531
+[e3d] pdl=1 D=72 S2 K=8 on step=980.6720018386841 first=1183.2000017166138 later=950.7108586175101 cycle=61122.1923828125
+[e3d] pdl=1 D=72 S3 K=4 off step=999.9040067195892 first=1153.7440419197083 later=942.4213270346324 cycle=57746.03271484375
+[e3d] pdl=1 D=72 S3 K=4 on step=996.3440150022507 first=1143.2160139083862 later=943.2426492373149 cycle=57591.4249420166
+[e3d] pdl=1 D=72 S3 K=8 off step=976.5060059726238 first=1169.3599820137024 later=949.9794287340981 cycle=61340.30342102051
+[e3d] pdl=1 D=72 S3 K=8 on step=965.1120007038116 first=1148.319959640503 later=939.0057112489428 cycle=61215.52085876465
+[e3d] pdl=1 D=96 S1 K=4 off step=827.9639780521393 first=None later=None cycle=None
+[e3d] pdl=1 D=96 S1 K=4 on step=824.755996465683 first=None later=None cycle=None
+[e3d] pdl=1 D=96 S1 K=8 off step=822.2099840641022 first=None later=None cycle=None
+[e3d] pdl=1 D=96 S1 K=8 on step=821.8279778957367 first=None later=None cycle=None
+[e3d] pdl=1 D=96 S2 K=4 off step=973.7039878964424 first=1278.3679962158203 later=875.8506576220194 cycle=58064.414978027344
+[e3d] pdl=1 D=96 S2 K=4 on step=978.8879901170731 first=1162.7519726753235 later=914.1759971777599 cycle=57665.59982299805
+[e3d] pdl=1 D=96 S2 K=8 off step=920.692004263401 first=1287.7119779586792 later=867.044563804354 cycle=61217.19932556152
+[e3d] pdl=1 D=96 S2 K=8 on step=937.1440000832081 first=1172.9440093040466 later=907.2502894060952 cycle=61326.78413391113
+[e3d] pdl=1 D=96 S3 K=4 off step=915.4319912195206 first=1059.3119859695435 later=866.3040101528168 cycle=57606.224060058594
+[e3d] pdl=1 D=96 S3 K=4 on step=933.0959990620613 first=1107.8880429267883 later=870.4319993654888 cycle=57649.248123168945
+[e3d] pdl=1 D=96 S3 K=8 off step=886.6960071027279 first=1061.8879795074463 later=862.0845675468445 cycle=60726.86576843262
+[e3d] pdl=1 D=96 S3 K=8 on step=899.018008261919 first=1113.5039925575256 later=868.4685656002589 cycle=60950.12664794922
+[e3d] pdl=1 D=160 S1 K=4 off step=1941.760003566742 first=None later=None cycle=None
+[e3d] pdl=1 D=160 S1 K=4 on step=1934.9640011787415 first=None later=None cycle=None
+[e3d] pdl=1 D=160 S1 K=8 off step=1937.4020099639893 first=None later=None cycle=None
+[e3d] pdl=1 D=160 S1 K=8 on step=1936.5779757499695 first=None later=None cycle=None
+[e3d] pdl=1 D=160 S2 K=4 off step=2076.672002673149 first=2166.7840480804443 later=2050.9920318921404 cycle=62092.75245666504
+[e3d] pdl=1 D=160 S2 K=4 on step=2089.7879898548126 first=2163.551926612854 later=2066.3840373357134 cycle=62094.608306884766
+[e3d] pdl=1 D=160 S2 K=8 off step=2026.8040001392365 first=2142.2719955444336 later=2012.9325645310537 cycle=69664.63851928711
+[e3d] pdl=1 D=160 S2 K=8 on step=2024.337999522686 first=2129.3920278549194 later=2008.8594470705305 cycle=69686.67221069336
+[e3d] pdl=1 D=160 S3 K=4 off step=2092.0639783143997 first=2196.303963661194 later=2049.0026473999023 cycle=62156.89468383789
+[e3d] pdl=1 D=160 S3 K=4 on step=2069.9360072612762 first=2187.0720386505127 later=2030.56530157725 cycle=62353.31153869629
+[e3d] pdl=1 D=160 S3 K=8 off step=2025.1499935984612 first=2169.376015663147 later=2007.1839945656911 cycle=70000.76675415039
+[e3d] pdl=1 D=160 S3 K=8 on step=2039.2940118908882 first=2174.9119758605957 later=2019.8331560407364 cycle=69713.03939819336
+/usr/local/lib/python3.10/dist-packages/huggingface_hub/constants.py:302: FutureWarning: The `HF_HUB_ENABLE_HF_TRANSFER` environment variable is deprecated as 'hf_transfer' is not used anymore. Please use `HF_XET_HIGH_PERFORMANCE` instead to enable high performance transfer with Xet. Visit https://huggingface.co/docs/huggingface_hub/package_reference/environment_variables#hfxethighperformance for more details.
+  warnings.warn(
+[e3d] wrote /workspace/repo/experiments/cache-resident/results/e3d/pro6000-ws/20261013T145929Z.json
