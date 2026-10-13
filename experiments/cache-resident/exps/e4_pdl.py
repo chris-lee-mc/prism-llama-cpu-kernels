@@ -180,7 +180,7 @@ def smi_summary(before: dict | None, during: list[dict], after: dict | None) -> 
             "before": before, "after": after}
 
 
-def health_problem(s: dict) -> str | None:
+def health_problem(s: dict, check_power: bool = True) -> str | None:
     """Reason the host looks throttled or power capped, else None. Missing fields skip their check."""
     sm, sm_max, mem, mem_max = s.get("sm_mhz_med"), s.get("sm_mhz_max"), s.get("mem_mhz_med"), s.get("mem_mhz_max")
     cap, cap_def = s.get("power_cap_w"), s.get("power_default_w")
@@ -188,7 +188,7 @@ def health_problem(s: dict) -> str | None:
         return "SM clock %.0f MHz < %.0f%% of max %.0f" % (sm, 100 * HEALTH_MIN_SM, sm_max)
     if mem and mem_max and mem < HEALTH_MIN_MEM * mem_max:
         return "mem clock %.0f MHz < %.0f%% of max %.0f" % (mem, 100 * HEALTH_MIN_MEM, mem_max)
-    if cap and cap_def and cap < HEALTH_MIN_POWER_CAP * cap_def:
+    if check_power and cap and cap_def and cap < HEALTH_MIN_POWER_CAP * cap_def:
         return "power cap %.0f W < %.0f%% of default %.0f W" % (cap, 100 * HEALTH_MIN_POWER_CAP, cap_def)
     return None
 
@@ -316,7 +316,10 @@ def run(args) -> int:
                 with SmiWatch() as watch:
                     tg, err = bench_once(cmd, run_env(cenv), budget.timeout(1800, reserve_s=60))
                 smi = watch.summary()
-                bad = health_problem(smi)
+                bad = health_problem(smi, check_power=not args.allow_power_cap)
+                capped = args.allow_power_cap and health_problem(smi) and not bad
+                if capped and not any(n.startswith("power-capped host") for n in notes):
+                    notes.append(f"power-capped host accepted (--allow-power-cap): {health_problem(smi)}; configs compare within this host only")
                 n_bench += 1
                 if bad and n_bench == 1:
                     notes.append(f"ABORT: unhealthy host: {bad}")
@@ -370,6 +373,7 @@ def parse_args(argv=None):
     ap.add_argument("--reps", type=int, default=5)
     ap.add_argument("--rounds", type=int, default=2)
     ap.add_argument("--no-tbo", action="store_true", help="skip the test-backend-ops correctness check")
+    ap.add_argument("--allow-power-cap", action="store_true", help="a power cap below default is a note, not an abort (clock checks stay)")
     a = ap.parse_args(argv)
     if any(n <= 0 for n in a.prefetch):
         ap.error("--prefetch values must be > 0 (pdl1 is the prefetch-off config)")

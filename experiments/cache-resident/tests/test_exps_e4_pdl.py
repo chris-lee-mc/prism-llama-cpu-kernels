@@ -130,6 +130,7 @@ def test_health_problem():
     assert "SM clock" in ep.health_problem(dict(ok, sm_mhz_med=620, sm_mhz_max=2430))  # the degraded E3d host
     assert "mem clock" in ep.health_problem(dict(ok, mem_mhz_med=3000))
     assert "power cap" in ep.health_problem(dict(ok, power_cap_w=350))
+    assert ep.health_problem(dict(ok, power_cap_w=350), check_power=False) is None
 
 
 def test_args():
