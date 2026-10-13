@@ -1,0 +1,425 @@
+{
+ "schema": 1,
+ "exp": "e2_08b",
+ "gpu": "pro6000-ws",
+ "utc": "2026-10-13T13:01:43.221913+00:00",
+ "env": {
+  "gpu_name": "NVIDIA RTX PRO 6000 Blackwell Workstation Edition",
+  "gpu_tag": "pro6000-ws",
+  "cc": "12.0",
+  "sm": "sm_120",
+  "driver": "580.178.04",
+  "cuda_runtime": "12.8",
+  "cuda_driver": "13.0",
+  "torch": "2.11.0+cu128",
+  "vram_bytes": 101971460096,
+  "sm_count": 188,
+  "l2_bytes": 134217728,
+  "persisting_l2_max_bytes": 83886080,
+  "access_policy_window_max_bytes": 134217728,
+  "persisting_l2_limit_bytes": 25165824,
+  "git_sha": "9c437777e394708109212a06e433226afef2365a",
+  "git_branch": "exp/cache-resident",
+  "hostname": "b45ed1b7128d",
+  "pod_id": "obtzm73o36qqo4",
+  "python": "3.10.12",
+  "counters_ok": null,
+  "transformers": "5.19.0"
+ },
+ "data": {
+  "config": {
+   "model": "0.8B",
+   "ctx": [
+    0,
+    1024
+   ],
+   "decode": 32,
+   "compile_mode_requested": "cuda_graph_manual",
+   "torch": "2.11.0+cu128",
+   "quick": true,
+   "device": {
+    "name": "NVIDIA RTX PRO 6000 Blackwell Workstation Edition",
+    "cc": "12.0",
+    "l2_bytes": 134217728,
+    "persisting_max_bytes": 83886080,
+    "window_max_bytes": 134217728,
+    "persisting_limit_bytes": 25165824,
+    "backend": "cuda-python"
+   },
+   "load": {
+    "hf": {
+     "kind": "qwen",
+     "key": "0.8B",
+     "repo": "Qwen/Qwen3.5-0.8B",
+     "file": null,
+     "exists": true,
+     "source": "api",
+     "checked_utc": "2026-10-13T13:01:35.394058+00:00",
+     "alternatives": [],
+     "note": null
+    },
+    "repo_used": "Qwen/Qwen3.5-0.8B",
+    "transformers": "5.19.0",
+    "load_errors": [],
+    "load_path": "AutoModelForCausalLM",
+    "class": "Qwen3_5ForCausalLM",
+    "fla_available": true,
+    "fla_version": "0.5.2",
+    "causal_conv1d_available": false,
+    "causal_conv1d_import_error": "ModuleNotFoundError: No module named 'causal_conv1d'",
+    "gdn_impl": "fla",
+    "fla_check": {
+     "ran": true,
+     "torch_recurrent_gated_delta_rule": {
+      "T": 1,
+      "out_rel_err": 0.0,
+      "state_rel_err": 1.638014168747759e-07
+     },
+     "torch_chunk_gated_delta_rule": {
+      "T": 64,
+      "out_rel_err": 0.005102040711790323,
+      "state_rel_err": 0.006465344689786434
+     },
+     "ok": true
+    },
+    "calibration": {
+     "nvml_idle": {
+      "sm_mhz": 2632,
+      "mem_mhz": 13365,
+      "max_sm_mhz": 3090,
+      "max_mem_mhz": 14001,
+      "power_w": 83.97,
+      "power_limit_w": 350.0,
+      "temp_c": 36,
+      "pstate": 1,
+      "event_reasons": "0x0"
+     },
+     "copy_gbps": 1469.2626123366445,
+     "nvml_copy_busy": {
+      "sm_mhz": 2632,
+      "mem_mhz": 13365,
+      "max_sm_mhz": 3090,
+      "max_mem_mhz": 14001,
+      "power_w": 83.97,
+      "power_limit_w": 350.0,
+      "temp_c": 36,
+      "pstate": 1,
+      "event_reasons": "0x0"
+     },
+     "linear_lm_head": {
+      "us": 312.0038414001465,
+      "gbps": 1629.977880136963,
+      "bytes": 508559360
+     },
+     "linear_mlp_3584x1024": {
+      "us": 8.469759821891785,
+      "gbps": 866.6163095945438,
+      "bytes": 7340032
+     },
+     "linear_mlp_x8_rotating": {
+      "us": 8.459624834358692,
+      "gbps": 867.6545525031469,
+      "bytes": 7340032
+     }
+    },
+    "cache_kind": "static"
+   }
+  },
+  "rows": [
+   {
+    "model": "0.8B",
+    "ctx": 0,
+    "tok_s": 324.63653250773996,
+    "us_per_token": 3080.3680419921875,
+    "compile_mode_used": "cuda_graph_manual",
+    "cache_kind": "static",
+    "dynamo_recompiles": 0,
+    "modes_rejected_recompile": [],
+    "dram_bytes_per_token": null,
+    "l2_hit_rate": null,
+    "ncu_us_per_token": null,
+    "counters_ok": false,
+    "gdn_impl": "fla",
+    "analytic": {
+     "weight_bytes": 1504786048,
+     "kv_bytes": 1572864,
+     "gdn_state_bytes": 18874368,
+     "conv_state_bytes": 884736,
+     "cache_len": 128,
+     "kv_bytes_per_token": 12288,
+     "n_layers": 24
+    },
+    "breakdown": {
+     "host_issue_us_per_token": 17.884374983623275,
+     "gpu_us_per_token": 3081.2480449676514,
+     "graph_replay_only_us": 3077.15106010437,
+     "nvml_decode_busy": {
+      "sm_mhz": 2872,
+      "mem_mhz": 13365,
+      "max_sm_mhz": 3090,
+      "max_mem_mhz": 14001,
+      "power_w": 194.651,
+      "power_limit_w": 350.0,
+      "temp_c": 38,
+      "pstate": 1,
+      "event_reasons": "0x0"
+     },
+     "kernel_us_per_token": 2961.8938333333367,
+     "kernels_per_token": 1545.0,
+     "by_category": {
+      "gemm": {
+       "us": 1383.4508333333313,
+       "n": 187.0
+      },
+      "other_elementwise": {
+       "us": 840.1163333333484,
+       "n": 803.0
+      },
+      "copy_cat_index": {
+       "us": 538.1336666666602,
+       "n": 414.0
+      },
+      "norm": {
+       "us": 65.69533333333175,
+       "n": 79.0
+      },
+      "attn": {
+       "us": 47.59483333333401,
+       "n": 6.0
+      },
+      "conv": {
+       "us": 35.690999999997835,
+       "n": 18.0
+      },
+      "gdn": {
+       "us": 33.21699999999881,
+       "n": 18.0
+      },
+      "memcpy": {
+       "us": 17.994833333334025,
+       "n": 20.0
+      }
+     },
+     "top_kernels": [
+      {
+       "name": "std::enable_if<!(false), void>::type internal::gemvx::kernel<int, int, __nv_bfloat16, __nv_bfloat16, __nv_bfloat16, floa",
+       "us_per_token": 1284.7931666666627,
+       "n_per_token": 139.0
+      },
+      {
+       "name": "void at::native::unrolled_elementwise_kernel<at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}:",
+       "us_per_token": 290.6181666666633,
+       "n_per_token": 188.0
+      },
+      {
+       "name": "void at::native::reduce_kernel<512, 1, at::native::ReduceOp<float, at::native::MeanOps<float, float, float, float>, unsi",
+       "us_per_token": 117.44516666667148,
+       "n_per_token": 79.0
+      },
+      {
+       "name": "void at::native::vectorized_elementwise_kernel<4, at::native::CUDAFunctorOnSelf_add<float>, std::array<char*, 2ul> >(int",
+       "us_per_token": 113.54450000000452,
+       "n_per_token": 140.0
+      },
+      {
+       "name": "std::enable_if<!(false), void>::type internal::gemvx::kernel<int, int, __nv_bfloat16, __nv_bfloat16, __nv_bfloat16, floa",
+       "us_per_token": 98.65766666666832,
+       "n_per_token": 48.0
+      },
+      {
+       "name": "void at::native::elementwise_kernel<128, 2, at::native::gpu_kernel_impl_nocast<at::native::BinaryFunctor<float, float, f",
+       "us_per_token": 93.2645000000025,
+       "n_per_token": 92.0
+      },
+      {
+       "name": "void at::native::vectorized_elementwise_kernel<4, at::native::bfloat16_copy_kernel_cuda(at::TensorIteratorBase&)::{lambd",
+       "us_per_token": 78.923833333331,
+       "n_per_token": 99.0
+      },
+      {
+       "name": "void at::native::vectorized_elementwise_kernel<4, at::native::rsqrt_kernel_cuda(at::TensorIteratorBase&)::{lambda()#2}::",
+       "us_per_token": 65.69533333333175,
+       "n_per_token": 79.0
+      },
+      {
+       "name": "void at::native::vectorized_elementwise_kernel<4, at::native::(anonymous namespace)::pow_tensor_scalar_kernel_impl<float",
+       "us_per_token": 65.07133333333043,
+       "n_per_token": 79.0
+      },
+      {
+       "name": "void at::native::vectorized_elementwise_kernel<4, at::native::BinaryFunctor<float, float, float, at::native::binary_inte",
+       "us_per_token": 58.074166666669576,
+       "n_per_token": 67.0
+      }
+     ],
+     "profile_source": "decoder",
+     "gpu_idle_us_per_token": 119.35421163431465,
+     "analytic_bytes_per_token": 1544107648,
+     "bw_floor_us": 861.6672142857143
+    },
+    "grad_enabled": false,
+    "anomaly_enabled": false,
+    "prefill_and_compile_s": 1.046424482000475,
+    "split": null,
+    "split_read_only": null
+   },
+   {
+    "model": "0.8B",
+    "ctx": 1024,
+    "tok_s": 293.0504360259065,
+    "us_per_token": 3412.381887435913,
+    "compile_mode_used": "cuda_graph_manual",
+    "cache_kind": "static",
+    "dynamo_recompiles": 0,
+    "modes_rejected_recompile": [],
+    "dram_bytes_per_token": null,
+    "l2_hit_rate": null,
+    "ncu_us_per_token": null,
+    "counters_ok": false,
+    "gdn_impl": "fla",
+    "analytic": {
+     "weight_bytes": 1504786048,
+     "kv_bytes": 14155776,
+     "gdn_state_bytes": 18874368,
+     "conv_state_bytes": 884736,
+     "cache_len": 1152,
+     "kv_bytes_per_token": 12288,
+     "n_layers": 24
+    },
+    "breakdown": {
+     "host_issue_us_per_token": 135.63021875029335,
+     "gpu_us_per_token": 3415.5960083007812,
+     "graph_replay_only_us": 3409.485101699829,
+     "nvml_decode_busy": {
+      "sm_mhz": 2857,
+      "mem_mhz": 13365,
+      "max_sm_mhz": 3090,
+      "max_mem_mhz": 14001,
+      "power_w": 274.741,
+      "power_limit_w": 510.0,
+      "temp_c": 41,
+      "pstate": 1,
+      "event_reasons": "0x0"
+     },
+     "kernel_us_per_token": 3278.1761666666566,
+     "kernels_per_token": 1545.0,
+     "by_category": {
+      "gemm": {
+       "us": 1381.758333333336,
+       "n": 187.0
+      },
+      "other_elementwise": {
+       "us": 841.5236666666574,
+       "n": 803.0
+      },
+      "copy_cat_index": {
+       "us": 567.6953333333315,
+       "n": 414.0
+      },
+      "attn": {
+       "us": 335.6196666666663,
+       "n": 6.0
+      },
+      "norm": {
+       "us": 64.58600000000615,
+       "n": 79.0
+      },
+      "conv": {
+       "us": 35.76516666666513,
+       "n": 18.0
+      },
+      "gdn": {
+       "us": 33.20566666666317,
+       "n": 18.0
+      },
+      "memcpy": {
+       "us": 18.022333333331215,
+       "n": 20.0
+      }
+     },
+     "top_kernels": [
+      {
+       "name": "std::enable_if<!(false), void>::type internal::gemvx::kernel<int, int, __nv_bfloat16, __nv_bfloat16, __nv_bfloat16, floa",
+       "us_per_token": 1282.932333333336,
+       "n_per_token": 139.0
+      },
+      {
+       "name": "fmha_cutlassF_bf16_aligned_32x128_gmem_sm80(PyTorchMemEffAttention::AttentionKernel<cutlass::bfloat16_t, cutlass::arch::",
+       "us_per_token": 335.6196666666663,
+       "n_per_token": 6.0
+      },
+      {
+       "name": "void at::native::unrolled_elementwise_kernel<at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}:",
+       "us_per_token": 291.71400000000466,
+       "n_per_token": 188.0
+      },
+      {
+       "name": "void at::native::reduce_kernel<512, 1, at::native::ReduceOp<float, at::native::MeanOps<float, float, float, float>, unsi",
+       "us_per_token": 117.10433333333526,
+       "n_per_token": 79.0
+      },
+      {
+       "name": "void at::native::vectorized_elementwise_kernel<4, at::native::CUDAFunctorOnSelf_add<float>, std::array<char*, 2ul> >(int",
+       "us_per_token": 112.7973333333335,
+       "n_per_token": 140.0
+      },
+      {
+       "name": "std::enable_if<!(false), void>::type internal::gemvx::kernel<int, int, __nv_bfloat16, __nv_bfloat16, __nv_bfloat16, floa",
+       "us_per_token": 98.82600000000002,
+       "n_per_token": 48.0
+      },
+      {
+       "name": "void at::native::elementwise_kernel<128, 2, at::native::gpu_kernel_impl_nocast<at::native::BinaryFunctor<float, float, f",
+       "us_per_token": 92.60249999999989,
+       "n_per_token": 92.0
+      },
+      {
+       "name": "void at::native::elementwise_kernel<128, 4, at::native::gpu_kernel_impl_nocast<at::native::direct_copy_kernel_cuda(at::T",
+       "us_per_token": 85.60449999999999,
+       "n_per_token": 36.0
+      },
+      {
+       "name": "void at::native::vectorized_elementwise_kernel<4, at::native::bfloat16_copy_kernel_cuda(at::TensorIteratorBase&)::{lambd",
+       "us_per_token": 78.93183333333279,
+       "n_per_token": 99.0
+      },
+      {
+       "name": "void at::native::vectorized_elementwise_kernel<4, at::native::(anonymous namespace)::pow_tensor_scalar_kernel_impl<float",
+       "us_per_token": 65.48400000000242,
+       "n_per_token": 79.0
+      }
+     ],
+     "profile_source": "decoder",
+     "gpu_idle_us_per_token": 137.41984163412462,
+     "analytic_bytes_per_token": 1556690560,
+     "bw_floor_us": 868.6889285714286
+    },
+    "grad_enabled": false,
+    "anomaly_enabled": false,
+    "prefill_and_compile_s": 1.0908940299996175,
+    "split": null,
+    "split_read_only": null
+   }
+  ],
+  "notes": [
+   "ncu counters unavailable (ERR_NVGPUCTRPERM needs host NVreg_RestrictProfilingToAdminUsers=0): timing-only run, analytic bytes, counters_ok=false [ERR_NVGPUCTRPERM]",
+   "fit and split use analytic bytes where ncu bytes are missing (see fit.bytes_source)",
+   "ncu dram_bytes_per_token counts reads only; split has the spec 2x state, split_read_only has 1x",
+   "ncu is kernel replay; rows with ncu_l2_state_ok false ran more than one pass on a warmed L2 (--cache-control none): dram bytes may be under-reported",
+   "static cache is read in full every step, so KV bytes scale with cache_len not ctx",
+   "reduce-overhead can skip CUDA graphs silently (mutated inputs); compare us/token with the other modes",
+   "breakdown: kernel_us_per_token from torch.profiler (sum of kernel durations), gpu_idle = gpu time - kernel time (launch gaps); host_issue_us_per_token >= gpu_us_per_token means the Python/launch path is the limit; bw_floor_us = analytic bytes / peak DRAM bandwidth",
+   "ncu counts kernel nodes only; any cudaMemcpy node (e.g. a same-dtype copy_ into the cache) is excluded from dram_bytes_per_token"
+  ],
+  "counters_ok": false,
+  "fit": {
+   "intercept_us": -37662.59495350096,
+   "n_points": 2,
+   "r2": 1.0,
+   "floor_us_per_layer": null,
+   "eff_bw_gbps": 37.898756852092575,
+   "bytes_source": "analytic_bytes",
+   "gdn_impl": "fla"
+  }
+ }
+}

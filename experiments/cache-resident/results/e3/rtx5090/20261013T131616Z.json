@@ -1,0 +1,1498 @@
+{
+ "schema": 1,
+ "exp": "e3",
+ "gpu": "rtx5090",
+ "utc": "2026-10-13T13:16:16.515177+00:00",
+ "env": {
+  "gpu_name": "NVIDIA GeForce RTX 5090",
+  "gpu_tag": "rtx5090",
+  "cc": "12.0",
+  "sm": "sm_120",
+  "driver": "595.91.07",
+  "cuda_runtime": "12.8",
+  "cuda_driver": "13.2",
+  "torch": "2.11.0+cu128",
+  "vram_bytes": 33670758400,
+  "sm_count": 170,
+  "l2_bytes": 100663296,
+  "persisting_l2_max_bytes": 62914560,
+  "access_policy_window_max_bytes": 134217728,
+  "persisting_l2_limit_bytes": 0,
+  "git_sha": "9c437777e394708109212a06e433226afef2365a",
+  "git_branch": "exp/cache-resident",
+  "hostname": "a4e6e8472695",
+  "pod_id": "k2fbqaeum7db1n",
+  "python": "3.10.12",
+  "counters_ok": null,
+  "transformers": "5.19.0"
+ },
+ "data": {
+  "config": {
+   "ctx": [
+    0,
+    16384
+   ],
+   "heads": [
+    "bf16_full",
+    "int8_full",
+    "int8_48k",
+    "bf16_48k"
+   ],
+   "conditions": [
+    "off",
+    "gdn",
+    "head",
+    "both"
+   ],
+   "window_method": "graph",
+   "iters": 200,
+   "repeats": 3,
+   "ncu_ctx": [
+    0
+   ],
+   "ncu_heads": [
+    "int8_48k",
+    "bf16_full"
+   ],
+   "gdn_persist_method": {
+    "0/bf16_full": "views_inplace",
+    "0/int8_full": "views_inplace",
+    "0/int8_48k": "views_inplace",
+    "0/bf16_48k": "views_inplace",
+    "16384/bf16_full": "views_inplace",
+    "16384/int8_full": "views_inplace",
+    "16384/int8_48k": "views_inplace",
+    "16384/bf16_48k": "views_inplace"
+   },
+   "cache_fill": "random",
+   "grad_enabled": false,
+   "head_bytes": {
+    "bf16_full": {
+     "rows": 248320,
+     "weight": 508559360,
+     "scale": 0,
+     "total": 508559360
+    },
+    "int8_full": {
+     "rows": 248320,
+     "weight": 254279680,
+     "scale": 993280,
+     "total": 255272960
+    },
+    "int8_48k": {
+     "rows": 49152,
+     "weight": 50331648,
+     "scale": 196608,
+     "total": 50528256
+    },
+    "bf16_48k": {
+     "rows": 49152,
+     "weight": 100663296,
+     "scale": 0,
+     "total": 100663296
+    }
+   },
+   "quick": false,
+   "device": {
+    "name": "NVIDIA GeForce RTX 5090",
+    "cc": "12.0",
+    "l2_bytes": 100663296,
+    "persisting_max_bytes": 62914560,
+    "window_max_bytes": 134217728,
+    "persisting_limit_bytes": 18874368,
+    "backend": "cuda-python"
+   },
+   "load": {
+    "hf": {
+     "kind": "qwen",
+     "key": "0.8B",
+     "repo": "Qwen/Qwen3.5-0.8B",
+     "file": null,
+     "exists": true,
+     "source": "api",
+     "checked_utc": "2026-10-13T13:13:15.447030+00:00",
+     "alternatives": [],
+     "note": null
+    },
+    "repo_used": "Qwen/Qwen3.5-0.8B",
+    "transformers": "5.19.0",
+    "load_errors": [],
+    "load_path": "AutoModelForCausalLM",
+    "class": "Qwen3_5ForCausalLM",
+    "fla_available": true,
+    "fla_version": "0.5.2",
+    "causal_conv1d_available": false,
+    "causal_conv1d_import_error": "ModuleNotFoundError: No module named 'causal_conv1d'",
+    "gdn_impl": "fla",
+    "fla_check": {
+     "ran": true,
+     "torch_recurrent_gated_delta_rule": {
+      "T": 1,
+      "out_rel_err": 0.0,
+      "state_rel_err": 1.638014168747759e-07
+     },
+     "torch_chunk_gated_delta_rule": {
+      "T": 64,
+      "out_rel_err": 0.005102040711790323,
+      "state_rel_err": 0.006465344689786434
+     },
+     "ok": true
+    },
+    "cache_kind": "static"
+   }
+  },
+  "rows": [
+   {
+    "ctx": 0,
+    "head": "bf16_full",
+    "condition": "off",
+    "window_bytes": 0,
+    "hit_ratio": null,
+    "persisted_bytes": 0,
+    "us_per_token": 2897.5128173828125,
+    "dram_bytes_per_token": null,
+    "l2_hit_rate": null,
+    "gdn_persist_method": "views_inplace",
+    "arena_bytes": 527433728,
+    "counters_ok": false,
+    "gdn_impl": "fla",
+    "graph_nodes": {
+     "kernel": 1548,
+     "memcpy": 0,
+     "memset": 1,
+     "other": 0
+    },
+    "window_readback": {
+     "base_ptr": 0,
+     "num_bytes": 0,
+     "hit_ratio": 0.0,
+     "hit_prop": "normal",
+     "miss_prop": "normal"
+    },
+    "window_method_used": null,
+    "us_per_token_all": [
+     2896.839599609375,
+     2897.5128173828125,
+     2897.8433227539062
+    ]
+   },
+   {
+    "ctx": 0,
+    "head": "bf16_full",
+    "condition": "gdn",
+    "window_bytes": 18874368,
+    "hit_ratio": 1.0,
+    "persisted_bytes": 18874368,
+    "us_per_token": 2901.66015625,
+    "dram_bytes_per_token": null,
+    "l2_hit_rate": null,
+    "gdn_persist_method": "views_inplace",
+    "arena_bytes": 527433728,
+    "counters_ok": false,
+    "gdn_impl": "fla",
+    "graph_nodes": {
+     "kernel": 1548,
+     "memcpy": 0,
+     "memset": 1,
+     "other": 0
+    },
+    "window_readback": {
+     "base_ptr": 133586200035328,
+     "num_bytes": 18874368,
+     "hit_ratio": 1.0,
+     "hit_prop": "persisting",
+     "miss_prop": "streaming"
+    },
+    "window_method_used": "graph",
+    "kernel_nodes": 1548,
+    "us_per_token_all": [
+     2902.1310424804688,
+     2901.5194702148438,
+     2901.66015625
+    ]
+   },
+   {
+    "ctx": 0,
+    "head": "bf16_full",
+    "condition": "head",
+    "window_bytes": 134217728,
+    "hit_ratio": 0.46875,
+    "persisted_bytes": 62914560,
+    "us_per_token": 3077.9568481445312,
+    "dram_bytes_per_token": null,
+    "l2_hit_rate": null,
+    "gdn_persist_method": "views_inplace",
+    "arena_bytes": 527433728,
+    "counters_ok": false,
+    "gdn_impl": "fla",
+    "graph_nodes": {
+     "kernel": 1548,
+     "memcpy": 0,
+     "memset": 1,
+     "other": 0
+    },
+    "window_readback": {
+     "base_ptr": 133586218909696,
+     "num_bytes": 134217728,
+     "hit_ratio": 0.46875,
+     "hit_prop": "persisting",
+     "miss_prop": "streaming"
+    },
+    "window_method_used": "graph",
+    "kernel_nodes": 1548,
+    "us_per_token_all": [
+     3077.9568481445312,
+     3078.0108642578125,
+     3077.9263305664062
+    ]
+   },
+   {
+    "ctx": 0,
+    "head": "bf16_full",
+    "condition": "both",
+    "window_bytes": 134217728,
+    "hit_ratio": 0.46875,
+    "persisted_bytes": 62914560,
+    "us_per_token": 3078.84033203125,
+    "dram_bytes_per_token": null,
+    "l2_hit_rate": null,
+    "gdn_persist_method": "views_inplace",
+    "arena_bytes": 527433728,
+    "counters_ok": false,
+    "gdn_impl": "fla",
+    "graph_nodes": {
+     "kernel": 1548,
+     "memcpy": 0,
+     "memset": 1,
+     "other": 0
+    },
+    "window_readback": {
+     "base_ptr": 133586200035328,
+     "num_bytes": 134217728,
+     "hit_ratio": 0.46875,
+     "hit_prop": "persisting",
+     "miss_prop": "streaming"
+    },
+    "window_method_used": "graph",
+    "kernel_nodes": 1548,
+    "us_per_token_all": [
+     3078.84033203125,
+     3079.083251953125,
+     3078.7789916992188
+    ]
+   },
+   {
+    "ctx": 0,
+    "head": "int8_full",
+    "condition": "off",
+    "window_bytes": 0,
+    "hit_ratio": null,
+    "persisted_bytes": 0,
+    "us_per_token": 2841.715087890625,
+    "dram_bytes_per_token": null,
+    "l2_hit_rate": null,
+    "gdn_persist_method": "views_inplace",
+    "arena_bytes": 274147328,
+    "counters_ok": false,
+    "gdn_impl": "fla",
+    "graph_nodes": {
+     "kernel": 1548,
+     "memcpy": 0,
+     "memset": 1,
+     "other": 0
+    },
+    "window_readback": {
+     "base_ptr": 0,
+     "num_bytes": 0,
+     "hit_ratio": 0.0,
+     "hit_prop": "normal",
+     "miss_prop": "normal"
+    },
+    "window_method_used": null,
+    "us_per_token_all": [
+     2841.715087890625,
+     2841.8612670898438,
+     2841.5103149414062
+    ]
+   },
+   {
+    "ctx": 0,
+    "head": "int8_full",
+    "condition": "gdn",
+    "window_bytes": 18874368,
+    "hit_ratio": 1.0,
+    "persisted_bytes": 18874368,
+    "us_per_token": 2827.87841796875,
+    "dram_bytes_per_token": null,
+    "l2_hit_rate": null,
+    "gdn_persist_method": "views_inplace",
+    "arena_bytes": 274147328,
+    "counters_ok": false,
+    "gdn_impl": "fla",
+    "graph_nodes": {
+     "kernel": 1548,
+     "memcpy": 0,
+     "memset": 1,
+     "other": 0
+    },
+    "window_readback": {
+     "base_ptr": 133585864491008,
+     "num_bytes": 18874368,
+     "hit_ratio": 1.0,
+     "hit_prop": "persisting",
+     "miss_prop": "streaming"
+    },
+    "window_method_used": "graph",
+    "kernel_nodes": 1548,
+    "us_per_token_all": [
+     2827.8448486328125,
+     2828.0218505859375,
+     2827.87841796875
+    ]
+   },
+   {
+    "ctx": 0,
+    "head": "int8_full",
+    "condition": "head",
+    "window_bytes": 134217728,
+    "hit_ratio": 0.46875,
+    "persisted_bytes": 62914560,
+    "us_per_token": 2844.7357177734375,
+    "dram_bytes_per_token": null,
+    "l2_hit_rate": null,
+    "gdn_persist_method": "views_inplace",
+    "arena_bytes": 274147328,
+    "counters_ok": false,
+    "gdn_impl": "fla",
+    "graph_nodes": {
+     "kernel": 1548,
+     "memcpy": 0,
+     "memset": 1,
+     "other": 0
+    },
+    "window_readback": {
+     "base_ptr": 133585883365376,
+     "num_bytes": 134217728,
+     "hit_ratio": 0.46875,
+     "hit_prop": "persisting",
+     "miss_prop": "streaming"
+    },
+    "window_method_used": "graph",
+    "kernel_nodes": 1548,
+    "us_per_token_all": [
+     2842.0147705078125,
+     2844.7357177734375,
+     2848.7783813476562
+    ]
+   },
+   {
+    "ctx": 0,
+    "head": "int8_full",
+    "condition": "both",
+    "window_bytes": 134217728,
+    "hit_ratio": 0.46875,
+    "persisted_bytes": 62914560,
+    "us_per_token": 2848.3889770507812,
+    "dram_bytes_per_token": null,
+    "l2_hit_rate": null,
+    "gdn_persist_method": "views_inplace",
+    "arena_bytes": 274147328,
+    "counters_ok": false,
+    "gdn_impl": "fla",
+    "graph_nodes": {
+     "kernel": 1548,
+     "memcpy": 0,
+     "memset": 1,
+     "other": 0
+    },
+    "window_readback": {
+     "base_ptr": 133585864491008,
+     "num_bytes": 134217728,
+     "hit_ratio": 0.46875,
+     "hit_prop": "persisting",
+     "miss_prop": "streaming"
+    },
+    "window_method_used": "graph",
+    "kernel_nodes": 1548,
+    "us_per_token_all": [
+     2845.7522583007812,
+     2848.3889770507812,
+     2848.6117553710938
+    ]
+   },
+   {
+    "ctx": 0,
+    "head": "int8_48k",
+    "condition": "off",
+    "window_bytes": 0,
+    "hit_ratio": null,
+    "persisted_bytes": 0,
+    "us_per_token": 2616.0357666015625,
+    "dram_bytes_per_token": null,
+    "l2_hit_rate": null,
+    "gdn_persist_method": "views_inplace",
+    "arena_bytes": 69402624,
+    "counters_ok": false,
+    "gdn_impl": "fla",
+    "graph_nodes": {
+     "kernel": 1548,
+     "memcpy": 0,
+     "memset": 0,
+     "other": 0
+    },
+    "window_readback": {
+     "base_ptr": 0,
+     "num_bytes": 0,
+     "hit_ratio": 0.0,
+     "hit_prop": "normal",
+     "miss_prop": "normal"
+    },
+    "window_method_used": null,
+    "us_per_token_all": [
+     2608.0819702148438,
+     2616.0357666015625,
+     2616.0894775390625
+    ]
+   },
+   {
+    "ctx": 0,
+    "head": "int8_48k",
+    "condition": "gdn",
+    "window_bytes": 18874368,
+    "hit_ratio": 1.0,
+    "persisted_bytes": 18874368,
+    "us_per_token": 2613.3316040039062,
+    "dram_bytes_per_token": null,
+    "l2_hit_rate": null,
+    "gdn_persist_method": "views_inplace",
+    "arena_bytes": 69402624,
+    "counters_ok": false,
+    "gdn_impl": "fla",
+    "graph_nodes": {
+     "kernel": 1548,
+     "memcpy": 0,
+     "memset": 0,
+     "other": 0
+    },
+    "window_readback": {
+     "base_ptr": 133585730273280,
+     "num_bytes": 18874368,
+     "hit_ratio": 1.0,
+     "hit_prop": "persisting",
+     "miss_prop": "streaming"
+    },
+    "window_method_used": "graph",
+    "kernel_nodes": 1548,
+    "us_per_token_all": [
+     2612.3284912109375,
+     2613.4552001953125,
+     2613.3316040039062
+    ]
+   },
+   {
+    "ctx": 0,
+    "head": "int8_48k",
+    "condition": "head",
+    "window_bytes": 50528256,
+    "hit_ratio": 1.0,
+    "persisted_bytes": 50528256,
+    "us_per_token": 2613.5983276367188,
+    "dram_bytes_per_token": null,
+    "l2_hit_rate": null,
+    "gdn_persist_method": "views_inplace",
+    "arena_bytes": 69402624,
+    "counters_ok": false,
+    "gdn_impl": "fla",
+    "graph_nodes": {
+     "kernel": 1548,
+     "memcpy": 0,
+     "memset": 0,
+     "other": 0
+    },
+    "window_readback": {
+     "base_ptr": 133585749147648,
+     "num_bytes": 50528256,
+     "hit_ratio": 1.0,
+     "hit_prop": "persisting",
+     "miss_prop": "streaming"
+    },
+    "window_method_used": "graph",
+    "kernel_nodes": 1548,
+    "us_per_token_all": [
+     2612.994384765625,
+     2613.5983276367188,
+     2613.6700439453125
+    ]
+   },
+   {
+    "ctx": 0,
+    "head": "int8_48k",
+    "condition": "both",
+    "window_bytes": 69402624,
+    "hit_ratio": 0.9065155807365439,
+    "persisted_bytes": 62914560,
+    "us_per_token": 2616.03515625,
+    "dram_bytes_per_token": null,
+    "l2_hit_rate": null,
+    "gdn_persist_method": "views_inplace",
+    "arena_bytes": 69402624,
+    "counters_ok": false,
+    "gdn_impl": "fla",
+    "graph_nodes": {
+     "kernel": 1548,
+     "memcpy": 0,
+     "memset": 0,
+     "other": 0
+    },
+    "window_readback": {
+     "base_ptr": 133585730273280,
+     "num_bytes": 69402624,
+     "hit_ratio": 0.9065155982971191,
+     "hit_prop": "persisting",
+     "miss_prop": "streaming"
+    },
+    "window_method_used": "graph",
+    "kernel_nodes": 1548,
+    "us_per_token_all": [
+     2615.5438232421875,
+     2616.0861206054688,
+     2616.03515625
+    ]
+   },
+   {
+    "ctx": 0,
+    "head": "bf16_48k",
+    "condition": "off",
+    "window_bytes": 0,
+    "hit_ratio": null,
+    "persisted_bytes": 0,
+    "us_per_token": 2658.4140014648438,
+    "dram_bytes_per_token": null,
+    "l2_hit_rate": null,
+    "gdn_persist_method": "views_inplace",
+    "arena_bytes": 119537664,
+    "counters_ok": false,
+    "gdn_impl": "fla",
+    "graph_nodes": {
+     "kernel": 1548,
+     "memcpy": 0,
+     "memset": 0,
+     "other": 0
+    },
+    "window_readback": {
+     "base_ptr": 0,
+     "num_bytes": 0,
+     "hit_ratio": 0.0,
+     "hit_prop": "normal",
+     "miss_prop": "normal"
+    },
+    "window_method_used": null,
+    "us_per_token_all": [
+     2657.6025390625,
+     2658.4140014648438,
+     2660.8709716796875
+    ]
+   },
+   {
+    "ctx": 0,
+    "head": "bf16_48k",
+    "condition": "gdn",
+    "window_bytes": 18874368,
+    "hit_ratio": 1.0,
+    "persisted_bytes": 18874368,
+    "us_per_token": 2665.0082397460938,
+    "dram_bytes_per_token": null,
+    "l2_hit_rate": null,
+    "gdn_persist_method": "views_inplace",
+    "arena_bytes": 119537664,
+    "counters_ok": false,
+    "gdn_impl": "fla",
+    "graph_nodes": {
+     "kernel": 1548,
+     "memcpy": 0,
+     "memset": 0,
+     "other": 0
+    },
+    "window_readback": {
+     "base_ptr": 133585495392256,
+     "num_bytes": 18874368,
+     "hit_ratio": 1.0,
+     "hit_prop": "persisting",
+     "miss_prop": "streaming"
+    },
+    "window_method_used": "graph",
+    "kernel_nodes": 1548,
+    "us_per_token_all": [
+     2664.19921875,
+     2665.0692749023438,
+     2665.0082397460938
+    ]
+   },
+   {
+    "ctx": 0,
+    "head": "bf16_48k",
+    "condition": "head",
+    "window_bytes": 100663296,
+    "hit_ratio": 0.625,
+    "persisted_bytes": 62914560,
+    "us_per_token": 2704.3197631835938,
+    "dram_bytes_per_token": null,
+    "l2_hit_rate": null,
+    "gdn_persist_method": "views_inplace",
+    "arena_bytes": 119537664,
+    "counters_ok": false,
+    "gdn_impl": "fla",
+    "graph_nodes": {
+     "kernel": 1548,
+     "memcpy": 0,
+     "memset": 0,
+     "other": 0
+    },
+    "window_readback": {
+     "base_ptr": 133585514266624,
+     "num_bytes": 100663296,
+     "hit_ratio": 0.625,
+     "hit_prop": "persisting",
+     "miss_prop": "streaming"
+    },
+    "window_method_used": "graph",
+    "kernel_nodes": 1548,
+    "us_per_token_all": [
+     2704.3197631835938,
+     2704.462890625,
+     2704.2379760742188
+    ]
+   },
+   {
+    "ctx": 0,
+    "head": "bf16_48k",
+    "condition": "both",
+    "window_bytes": 119537664,
+    "hit_ratio": 0.5263157894736842,
+    "persisted_bytes": 62914560,
+    "us_per_token": 2676.6461181640625,
+    "dram_bytes_per_token": null,
+    "l2_hit_rate": null,
+    "gdn_persist_method": "views_inplace",
+    "arena_bytes": 119537664,
+    "counters_ok": false,
+    "gdn_impl": "fla",
+    "graph_nodes": {
+     "kernel": 1548,
+     "memcpy": 0,
+     "memset": 0,
+     "other": 0
+    },
+    "window_readback": {
+     "base_ptr": 133585495392256,
+     "num_bytes": 119537664,
+     "hit_ratio": 0.5263158082962036,
+     "hit_prop": "persisting",
+     "miss_prop": "streaming"
+    },
+    "window_method_used": "graph",
+    "kernel_nodes": 1548,
+    "us_per_token_all": [
+     2676.0006713867188,
+     2676.8948364257812,
+     2676.6461181640625
+    ]
+   },
+   {
+    "ctx": 16384,
+    "head": "bf16_full",
+    "condition": "off",
+    "window_bytes": 0,
+    "hit_ratio": null,
+    "persisted_bytes": 0,
+    "us_per_token": 10537.796630859375,
+    "dram_bytes_per_token": null,
+    "l2_hit_rate": null,
+    "gdn_persist_method": "views_inplace",
+    "arena_bytes": 527433728,
+    "counters_ok": false,
+    "gdn_impl": "fla",
+    "graph_nodes": {
+     "kernel": 1548,
+     "memcpy": 0,
+     "memset": 1,
+     "other": 0
+    },
+    "window_readback": {
+     "base_ptr": 0,
+     "num_bytes": 0,
+     "hit_ratio": 0.0,
+     "hit_prop": "normal",
+     "miss_prop": "normal"
+    },
+    "window_method_used": null,
+    "us_per_token_all": [
+     10532.7001953125,
+     10537.796630859375,
+     10539.0185546875
+    ]
+   },
+   {
+    "ctx": 16384,
+    "head": "bf16_full",
+    "condition": "gdn",
+    "window_bytes": 18874368,
+    "hit_ratio": 1.0,
+    "persisted_bytes": 18874368,
+    "us_per_token": 10585.584716796875,
+    "dram_bytes_per_token": null,
+    "l2_hit_rate": null,
+    "gdn_persist_method": "views_inplace",
+    "arena_bytes": 527433728,
+    "counters_ok": false,
+    "gdn_impl": "fla",
+    "graph_nodes": {
+     "kernel": 1548,
+     "memcpy": 0,
+     "memset": 1,
+     "other": 0
+    },
+    "window_readback": {
+     "base_ptr": 133583817670656,
+     "num_bytes": 18874368,
+     "hit_ratio": 1.0,
+     "hit_prop": "persisting",
+     "miss_prop": "streaming"
+    },
+    "window_method_used": "graph",
+    "kernel_nodes": 1548,
+    "us_per_token_all": [
+     10586.025390625,
+     10585.41748046875,
+     10585.584716796875
+    ]
+   },
+   {
+    "ctx": 16384,
+    "head": "bf16_full",
+    "condition": "head",
+    "window_bytes": 134217728,
+    "hit_ratio": 0.46875,
+    "persisted_bytes": 62914560,
+    "us_per_token": 10523.834228515625,
+    "dram_bytes_per_token": null,
+    "l2_hit_rate": null,
+    "gdn_persist_method": "views_inplace",
+    "arena_bytes": 527433728,
+    "counters_ok": false,
+    "gdn_impl": "fla",
+    "graph_nodes": {
+     "kernel": 1548,
+     "memcpy": 0,
+     "memset": 1,
+     "other": 0
+    },
+    "window_readback": {
+     "base_ptr": 133583836545024,
+     "num_bytes": 134217728,
+     "hit_ratio": 0.46875,
+     "hit_prop": "persisting",
+     "miss_prop": "streaming"
+    },
+    "window_method_used": "graph",
+    "kernel_nodes": 1548,
+    "us_per_token_all": [
+     10527.48291015625,
+     10523.773193359375,
+     10523.834228515625
+    ]
+   },
+   {
+    "ctx": 16384,
+    "head": "bf16_full",
+    "condition": "both",
+    "window_bytes": 134217728,
+    "hit_ratio": 0.46875,
+    "persisted_bytes": 62914560,
+    "us_per_token": 10524.052734375,
+    "dram_bytes_per_token": null,
+    "l2_hit_rate": null,
+    "gdn_persist_method": "views_inplace",
+    "arena_bytes": 527433728,
+    "counters_ok": false,
+    "gdn_impl": "fla",
+    "graph_nodes": {
+     "kernel": 1548,
+     "memcpy": 0,
+     "memset": 1,
+     "other": 0
+    },
+    "window_readback": {
+     "base_ptr": 133583817670656,
+     "num_bytes": 134217728,
+     "hit_ratio": 0.46875,
+     "hit_prop": "persisting",
+     "miss_prop": "streaming"
+    },
+    "window_method_used": "graph",
+    "kernel_nodes": 1548,
+    "us_per_token_all": [
+     10523.148193359375,
+     10524.052734375,
+     10528.43505859375
+    ]
+   },
+   {
+    "ctx": 16384,
+    "head": "int8_full",
+    "condition": "off",
+    "window_bytes": 0,
+    "hit_ratio": null,
+    "persisted_bytes": 0,
+    "us_per_token": 10365.478515625,
+    "dram_bytes_per_token": null,
+    "l2_hit_rate": null,
+    "gdn_persist_method": "views_inplace",
+    "arena_bytes": 274147328,
+    "counters_ok": false,
+    "gdn_impl": "fla",
+    "graph_nodes": {
+     "kernel": 1548,
+     "memcpy": 0,
+     "memset": 1,
+     "other": 0
+    },
+    "window_readback": {
+     "base_ptr": 0,
+     "num_bytes": 0,
+     "hit_ratio": 0.0,
+     "hit_prop": "normal",
+     "miss_prop": "normal"
+    },
+    "window_method_used": null,
+    "us_per_token_all": [
+     10365.478515625,
+     10364.6923828125,
+     10366.983642578125
+    ]
+   },
+   {
+    "ctx": 16384,
+    "head": "int8_full",
+    "condition": "gdn",
+    "window_bytes": 18874368,
+    "hit_ratio": 1.0,
+    "persisted_bytes": 18874368,
+    "us_per_token": 10428.57666015625,
+    "dram_bytes_per_token": null,
+    "l2_hit_rate": null,
+    "gdn_persist_method": "views_inplace",
+    "arena_bytes": 274147328,
+    "counters_ok": false,
+    "gdn_impl": "fla",
+    "graph_nodes": {
+     "kernel": 1548,
+     "memcpy": 0,
+     "memset": 1,
+     "other": 0
+    },
+    "window_readback": {
+     "base_ptr": 133583113027584,
+     "num_bytes": 18874368,
+     "hit_ratio": 1.0,
+     "hit_prop": "persisting",
+     "miss_prop": "streaming"
+    },
+    "window_method_used": "graph",
+    "kernel_nodes": 1548,
+    "us_per_token_all": [
+     10428.57666015625,
+     10441.881103515625,
+     10414.5947265625
+    ]
+   },
+   {
+    "ctx": 16384,
+    "head": "int8_full",
+    "condition": "head",
+    "window_bytes": 134217728,
+    "hit_ratio": 0.46875,
+    "persisted_bytes": 62914560,
+    "us_per_token": 10368.58154296875,
+    "dram_bytes_per_token": null,
+    "l2_hit_rate": null,
+    "gdn_persist_method": "views_inplace",
+    "arena_bytes": 274147328,
+    "counters_ok": false,
+    "gdn_impl": "fla",
+    "graph_nodes": {
+     "kernel": 1548,
+     "memcpy": 0,
+     "memset": 1,
+     "other": 0
+    },
+    "window_readback": {
+     "base_ptr": 133583131901952,
+     "num_bytes": 134217728,
+     "hit_ratio": 0.46875,
+     "hit_prop": "persisting",
+     "miss_prop": "streaming"
+    },
+    "window_method_used": "graph",
+    "kernel_nodes": 1548,
+    "us_per_token_all": [
+     10366.064453125,
+     10368.58154296875,
+     10369.136962890625
+    ]
+   },
+   {
+    "ctx": 16384,
+    "head": "int8_full",
+    "condition": "both",
+    "window_bytes": 134217728,
+    "hit_ratio": 0.46875,
+    "persisted_bytes": 62914560,
+    "us_per_token": 10368.673095703125,
+    "dram_bytes_per_token": null,
+    "l2_hit_rate": null,
+    "gdn_persist_method": "views_inplace",
+    "arena_bytes": 274147328,
+    "counters_ok": false,
+    "gdn_impl": "fla",
+    "graph_nodes": {
+     "kernel": 1548,
+     "memcpy": 0,
+     "memset": 1,
+     "other": 0
+    },
+    "window_readback": {
+     "base_ptr": 133583113027584,
+     "num_bytes": 134217728,
+     "hit_ratio": 0.46875,
+     "hit_prop": "persisting",
+     "miss_prop": "streaming"
+    },
+    "window_method_used": "graph",
+    "kernel_nodes": 1548,
+    "us_per_token_all": [
+     10369.412841796875,
+     10368.673095703125,
+     10366.839599609375
+    ]
+   },
+   {
+    "ctx": 16384,
+    "head": "int8_48k",
+    "condition": "off",
+    "window_bytes": 0,
+    "hit_ratio": null,
+    "persisted_bytes": 0,
+    "us_per_token": 10274.866943359375,
+    "dram_bytes_per_token": null,
+    "l2_hit_rate": null,
+    "gdn_persist_method": "views_inplace",
+    "arena_bytes": 69402624,
+    "counters_ok": false,
+    "gdn_impl": "fla",
+    "graph_nodes": {
+     "kernel": 1548,
+     "memcpy": 0,
+     "memset": 0,
+     "other": 0
+    },
+    "window_readback": {
+     "base_ptr": 0,
+     "num_bytes": 0,
+     "hit_ratio": 0.0,
+     "hit_prop": "normal",
+     "miss_prop": "normal"
+    },
+    "window_method_used": null,
+    "us_per_token_all": [
+     10274.805908203125,
+     10274.925537109375,
+     10274.866943359375
+    ]
+   },
+   {
+    "ctx": 16384,
+    "head": "int8_48k",
+    "condition": "gdn",
+    "window_bytes": 18874368,
+    "hit_ratio": 1.0,
+    "persisted_bytes": 18874368,
+    "us_per_token": 10306.09619140625,
+    "dram_bytes_per_token": null,
+    "l2_hit_rate": null,
+    "gdn_persist_method": "views_inplace",
+    "arena_bytes": 69402624,
+    "counters_ok": false,
+    "gdn_impl": "fla",
+    "graph_nodes": {
+     "kernel": 1548,
+     "memcpy": 0,
+     "memset": 0,
+     "other": 0
+    },
+    "window_readback": {
+     "base_ptr": 133585730273280,
+     "num_bytes": 18874368,
+     "hit_ratio": 1.0,
+     "hit_prop": "persisting",
+     "miss_prop": "streaming"
+    },
+    "window_method_used": "graph",
+    "kernel_nodes": 1548,
+    "us_per_token_all": [
+     10306.2939453125,
+     10306.09619140625,
+     10306.0791015625
+    ]
+   },
+   {
+    "ctx": 16384,
+    "head": "int8_48k",
+    "condition": "head",
+    "window_bytes": 50528256,
+    "hit_ratio": 1.0,
+    "persisted_bytes": 50528256,
+    "us_per_token": 10314.183349609375,
+    "dram_bytes_per_token": null,
+    "l2_hit_rate": null,
+    "gdn_persist_method": "views_inplace",
+    "arena_bytes": 69402624,
+    "counters_ok": false,
+    "gdn_impl": "fla",
+    "graph_nodes": {
+     "kernel": 1548,
+     "memcpy": 0,
+     "memset": 0,
+     "other": 0
+    },
+    "window_readback": {
+     "base_ptr": 133585749147648,
+     "num_bytes": 50528256,
+     "hit_ratio": 1.0,
+     "hit_prop": "persisting",
+     "miss_prop": "streaming"
+    },
+    "window_method_used": "graph",
+    "kernel_nodes": 1548,
+    "us_per_token_all": [
+     10314.180908203125,
+     10314.375,
+     10314.183349609375
+    ]
+   },
+   {
+    "ctx": 16384,
+    "head": "int8_48k",
+    "condition": "both",
+    "window_bytes": 69402624,
+    "hit_ratio": 0.9065155807365439,
+    "persisted_bytes": 62914560,
+    "us_per_token": 10355.457763671875,
+    "dram_bytes_per_token": null,
+    "l2_hit_rate": null,
+    "gdn_persist_method": "views_inplace",
+    "arena_bytes": 69402624,
+    "counters_ok": false,
+    "gdn_impl": "fla",
+    "graph_nodes": {
+     "kernel": 1548,
+     "memcpy": 0,
+     "memset": 0,
+     "other": 0
+    },
+    "window_readback": {
+     "base_ptr": 133585730273280,
+     "num_bytes": 69402624,
+     "hit_ratio": 0.9065155982971191,
+     "hit_prop": "persisting",
+     "miss_prop": "streaming"
+    },
+    "window_method_used": "graph",
+    "kernel_nodes": 1548,
+    "us_per_token_all": [
+     10355.068359375,
+     10355.457763671875,
+     10355.5224609375
+    ]
+   },
+   {
+    "ctx": 16384,
+    "head": "bf16_48k",
+    "condition": "off",
+    "window_bytes": 0,
+    "hit_ratio": null,
+    "persisted_bytes": 0,
+    "us_per_token": 10303.743896484375,
+    "dram_bytes_per_token": null,
+    "l2_hit_rate": null,
+    "gdn_persist_method": "views_inplace",
+    "arena_bytes": 119537664,
+    "counters_ok": false,
+    "gdn_impl": "fla",
+    "graph_nodes": {
+     "kernel": 1548,
+     "memcpy": 0,
+     "memset": 0,
+     "other": 0
+    },
+    "window_readback": {
+     "base_ptr": 0,
+     "num_bytes": 0,
+     "hit_ratio": 0.0,
+     "hit_prop": "normal",
+     "miss_prop": "normal"
+    },
+    "window_method_used": null,
+    "us_per_token_all": [
+     10303.812255859375,
+     10303.743896484375,
+     10303.228759765625
+    ]
+   },
+   {
+    "ctx": 16384,
+    "head": "bf16_48k",
+    "condition": "gdn",
+    "window_bytes": 18874368,
+    "hit_ratio": 1.0,
+    "persisted_bytes": 18874368,
+    "us_per_token": 10330.467529296875,
+    "dram_bytes_per_token": null,
+    "l2_hit_rate": null,
+    "gdn_persist_method": "views_inplace",
+    "arena_bytes": 119537664,
+    "counters_ok": false,
+    "gdn_impl": "fla",
+    "graph_nodes": {
+     "kernel": 1548,
+     "memcpy": 0,
+     "memset": 0,
+     "other": 0
+    },
+    "window_readback": {
+     "base_ptr": 133585864491008,
+     "num_bytes": 18874368,
+     "hit_ratio": 1.0,
+     "hit_prop": "persisting",
+     "miss_prop": "streaming"
+    },
+    "window_method_used": "graph",
+    "kernel_nodes": 1548,
+    "us_per_token_all": [
+     10330.201416015625,
+     10330.467529296875,
+     10332.786865234375
+    ]
+   },
+   {
+    "ctx": 16384,
+    "head": "bf16_48k",
+    "condition": "head",
+    "window_bytes": 100663296,
+    "hit_ratio": 0.625,
+    "persisted_bytes": 62914560,
+    "us_per_token": 10372.8662109375,
+    "dram_bytes_per_token": null,
+    "l2_hit_rate": null,
+    "gdn_persist_method": "views_inplace",
+    "arena_bytes": 119537664,
+    "counters_ok": false,
+    "gdn_impl": "fla",
+    "graph_nodes": {
+     "kernel": 1548,
+     "memcpy": 0,
+     "memset": 0,
+     "other": 0
+    },
+    "window_readback": {
+     "base_ptr": 133585883365376,
+     "num_bytes": 100663296,
+     "hit_ratio": 0.625,
+     "hit_prop": "persisting",
+     "miss_prop": "streaming"
+    },
+    "window_method_used": "graph",
+    "kernel_nodes": 1548,
+    "us_per_token_all": [
+     10372.34375,
+     10372.8662109375,
+     10372.889404296875
+    ]
+   },
+   {
+    "ctx": 16384,
+    "head": "bf16_48k",
+    "condition": "both",
+    "window_bytes": 119537664,
+    "hit_ratio": 0.5263157894736842,
+    "persisted_bytes": 62914560,
+    "us_per_token": 10375.518798828125,
+    "dram_bytes_per_token": null,
+    "l2_hit_rate": null,
+    "gdn_persist_method": "views_inplace",
+    "arena_bytes": 119537664,
+    "counters_ok": false,
+    "gdn_impl": "fla",
+    "graph_nodes": {
+     "kernel": 1548,
+     "memcpy": 0,
+     "memset": 0,
+     "other": 0
+    },
+    "window_readback": {
+     "base_ptr": 133585864491008,
+     "num_bytes": 119537664,
+     "hit_ratio": 0.5263158082962036,
+     "hit_prop": "persisting",
+     "miss_prop": "streaming"
+    },
+    "window_method_used": "graph",
+    "kernel_nodes": 1548,
+    "us_per_token_all": [
+     10375.518798828125,
+     10374.730224609375,
+     10375.631103515625
+    ]
+   }
+  ],
+  "notes": [
+   "ncu counters unavailable (ERR_NVGPUCTRPERM needs host NVreg_RestrictProfilingToAdminUsers=0): timing-only run, analytic bytes, counters_ok=false [ERR_NVGPUCTRPERM]",
+   "pruned heads use vocab ids 0..49151 (measurement only); bf16_48k matches PLAN's 98 MB figure",
+   "GDN state write-back is an add kernel (ArenaView), so it is a kernel node with the window and counted by ncu; ncu DRAM bytes still exclude any remaining memcpy graph nodes (see rows[].graph_nodes.memcpy)",
+   "each captured step starts with a cache-length reset (one tiny fill kernel per full-attention layer) so every replay writes the same KV slot; the cost is the same in all conditions",
+   "GO/NO-GO time proxy time saved x peak bw / persisted byte (both, int8_48k), no counters: -2.295 vs threshold 0.50 -> NO-GO"
+  ],
+  "counters_ok": false,
+  "analysis": {
+   "per_config": [
+    {
+     "ctx": 0,
+     "head": "bf16_48k",
+     "condition": "gdn",
+     "persisted_bytes": 18874368,
+     "time_gain_pct": -0.24805159307829525,
+     "time_saved_us": -6.59423828125,
+     "proxy_saved_per_persisted_byte": -0.6260805659823947
+    },
+    {
+     "ctx": 0,
+     "head": "bf16_48k",
+     "condition": "head",
+     "persisted_bytes": 62914560,
+     "time_gain_pct": -1.726810109089665,
+     "time_saved_us": -45.90576171875,
+     "proxy_saved_per_persisted_byte": -1.3075371583302815
+    },
+    {
+     "ctx": 0,
+     "head": "bf16_48k",
+     "condition": "both",
+     "persisted_bytes": 62914560,
+     "time_gain_pct": -0.6858268384522673,
+     "time_saved_us": -18.23211669921875,
+     "proxy_saved_per_persisted_byte": -0.5193067093690237
+    },
+    {
+     "ctx": 0,
+     "head": "bf16_full",
+     "condition": "gdn",
+     "persisted_bytes": 18874368,
+     "time_gain_pct": -0.1431344442139033,
+     "time_saved_us": -4.1473388671875,
+     "proxy_saved_per_persisted_byte": -0.39376318454742426
+    },
+    {
+     "ctx": 0,
+     "head": "bf16_full",
+     "condition": "head",
+     "persisted_bytes": 62914560,
+     "time_gain_pct": -6.227549009591798,
+     "time_saved_us": -180.44403076171875,
+     "proxy_saved_per_persisted_byte": -5.139600485563277
+    },
+    {
+     "ctx": 0,
+     "head": "bf16_full",
+     "condition": "both",
+     "persisted_bytes": 62914560,
+     "time_gain_pct": -6.258040121880191,
+     "time_saved_us": -181.3275146484375,
+     "proxy_saved_per_persisted_byte": -5.164764821529388
+    },
+    {
+     "ctx": 0,
+     "head": "int8_48k",
+     "condition": "gdn",
+     "persisted_bytes": 18874368,
+     "time_gain_pct": 0.10336871659706592,
+     "time_saved_us": 2.70416259765625,
+     "proxy_saved_per_persisted_byte": 0.2567428681585524
+    },
+    {
+     "ctx": 0,
+     "head": "int8_48k",
+     "condition": "head",
+     "persisted_bytes": 50528256,
+     "time_gain_pct": 0.09317299847204215,
+     "time_saved_us": 2.43743896484375,
+     "proxy_saved_per_persisted_byte": 0.08644451581705095
+    },
+    {
+     "ctx": 0,
+     "head": "int8_48k",
+     "condition": "both",
+     "persisted_bytes": 62914560,
+     "time_gain_pct": 2.3331162757491462e-05,
+     "time_saved_us": 0.0006103515625,
+     "proxy_saved_per_persisted_byte": 1.7384688059488933e-05
+    },
+    {
+     "ctx": 0,
+     "head": "int8_full",
+     "condition": "gdn",
+     "persisted_bytes": 18874368,
+     "time_gain_pct": 0.48691263880876295,
+     "time_saved_us": 13.836669921875,
+     "proxy_saved_per_persisted_byte": 1.3137029276953802
+    },
+    {
+     "ctx": 0,
+     "head": "int8_full",
+     "condition": "head",
+     "persisted_bytes": 62914560,
+     "time_gain_pct": -0.10629601453306431,
+     "time_saved_us": -3.0206298828125,
+     "proxy_saved_per_persisted_byte": -0.08603682120641072
+    },
+    {
+     "ctx": 0,
+     "head": "int8_full",
+     "condition": "both",
+     "persisted_bytes": 62914560,
+     "time_gain_pct": -0.23485426771303125,
+     "time_saved_us": -6.67388916015625,
+     "proxy_saved_per_persisted_byte": -0.19009287158648172
+    },
+    {
+     "ctx": 16384,
+     "head": "bf16_48k",
+     "condition": "gdn",
+     "persisted_bytes": 18874368,
+     "time_gain_pct": -0.2593584728131497,
+     "time_saved_us": -26.7236328125,
+     "proxy_saved_per_persisted_byte": -2.5372372733222113
+    },
+    {
+     "ctx": 16384,
+     "head": "bf16_48k",
+     "condition": "head",
+     "persisted_bytes": 62914560,
+     "time_gain_pct": -0.6708465888472777,
+     "time_saved_us": -69.122314453125,
+     "proxy_saved_per_persisted_byte": -1.9688159227371211
+    },
+    {
+     "ctx": 16384,
+     "head": "bf16_48k",
+     "condition": "both",
+     "persisted_bytes": 62914560,
+     "time_gain_pct": -0.6965905118064853,
+     "time_saved_us": -71.77490234375,
+     "proxy_saved_per_persisted_byte": -2.04436977704366
+    },
+    {
+     "ctx": 16384,
+     "head": "bf16_full",
+     "condition": "gdn",
+     "persisted_bytes": 18874368,
+     "time_gain_pct": -0.45349220156284986,
+     "time_saved_us": -47.7880859375,
+     "proxy_saved_per_persisted_byte": -4.537171787685818
+    },
+    {
+     "ctx": 16384,
+     "head": "bf16_full",
+     "condition": "head",
+     "persisted_bytes": 62914560,
+     "time_gain_pct": 0.13249830901900167,
+     "time_saved_us": 13.96240234375,
+     "proxy_saved_per_persisted_byte": 0.3976921240488688
+    },
+    {
+     "ctx": 16384,
+     "head": "bf16_full",
+     "condition": "both",
+     "persisted_bytes": 62914560,
+     "time_gain_pct": 0.13042476492786673,
+     "time_saved_us": 13.743896484375,
+     "proxy_saved_per_persisted_byte": 0.3914684057235718
+    },
+    {
+     "ctx": 16384,
+     "head": "int8_48k",
+     "condition": "gdn",
+     "persisted_bytes": 18874368,
+     "time_gain_pct": -0.30393822342447363,
+     "time_saved_us": -31.229248046875,
+     "proxy_saved_per_persisted_byte": -2.965016497506036
+    },
+    {
+     "ctx": 16384,
+     "head": "int8_48k",
+     "condition": "head",
+     "persisted_bytes": 50528256,
+     "time_gain_pct": -0.3826463784566097,
+     "time_saved_us": -39.31640625,
+     "proxy_saved_per_persisted_byte": -1.3943683312560795
+    },
+    {
+     "ctx": 16384,
+     "head": "int8_48k",
+     "condition": "both",
+     "persisted_bytes": 62914560,
+     "time_gain_pct": -0.7843490407881698,
+     "time_saved_us": -80.5908203125,
+     "proxy_saved_per_persisted_byte": -2.2954742113749185
+    },
+    {
+     "ctx": 16384,
+     "head": "int8_full",
+     "condition": "gdn",
+     "persisted_bytes": 18874368,
+     "time_gain_pct": -0.60873354217208,
+     "time_saved_us": -63.09814453125,
+     "proxy_saved_per_persisted_byte": -5.990763505299886
+    },
+    {
+     "ctx": 16384,
+     "head": "int8_full",
+     "condition": "head",
+     "persisted_bytes": 62914560,
+     "time_gain_pct": -0.029936170713898768,
+     "time_saved_us": -3.10302734375,
+     "proxy_saved_per_persisted_byte": -0.08838375409444173
+    },
+    {
+     "ctx": 16384,
+     "head": "int8_full",
+     "condition": "both",
+     "persisted_bytes": 62914560,
+     "time_gain_pct": -0.030819417292790353,
+     "time_saved_us": -3.194580078125,
+     "proxy_saved_per_persisted_byte": -0.09099145730336507
+    }
+   ],
+   "go_no_go": null,
+   "go_no_go_time_proxy": {
+    "metric": "time saved x peak bw / persisted byte (both, int8_48k), no counters",
+    "value": -2.2954742113749185,
+    "threshold": 0.5,
+    "go": false,
+    "per_ctx": {
+     "0": 1.7384688059488933e-05,
+     "16384": -2.2954742113749185
+    }
+   }
+  }
+ }
+}

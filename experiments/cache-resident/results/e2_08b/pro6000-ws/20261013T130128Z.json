@@ -1,0 +1,417 @@
+{
+ "schema": 1,
+ "exp": "e2_08b",
+ "gpu": "pro6000-ws",
+ "utc": "2026-10-13T13:01:28.748915+00:00",
+ "env": {
+  "gpu_name": "NVIDIA RTX PRO 6000 Blackwell Workstation Edition",
+  "gpu_tag": "pro6000-ws",
+  "cc": "12.0",
+  "sm": "sm_120",
+  "driver": "580.178.04",
+  "cuda_runtime": "12.8",
+  "cuda_driver": "13.0",
+  "torch": "2.11.0+cu128",
+  "vram_bytes": 101971460096,
+  "sm_count": 188,
+  "l2_bytes": 134217728,
+  "persisting_l2_max_bytes": 83886080,
+  "access_policy_window_max_bytes": 134217728,
+  "persisting_l2_limit_bytes": 25165824,
+  "git_sha": "9c437777e394708109212a06e433226afef2365a",
+  "git_branch": "exp/cache-resident",
+  "hostname": "b45ed1b7128d",
+  "pod_id": "obtzm73o36qqo4",
+  "python": "3.10.12",
+  "counters_ok": null,
+  "transformers": "5.19.0"
+ },
+ "data": {
+  "config": {
+   "model": "0.8B",
+   "ctx": [
+    0,
+    1024
+   ],
+   "decode": 32,
+   "compile_mode_requested": "reduce-overhead",
+   "torch": "2.11.0+cu128",
+   "quick": true,
+   "device": {
+    "name": "NVIDIA RTX PRO 6000 Blackwell Workstation Edition",
+    "cc": "12.0",
+    "l2_bytes": 134217728,
+    "persisting_max_bytes": 83886080,
+    "window_max_bytes": 134217728,
+    "persisting_limit_bytes": 25165824,
+    "backend": "cuda-python"
+   },
+   "load": {
+    "hf": {
+     "kind": "qwen",
+     "key": "0.8B",
+     "repo": "Qwen/Qwen3.5-0.8B",
+     "file": null,
+     "exists": true,
+     "source": "api",
+     "checked_utc": "2026-10-13T13:00:10.873405+00:00",
+     "alternatives": [],
+     "note": null
+    },
+    "repo_used": "Qwen/Qwen3.5-0.8B",
+    "transformers": "5.19.0",
+    "load_errors": [],
+    "load_path": "AutoModelForCausalLM",
+    "class": "Qwen3_5ForCausalLM",
+    "fla_available": true,
+    "fla_version": "0.5.2",
+    "causal_conv1d_available": false,
+    "causal_conv1d_import_error": "ModuleNotFoundError: No module named 'causal_conv1d'",
+    "gdn_impl": "fla",
+    "fla_check": {
+     "ran": true,
+     "torch_recurrent_gated_delta_rule": {
+      "T": 1,
+      "out_rel_err": 0.0,
+      "state_rel_err": 1.638014168747759e-07
+     },
+     "torch_chunk_gated_delta_rule": {
+      "T": 64,
+      "out_rel_err": 0.005102040711790323,
+      "state_rel_err": 0.006465344689786434
+     },
+     "ok": true
+    },
+    "calibration": {
+     "nvml_idle": {
+      "sm_mhz": 2872,
+      "mem_mhz": 13365,
+      "max_sm_mhz": 3090,
+      "max_mem_mhz": 14001,
+      "power_w": 205.029,
+      "power_limit_w": 350.0,
+      "temp_c": 37,
+      "pstate": 1,
+      "event_reasons": "0x0"
+     },
+     "copy_gbps": 1469.864424078995,
+     "nvml_copy_busy": {
+      "sm_mhz": 2872,
+      "mem_mhz": 13365,
+      "max_sm_mhz": 3090,
+      "max_mem_mhz": 14001,
+      "power_w": 205.029,
+      "power_limit_w": 350.0,
+      "temp_c": 37,
+      "pstate": 1,
+      "event_reasons": "0x0"
+     },
+     "linear_lm_head": {
+      "us": 311.9647979736328,
+      "gbps": 1630.1818772609827,
+      "bytes": 508559360
+     },
+     "linear_mlp_3584x1024": {
+      "us": 8.4307199716568,
+      "gbps": 870.6293204704251,
+      "bytes": 7340032
+     },
+     "linear_mlp_x8_rotating": {
+      "us": 8.480874821543694,
+      "gbps": 865.480525824335,
+      "bytes": 7340032
+     }
+    },
+    "cache_kind": "static"
+   }
+  },
+  "rows": [
+   {
+    "model": "0.8B",
+    "ctx": 0,
+    "tok_s": 524.662280954676,
+    "us_per_token": 1905.9879779815674,
+    "compile_mode_used": "reduce-overhead",
+    "cache_kind": "static",
+    "dynamo_recompiles": 0,
+    "modes_rejected_recompile": [],
+    "dram_bytes_per_token": null,
+    "l2_hit_rate": null,
+    "ncu_us_per_token": null,
+    "counters_ok": false,
+    "gdn_impl": "fla",
+    "analytic": {
+     "weight_bytes": 1504786048,
+     "kv_bytes": 1572864,
+     "gdn_state_bytes": 18874368,
+     "conv_state_bytes": 884736,
+     "cache_len": 128,
+     "kv_bytes_per_token": 12288,
+     "n_layers": 24
+    },
+    "breakdown": {
+     "host_issue_us_per_token": 281.3359062656673,
+     "gpu_us_per_token": 1910.8469486236572,
+     "graph_replay_only_us": null,
+     "nvml_decode_busy": {
+      "sm_mhz": 2865,
+      "mem_mhz": 13365,
+      "max_sm_mhz": 3090,
+      "max_mem_mhz": 14001,
+      "power_w": 295.458,
+      "power_limit_w": 350.0,
+      "temp_c": 40,
+      "pstate": 1,
+      "event_reasons": "0x0"
+     },
+     "kernel_us_per_token": 1860.0401666666687,
+     "kernels_per_token": 491.0,
+     "by_category": {
+      "gemm": {
+       "us": 1379.2773333333323,
+       "n": 187.0
+      },
+      "norm": {
+       "us": 256.5646666666674,
+       "n": 126.0
+      },
+      "copy_cat_index": {
+       "us": 76.1580000000043,
+       "n": 98.0
+      },
+      "attn": {
+       "us": 65.37450000000172,
+       "n": 29.0
+      },
+      "other_elementwise": {
+       "us": 46.04233333333226,
+       "n": 32.0
+      },
+      "conv": {
+       "us": 35.83383333333101,
+       "n": 18.0
+      },
+      "memcpy": {
+       "us": 0.7894999999995586,
+       "n": 1.0
+      }
+     },
+     "top_kernels": [
+      {
+       "name": "std::enable_if<!(false), void>::type internal::gemvx::kernel<int, int, __nv_bfloat16, __nv_bfloat16, __nv_bfloat16, floa",
+       "us_per_token": 1282.1263333333336,
+       "n_per_token": 139.0
+      },
+      {
+       "name": "triton_red_fused__to_copy__unsafe_view_add_exp_mul_neg_rsqrt_select_silu_slice_softplus_split_with_sizes_sum_transpose_u",
+       "us_per_token": 121.14066666666865,
+       "n_per_token": 17.0
+      },
+      {
+       "name": "std::enable_if<!(false), void>::type internal::gemvx::kernel<int, int, __nv_bfloat16, __nv_bfloat16, __nv_bfloat16, floa",
+       "us_per_token": 97.15099999999863,
+       "n_per_token": 48.0
+      },
+      {
+       "name": "fmha_cutlassF_bf16_aligned_32x128_gmem_sm80(PyTorchMemEffAttention::AttentionKernel<cutlass::bfloat16_t, cutlass::arch::",
+       "us_per_token": 48.16033333333356,
+       "n_per_token": 6.0
+      },
+      {
+       "name": "triton_red_fused__to_copy__unsafe_view_add_copy__div_exp_mul_neg_rsqrt_select_sigmoid_silu_slice_softplus_split_with_siz",
+       "us_per_token": 47.30666666666851,
+       "n_per_token": 17.0
+      },
+      {
+       "name": "void at::native::(anonymous namespace)::conv_depthwise2d_forward_kernel_generic<c10::BFloat16, int>(torch::headeronly::d",
+       "us_per_token": 35.83383333333101,
+       "n_per_token": 18.0
+      },
+      {
+       "name": "triton_red_fused__unsafe_view_argmax_select_35",
+       "us_per_token": 23.55700000000009,
+       "n_per_token": 1.0
+      },
+      {
+       "name": "triton_poi_fused__unsafe_view_mul_silu_11",
+       "us_per_token": 17.114499999999982,
+       "n_per_token": 24.0
+      },
+      {
+       "name": "triton_red_fused__to_copy_mul_silu_slice_split_with_sizes_sum_transpose_view_6",
+       "us_per_token": 15.91000000000137,
+       "n_per_token": 18.0
+      },
+      {
+       "name": "triton_red_fused__to_copy_mul_silu_slice_split_with_sizes_sum_transpose_view_5",
+       "us_per_token": 15.179333333331973,
+       "n_per_token": 18.0
+      }
+     ],
+     "profile_source": "decoder",
+     "gpu_idle_us_per_token": 50.806781956988516,
+     "analytic_bytes_per_token": 1544107648,
+     "bw_floor_us": 861.6672142857143
+    },
+    "grad_enabled": false,
+    "anomaly_enabled": false,
+    "prefill_and_compile_s": 22.252820511999744,
+    "split": null,
+    "split_read_only": null
+   },
+   {
+    "model": "0.8B",
+    "ctx": 1024,
+    "tok_s": 450.2399119594654,
+    "us_per_token": 2221.0381031036377,
+    "compile_mode_used": "reduce-overhead",
+    "cache_kind": "static",
+    "dynamo_recompiles": 0,
+    "modes_rejected_recompile": [],
+    "dram_bytes_per_token": null,
+    "l2_hit_rate": null,
+    "ncu_us_per_token": null,
+    "counters_ok": false,
+    "gdn_impl": "fla",
+    "analytic": {
+     "weight_bytes": 1504786048,
+     "kv_bytes": 14155776,
+     "gdn_state_bytes": 18874368,
+     "conv_state_bytes": 884736,
+     "cache_len": 1152,
+     "kv_bytes_per_token": 12288,
+     "n_layers": 24
+    },
+    "breakdown": {
+     "host_issue_us_per_token": 326.5479687399875,
+     "gpu_us_per_token": 2238.503932952881,
+     "graph_replay_only_us": null,
+     "nvml_decode_busy": {
+      "sm_mhz": 2677,
+      "mem_mhz": 13365,
+      "max_sm_mhz": 3090,
+      "max_mem_mhz": 14001,
+      "power_w": 114.264,
+      "power_limit_w": 350.0,
+      "temp_c": 39,
+      "pstate": 1,
+      "event_reasons": "0x0"
+     },
+     "kernel_us_per_token": 2160.8095000000044,
+     "kernels_per_token": 490.8333333333333,
+     "by_category": {
+      "gemm": {
+       "us": 1380.748166666667,
+       "n": 187.0
+      },
+      "attn": {
+       "us": 364.83000000000067,
+       "n": 29.0
+      },
+      "norm": {
+       "us": 255.82250000000283,
+       "n": 126.0
+      },
+      "copy_cat_index": {
+       "us": 76.95349999999867,
+       "n": 97.83333333333333
+      },
+      "other_elementwise": {
+       "us": 46.18816666666718,
+       "n": 32.0
+      },
+      "conv": {
+       "us": 35.477833333334694,
+       "n": 18.0
+      },
+      "memcpy": {
+       "us": 0.789333333333237,
+       "n": 1.0
+      }
+     },
+     "top_kernels": [
+      {
+       "name": "std::enable_if<!(false), void>::type internal::gemvx::kernel<int, int, __nv_bfloat16, __nv_bfloat16, __nv_bfloat16, floa",
+       "us_per_token": 1282.8348333333317,
+       "n_per_token": 139.0
+      },
+      {
+       "name": "fmha_cutlassF_bf16_aligned_32x128_gmem_sm80(PyTorchMemEffAttention::AttentionKernel<cutlass::bfloat16_t, cutlass::arch::",
+       "us_per_token": 336.3233333333334,
+       "n_per_token": 6.0
+      },
+      {
+       "name": "triton_red_fused__to_copy__unsafe_view_add_exp_mul_neg_rsqrt_select_silu_slice_softplus_split_with_sizes_sum_transpose_u",
+       "us_per_token": 120.31850000000027,
+       "n_per_token": 17.0
+      },
+      {
+       "name": "std::enable_if<!(false), void>::type internal::gemvx::kernel<int, int, __nv_bfloat16, __nv_bfloat16, __nv_bfloat16, floa",
+       "us_per_token": 97.91333333333527,
+       "n_per_token": 48.0
+      },
+      {
+       "name": "triton_red_fused__to_copy__unsafe_view_add_copy__div_exp_mul_neg_rsqrt_select_sigmoid_silu_slice_softplus_split_with_siz",
+       "us_per_token": 47.018166666666424,
+       "n_per_token": 17.0
+      },
+      {
+       "name": "void at::native::(anonymous namespace)::conv_depthwise2d_forward_kernel_generic<c10::BFloat16, int>(torch::headeronly::d",
+       "us_per_token": 35.477833333334694,
+       "n_per_token": 18.0
+      },
+      {
+       "name": "triton_red_fused__unsafe_view_argmax_select_35",
+       "us_per_token": 23.55183333333351,
+       "n_per_token": 1.0
+      },
+      {
+       "name": "triton_poi_fused__scaled_dot_product_efficient_attention__unsafe_view_add_arange_clone_expand_le_scalar_tensor_unsqueeze",
+       "us_per_token": 20.394499999999805,
+       "n_per_token": 12.0
+      },
+      {
+       "name": "triton_poi_fused__unsafe_view_mul_silu_11",
+       "us_per_token": 17.190833333333405,
+       "n_per_token": 24.0
+      },
+      {
+       "name": "triton_red_fused__to_copy_mul_silu_slice_split_with_sizes_sum_transpose_view_5",
+       "us_per_token": 15.33849999999984,
+       "n_per_token": 18.0
+      }
+     ],
+     "profile_source": "decoder",
+     "gpu_idle_us_per_token": 77.69443295287647,
+     "analytic_bytes_per_token": 1556690560,
+     "bw_floor_us": 868.6889285714286
+    },
+    "grad_enabled": false,
+    "anomaly_enabled": false,
+    "prefill_and_compile_s": 17.4876181489999,
+    "split": null,
+    "split_read_only": null
+   }
+  ],
+  "notes": [
+   "ncu counters unavailable (ERR_NVGPUCTRPERM needs host NVreg_RestrictProfilingToAdminUsers=0): timing-only run, analytic bytes, counters_ok=false [ERR_NVGPUCTRPERM]",
+   "fit and split use analytic bytes where ncu bytes are missing (see fit.bytes_source)",
+   "ncu dram_bytes_per_token counts reads only; split has the spec 2x state, split_read_only has 1x",
+   "ncu is kernel replay; rows with ncu_l2_state_ok false ran more than one pass on a warmed L2 (--cache-control none): dram bytes may be under-reported",
+   "static cache is read in full every step, so KV bytes scale with cache_len not ctx",
+   "reduce-overhead can skip CUDA graphs silently (mutated inputs); compare us/token with the other modes",
+   "breakdown: kernel_us_per_token from torch.profiler (sum of kernel durations), gpu_idle = gpu time - kernel time (launch gaps); host_issue_us_per_token >= gpu_us_per_token means the Python/launch path is the limit; bw_floor_us = analytic bytes / peak DRAM bandwidth",
+   "ncu counts kernel nodes only; any cudaMemcpy node (e.g. a same-dtype copy_ into the cache) is excluded from dram_bytes_per_token"
+  ],
+  "counters_ok": false,
+  "fit": {
+   "intercept_us": -36755.2780075348,
+   "n_points": 2,
+   "r2": 1.0,
+   "floor_us_per_layer": null,
+   "eff_bw_gbps": 39.9393969296936,
+   "bytes_source": "analytic_bytes",
+   "gdn_impl": "fla"
+  }
+ }
+}
