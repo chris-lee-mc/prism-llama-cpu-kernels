@@ -1,0 +1,16 @@
+device NVIDIA GeForce RTX 5090 tag rtx5090 peak 1792.0 GB/s L2 96 MiB graph-node gap ~0.67 us
+     N      K  var       bytes  us_cold   us_hot  GB/s cold  GB/s hot  %peak   %net       err ok
+  4096   4096  lut     4472832     6.16     4.58      726.6     977.5   40.5   45.5  9.46e-04 True
+  4096   4096  fp4     4472832     8.32     6.78      537.8     659.6   30.0   32.7  9.46e-04 True
+  8192   8192  lut    17858560    17.02    13.83     1049.2    1290.8   58.6   61.0  9.70e-04 True
+  8192   8192  fp4    17858560    26.02    22.25      686.4     802.8   38.3   39.3  9.70e-04 True
+  4096  16384  lut    17866752    17.92    14.22      997.2    1256.3   55.6   57.8  9.49e-04 True
+  4096  16384  fp4    17866752    26.45    22.77      675.6     784.5   37.7   38.7  9.49e-04 True
+ 16384   4096  lut    17866752    15.79    12.28     1131.4    1455.4   63.1   65.9  9.76e-04 True
+ 16384   4096  fp4    17866752    21.26    18.83      840.3     949.1   46.9   48.4  9.76e-04 True
+ 28672   8192  lut    62464000    44.92    36.94     1390.4    1690.8   77.6   78.8  9.73e-04 True
+ 28672   8192  fp4    62464000    66.20    57.90      943.5    1078.8   52.7   53.2  9.73e-04 True
+target >= 70% of peak at 4096x4096: best lut 40.5% -> NOT MET
+/usr/local/lib/python3.10/dist-packages/huggingface_hub/constants.py:302: FutureWarning: The `HF_HUB_ENABLE_HF_TRANSFER` environment variable is deprecated as 'hf_transfer' is not used anymore. Please use `HF_XET_HIGH_PERFORMANCE` instead to enable high performance transfer with Xet. Visit https://huggingface.co/docs/huggingface_hub/package_reference/environment_variables#hfxethighperformance for more details.
+  warnings.warn(
+wrote /workspace/repo/experiments/cache-resident/results/p0_gemv/rtx5090/20261013T041011Z.json

@@ -1,0 +1,33 @@
+...........................................F                             [100%]
+=================================== FAILURES ===================================
+_________________________ test_bench_target_on_rtx5090 _________________________
+
+    def test_bench_target_on_rtx5090():
+        from infra.gpus import peak_dram_gbps, tag_from_name
+        from kernels import bench_gemv as B
+    
+        tag = tag_from_name(torch.cuda.get_device_name(0))
+        if tag != "rtx5090":
+            pytest.skip(f"target is defined for rtx5090, this is {tag}")
+        gap = B.gap_estimate_us()
+        rows = [B.bench_one(4096, 4096, v, 200, gap, peak_dram_gbps(tag), B.l2_bytes()) for v in ("lut", "fp4")]
+        assert all(r["ok"] for r in rows)
+>       assert max(r["pct_peak_cold"] for r in rows) >= 0.70, rows
+E       AssertionError: [{'N': 4096, 'K': 4096, 'variant': 'lut', 'bytes': 4472832, ...}, {'N': 4096, 'K': 4096, 'variant': 'fp4', 'bytes': 4472832, ...}]
+E       assert 0.42941179100397725 >= 0.7
+E        +  where 0.42941179100397725 = max(<generator object test_bench_target_on_rtx5090.<locals>.<genexpr> at 0x79ded9f06ea0>)
+
+tests/test_kernels_gpu.py:230: AssertionError
+=============================== warnings summary ===============================
+tests/test_harness_p0_l2.py: 12 warnings
+  /workspace/repo/experiments/cache-resident/harness/p0_l2_check.py:205: DeprecationWarning: ExternalStream is deprecated. Use Stream.from_external() instead to interoperate with external streams that implement the CUDA stream protocol.
+    with self._stream_ctx(handle):
+
+tests/test_harness_p0_l2.py::test_gpu_p0_l2_check_runs[all]
+  /usr/local/lib/python3.10/dist-packages/huggingface_hub/constants.py:302: FutureWarning: The `HF_HUB_ENABLE_HF_TRANSFER` environment variable is deprecated as 'hf_transfer' is not used anymore. Please use `HF_XET_HIGH_PERFORMANCE` instead to enable high performance transfer with Xet. Visit https://huggingface.co/docs/huggingface_hub/package_reference/environment_variables#hfxethighperformance for more details.
+    warnings.warn(
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_kernels_gpu.py::test_bench_target_on_rtx5090 - AssertionErr...
+1 failed, 43 passed, 466 deselected, 13 warnings in 21.33s

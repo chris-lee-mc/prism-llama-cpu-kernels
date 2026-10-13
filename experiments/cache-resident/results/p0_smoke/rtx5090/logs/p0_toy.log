@@ -1,0 +1,19 @@
+{
+ "total_bytes_per_token": 206889984,
+ "us_per_token_eager": 1101.4718627929688,
+ "us_per_token_graph": 781.1840057373047,
+ "us_per_layer_graph": 32.549333572387695,
+ "launches_per_token": 294,
+ "weight_bytes_per_token": 118809600,
+ "extra_bytes_per_token": 88080384,
+ "eff_gbps": 264.84155138933124,
+ "us_per_layer_gdn": 28.515466054280598,
+ "us_per_layer_attn": 44.15266036987305,
+ "floor_us_per_layer": 13.988827069600424,
+ "eff_gbps_net": 464.44939413186023,
+ "l2_bytes": 100663296,
+ "l2_assisted": false
+}
+/usr/local/lib/python3.10/dist-packages/huggingface_hub/constants.py:302: FutureWarning: The `HF_HUB_ENABLE_HF_TRANSFER` environment variable is deprecated as 'hf_transfer' is not used anymore. Please use `HF_XET_HIGH_PERFORMANCE` instead to enable high performance transfer with Xet. Visit https://huggingface.co/docs/huggingface_hub/package_reference/environment_variables#hfxethighperformance for more details.
+  warnings.warn(
+wrote /workspace/repo/experiments/cache-resident/results/p0_toy/rtx5090/20261013T041015Z.json
