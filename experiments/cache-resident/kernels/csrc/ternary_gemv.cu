@@ -32,7 +32,7 @@ struct Tile {
 // Weights are read once: skip L1, keep the default L2 policy (L2 persistence experiments rely on it).
 __device__ __forceinline__ uint4 ld_stream(const uint4* p) {
   uint4 v;
-  asm("ld.global.nc.L1::no_allocate.v4.u32 {%0, %1, %2, %3}, [%4];" : "=r"(v.x), "=r"(v.y), "=r"(v.z), "=r"(v.w) : "l"(p));
+  asm volatile("ld.global.nc.L1::no_allocate.v4.u32 {%0, %1, %2, %3}, [%4];" : "=r"(v.x), "=r"(v.y), "=r"(v.z), "=r"(v.w) : "l"(p));
   return v;
 }
 
@@ -70,17 +70,62 @@ __device__ __forceinline__ uint32_t byte_of(uint32_t v, int b) { return __byte_p
 
 __device__ __forceinline__ float lds_at(const char* base, uint32_t off) { return *reinterpret_cast<const float*>(base + off); }
 
+// x of one tile in registers, loaded one tile ahead. LUT: one half2 pair per table chunk. FP4: 4 halves per uint2.
+template <int NT, bool FP4>
+struct XTile {
+  static constexpr int kN = FP4 ? kTile * 64 / NT : kTile * 256 / NT;
+  uint32_t v[kN];
+};
+
+template <int NT, bool FP4>
+__device__ __forceinline__ void x_load(XTile<NT, FP4>& t, const __half* x, int g0, int ng) {
+  if (FP4) {
+#pragma unroll
+    for (int it = 0; it < XTile<NT, FP4>::kN / 2; ++it) {
+      const int idx = it * NT + threadIdx.x;
+      const int u = idx >> 5;
+      uint2 v = make_uint2(0u, 0u);
+      if (u < ng) v = reinterpret_cast<const uint2*>(x)[(g0 + u) * 32 + (idx & 31)];
+      t.v[2 * it] = v.x;
+      t.v[2 * it + 1] = v.y;
+    }
+  } else {
+#pragma unroll
+    for (int it = 0; it < XTile<NT, FP4>::kN; ++it) {
+      const int e = it * NT + threadIdx.x;
+      const int u = e >> 8, j = (e >> 3) & 31, c = e & 7;
+      t.v[it] = u < ng ? reinterpret_cast<const uint32_t*>(x)[(g0 + u) * 64 + j + ((c >> 2) << 5)] : 0u;
+    }
+  }
+}
+
 // LUT tile: group u, slot j, entry n = c0 | c1 << 2 of pair p = j + 32h sits at float u * kLutGroup + j * kSlot + 16h + n.
 // Entry value t(c0) * x[2p] + t(c1) * x[2p + 1], t = {0, +1, -1, 0}. 8 lanes write one 128 B slot: no bank conflict.
-template <int NT>
-__device__ __forceinline__ void lut_build(float* lut, const uint32_t* x2, int g0, int ng) {
-  for (int e = threadIdx.x; e < ng * 256; e += NT) {
-    const int u = e >> 8, j = (e >> 3) & 31, c = e & 7;
-    const int p = j + ((c >> 2) << 5);
-    const float2 xv = h2f2(x2[(g0 + u) * 64 + p]);
-    const int c1 = c & 3;
-    const float t1 = c1 == 1 ? xv.y : (c1 == 2 ? -xv.y : 0.f);
-    *reinterpret_cast<float4*>(lut + u * kLutGroup + j * kSlot + 4 * c) = make_float4(t1, t1 + xv.x, t1 - xv.x, t1);
+// fp4 x tile: group u, half h, weight i at float u * kXGroup + h * kXHalf + i.
+template <int NT, bool FP4>
+__device__ __forceinline__ void x_store(float* sm, const XTile<NT, FP4>& t, int ng) {
+  if (FP4) {
+#pragma unroll
+    for (int it = 0; it < XTile<NT, FP4>::kN / 2; ++it) {
+      const int idx = it * NT + threadIdx.x;
+      const int u = idx >> 5, k = (idx & 31) * 4;
+      if (u < ng) {
+        const float2 a = h2f2(t.v[2 * it]), b = h2f2(t.v[2 * it + 1]);
+        *reinterpret_cast<float4*>(sm + u * kXGroup + (k >> 6) * kXHalf + (k & 63)) = make_float4(a.x, a.y, b.x, b.y);
+      }
+    }
+  } else {
+#pragma unroll
+    for (int it = 0; it < XTile<NT, FP4>::kN; ++it) {
+      const int e = it * NT + threadIdx.x;
+      const int u = e >> 8, j = (e >> 3) & 31, c = e & 7;
+      if (u < ng) {
+        const float2 xv = h2f2(t.v[it]);
+        const int c1 = c & 3;
+        const float t1 = c1 == 1 ? xv.y : (c1 == 2 ? -xv.y : 0.f);
+        *reinterpret_cast<float4*>(sm + u * kLutGroup + j * kSlot + 4 * c) = make_float4(t1, t1 + xv.x, t1 - xv.x, t1);
+      }
+    }
   }
 }
 
@@ -120,15 +165,6 @@ __device__ __forceinline__ void to_e2m1(uint32_t w, uint32_t& e, uint32_t& o) {
   const uint32_t ng = b1 & ~b0;
   e = ((nz & 0x11111111u) << 1) | ((ng & 0x11111111u) << 3);
   o = (((nz >> 2) & 0x11111111u) << 1) | (((ng >> 2) & 0x11111111u) << 3);
-}
-
-// fp4 x tile: group u, half h, weight i at float u * kXGroup + h * kXHalf + i.
-template <int NT>
-__device__ __forceinline__ void xs_build(float* xs, const __half* x, int g0, int ng) {
-  for (int e = threadIdx.x; e < ng * 128; e += NT) {
-    const int u = e >> 7, k = e & 127;
-    xs[u * kXGroup + (k >> 6) * kXHalf + (k & 63)] = __half2float(x[(g0 + u) * 128 + k]);
-  }
 }
 
 // Stage the lane's 64 weights as E2M1 nibbles in shared memory, read back, decode via the 16-entry table, fp32 dot.
@@ -193,19 +229,22 @@ __device__ __forceinline__ void gemv_body(const uint32_t* __restrict__ q, const 
   grid_dep_wait();
   if (FP4 && tid < 16) tab[tid] = e2m1_value(tid);
 
+  XTile<NT, FP4> xc;
+  x_load(xc, x, gb, min(kTile, ge - gb));
+
   const uint32_t hb = h ? 0x40404040u : 0u;
   float acc = 0.f;
   for (int g0 = gb; g0 < ge; g0 += kTile) {
     const int ng = min(kTile, ge - g0);
     const bool more = g0 + kTile < ge;
     Tile nxt;
-    if (more) load_tile(nxt, qrow, srow, g0 + kTile, ge);
-    if (g0 != gb) __syncthreads();
-    if (FP4) {
-      xs_build<NT>(tile_smem, x, g0, ng);
-    } else {
-      lut_build<NT>(tile_smem, reinterpret_cast<const uint32_t*>(x), g0, ng);
+    XTile<NT, FP4> xn;
+    if (more) {
+      load_tile(nxt, qrow, srow, g0 + kTile, ge);
+      x_load(xn, x, g0 + kTile, min(kTile, ge - g0 - kTile));
     }
+    if (g0 != gb) __syncthreads();
+    x_store(tile_smem, xc, ng);
     __syncthreads();
 #pragma unroll
     for (int u = 0; u < kTile; ++u) {
@@ -221,6 +260,7 @@ __device__ __forceinline__ void gemv_body(const uint32_t* __restrict__ q, const 
     }
     if (!more) break;
     cur = nxt;
+    xc = xn;
   }
   acc += __shfl_xor_sync(kFull, acc, 1);
 
@@ -284,13 +324,20 @@ DevInfo dev_info() {
   return c;
 }
 
+int env_int(const char* name, int def) {
+  const char* e = getenv(name);
+  return e && *e ? atoi(e) : def;
+}
+
+// Tuning knobs, read once: CR_GEMV_PDL=1 enables PDL, CR_GEMV_BPS = target blocks per SM for split-K (default 2).
 bool pdl_on() {
-  static int v = -1;
-  if (v < 0) {
-    const char* e = getenv("CR_GEMV_PDL");
-    v = (e && atoi(e) != 0) ? 1 : 0;
-  }
-  return v == 1;
+  static const int v = env_int("CR_GEMV_PDL", 0);
+  return v != 0;
+}
+
+int blocks_per_sm() {
+  static const int v = env_int("CR_GEMV_BPS", 2);
+  return v;
 }
 
 template <int W, bool FP4>
@@ -301,7 +348,7 @@ cudaError_t launch_w(const uint32_t* q, const __half* s, const __half* x, __half
   int S = 1;
   // split K over a cluster until there are about 2 blocks per SM
   if (di.major >= 9) {
-    while (S < kMaxSplit && 2 * S <= G && rblocks * S < 2 * di.sms) S *= 2;
+    while (S < kMaxSplit && 2 * S <= G && rblocks * S < blocks_per_sm() * di.sms) S *= 2;
   }
   cudaLaunchConfig_t cfg = {};
   cfg.gridDim = dim3((unsigned)(rblocks * S));
