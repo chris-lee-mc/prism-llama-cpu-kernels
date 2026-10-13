@@ -33,12 +33,50 @@ def test_layout_regions_aligned_and_disjoint(head):
     assert by["total"] == lay["total"] and by["pad"] >= 0 and sum(v for k, v in by.items() if k != "total") == by["total"]
     assert (("logits" in lay) == (head == "ternary"))
     assert len(lay["kv"]) == 2 and by["state"] == 6 * 12 * 128 * 128 * 4
+    # read-write and per-token data first, matrices last (a clamped window then drops matrices)
+    front = max(o + n for o, n in spans if o < lay["mat_start"])
+    mats = [e for e in lay["ent"].values() if "q_off" in e]
+    assert front <= lay["mat_start"] and min(e["q_off"] for e in mats) == lay["mat_start"]
+    assert all(e["w_off"] < lay["mat_start"] for e in lay["ent"].values() if "w_off" in e) and lay["final_norm"] < lay["head_q"]
+    assert lay["state"] == 0 and all(lay[n] < lay["mat_start"] for n in ("head_q", "head_s", "act", "x0"))
+    assert max(e["s_off"] for e in mats) < lay["total"]
+
+
+@pytest.mark.parametrize("head", ["ternary", "int8"])
+def test_every_plan_pointer_in_arena(head):
+    """All raw pointers of the draft step lie in the arena; the known exceptions are listed in OUTSIDE_ARENA."""
+    cfg = e3d.make_cfg(768, 8, 2560)
+    m = e3d.DraftModel.__new__(e3d.DraftModel)
+    m.torch, m.cfg, m.vocab, m.head, m.vi = torch, cfg, 4096, head, 0
+    m.lay = e3d.draft_layout(cfg, 4096, head)
+    m.total = m.lay["total"]
+    m.arena = torch.zeros(m.total, dtype=torch.uint8)
+    m.base = m.arena.data_ptr()
+    m._views()
+    calls = []
+
+    class Ext:
+        def __getattr__(self, name):
+            return lambda *a: calls.append((name, a))
+
+    m.ext = Ext()
+    m.plan = m._build_plan()
+    for fn in m.plan:
+        fn(0)
+    ptrs = [a for _, args in calls for a in args if isinstance(a, int) and a >= 1 << 32]
+    assert len(ptrs) > 50 and all(m.base <= p < m.base + m.total for p in ptrs)
+    if head == "ternary":
+        assert m.base <= m.logits.data_ptr() < m.base + m.total
+    else:
+        assert m.logits is not None and not m.base <= m.logits.data_ptr() < m.base + m.total   # int8 logits: outside
+    assert len(e3d.OUTSIDE_ARENA) == 3 and any("g_attn" in x for x in e3d.OUTSIDE_ARENA)
 
 
 @pytest.mark.parametrize("d", e3d.DEFAULT_D)
 def test_plan_draft_hits_target(d):
     p = e3d.plan_draft(d)
     assert p["within_tol"] and abs(p["layout"]["total"] / (d * MIB) - 1) <= e3d.PLAN_TOL
+    assert p["layout"]["total"] <= d * MIB   # one-sided: D=60 must not exceed the 5090 persisting max of 60 MiB
     cfg = p["cfg"]
     assert cfg.layers % 4 == 0 and cfg.F % 128 == 0
     from kernels import toy_hybrid
@@ -77,6 +115,22 @@ def test_choose_verify_and_window():
     w = e3d.window_params(160 * MIB, 128 * MIB, 60 * MIB, "auto")
     assert w["clamped"] and w["limit"] == 60 * MIB and w["hit_ratio"] == pytest.approx(60 / 128)
     assert e3d.window_params(16 * MIB, 128 * MIB, 60 * MIB, "0.5")["hit_ratio"] == 0.5
+
+
+def test_window_problems_and_floor():
+    rb = {"base_ptr": 4096, "num_bytes": 100, "hit_ratio": 0.5, "hit_prop": "persisting", "miss_prop": "streaming"}
+    assert e3d.window_problems(rb, 4096, 100, 0.5) == []
+    assert len(e3d.window_problems(dict(rb, base_ptr=0, num_bytes=0, hit_prop="normal"), 4096, 100, 0.5)) == 3
+    assert e3d.window_problems(dict(rb, hit_ratio=0.75), 4096, 100, 0.5) and e3d.window_problems(None, 4096, 100, 0.5)
+    assert e3d.window_problems(None, 4096, 0, None) == [] and e3d.window_problems(dict(rb, num_bytes=0), 4096, 0, None) == []
+    assert e3d.window_problems(rb, 4096, 0, None)
+    r = {"kernel_nodes": 200, "step_us": 400.0}
+    e3d.floor_fields(r, 1.0)
+    assert r["floor_us"] == 200.0 and r["floor_frac"] == 0.5
+    r = {"kernel_nodes": None, "step_us": 400.0}
+    e3d.floor_fields(r, 1.0)
+    e3d.floor_fields(dict(r, kernel_nodes=5), None)
+    assert "floor_us" not in r
 
 
 # ---------------------------------------------------------------- summaries, deltas, projection
@@ -127,7 +181,7 @@ def test_add_deltas_and_cross():
     assert s1on["above_step_us"] is True and "delta_first_us" not in s1on
     assert s2on["delta_first_us"] == pytest.approx(503.0) and s2on["delta_refill_us"] > 400 and "delta_step_us" not in rows[2]
     assert s2on["delta_all_first_us"] == [500.0, 503.0, 504.0]
-    assert s3on["s3_delta_first_us"] == pytest.approx(100.0) and rows[2]["first_minus_steady_us"] == pytest.approx(601.0)
+    assert s3on["s3_delta_first_us"] == pytest.approx(100.0) and "first_minus_steady_us" not in rows[2]
     assert rows[4]["s3_delta_first_us"] == pytest.approx(101.0)
 
 
@@ -149,7 +203,20 @@ def test_projection():
     assert x["cycle_off_us"] == pytest.approx(4001 + 4 * 401)
     s1 = next(x for x in p if x["source"] == "S1" and x["acc"] == 0.6)   # S1 step with the verify of the S2 row
     assert s1["cycle_on_us"] == pytest.approx(4001 + 4 * 250)
-    assert e3d.projection([r for r in rows if r["scenario"] != "S2"]) == []
+    assert e3d.projection([r for r in rows if r["scenario"] != "S2"]) == [] and x["baseline_us"] == pytest.approx(4001)
+
+
+def test_projection_kp1_uses_one_column_baseline():
+    rows = _rows()
+    for r in rows:
+        if r["scenario"] != "S1":
+            r["verify_cols"] = 5
+    e3d.add_deltas(rows)
+    assert e3d.projection(rows) == []   # multi-column verify without a 1-column baseline: skipped
+    p = e3d.projection(rows, base_us={1: 800.0})
+    x = next(x for x in p if x["source"] == "S2" and x["acc"] == 0.8)
+    assert x["baseline_us"] == 800.0 and x["speedup_off"] == pytest.approx(3.3616 * 800 / (4001 + 4 * 401))
+    assert e3d.projection(rows, base_us={0: 800.0}) == []   # other PDL setting
 
 
 # ---------------------------------------------------------------- CLI and plumbing
@@ -196,7 +263,7 @@ def fake_cuda(tmp_path, monkeypatch):
     return tmp_path
 
 
-def _patch_gpu(monkeypatch, probe_ok=True, fail_d=None):
+def _patch_gpu(monkeypatch, probe_ok=True, fail_d=None, bad_window=False, clip_limit=False):
     log = {"limits": [], "graphs": [], "vgraphs": [], "models": []}
 
     class FakeModel:
@@ -217,7 +284,9 @@ def _patch_gpu(monkeypatch, probe_ok=True, fail_d=None):
 
     def bdg(model, ratio, nbytes):
         log["graphs"].append((ratio, nbytes))
-        return ("g", ratio), {"kernel_nodes": None if ratio is None else 7, "window_readback": None}
+        rb = None if ratio is None else {"base_ptr": model.base + (1 if bad_window else 0), "num_bytes": nbytes, "hit_ratio": ratio,
+                                         "hit_prop": "persisting", "miss_prop": "streaming"}
+        return ("g", ratio), {"kernel_nodes": None if ratio is None else 7, "window_readback": rb}
 
     def bvg(ver, cols, stream):
         log["vgraphs"].append((cols, stream))
@@ -240,9 +309,10 @@ def _patch_gpu(monkeypatch, probe_ok=True, fail_d=None):
     monkeypatch.setattr(e3d, "probe_midcapture", lambda ver: {"supported": probe_ok})
     monkeypatch.setattr(e3d, "time_steady", steady)
     monkeypatch.setattr(e3d, "time_cycles", cycles)
-    monkeypatch.setattr(e3d, "set_persist", lambda lim: log["limits"].append(lim) or lim)
+    monkeypatch.setattr(e3d, "set_persist", lambda lim: log["limits"].append(lim) or (lim // 2 if clip_limit and lim else lim))
+    monkeypatch.setattr(e3d, "time_verify", lambda vg, n=30: 800.0)
     monkeypatch.setattr(e3d, "nvml_state", lambda: {"sm_mhz": 2400})
-    monkeypatch.setattr(e3d, "calibrate", lambda *a: {"copy_gbps": 1.0})
+    monkeypatch.setattr(e3d, "calibrate", lambda *a: {"copy_gbps": 1.0, "graph_node_gap_us": 1.5})
     return log
 
 
@@ -257,13 +327,18 @@ def test_run_single_pdl_plumbing(fake_cuda, monkeypatch):
     assert e3d.main(["--quick", "--pdl", "1", "--D", "16,160", "--rounds", "3"]) == 0
     doc = _result(fake_cuda)
     d, rows = doc["data"], doc["data"]["rows"]
-    assert len(rows) == 2 * 6 and d["config"]["pdl"] == 1 and d["config"]["calibration"] == {"copy_gbps": 1.0}
+    assert len(rows) == 2 * 6 and d["config"]["pdl"] == 1 and d["config"]["calibration"] == {"copy_gbps": 1.0, "graph_node_gap_us": 1.5}
     assert d["config"]["s3_probe"] == {"supported": True} and d["config"]["verify_cols"] == {"4": 1}
     assert d["config"]["verify_bytes"] > 0.9 * 1024 * MIB
     on = next(r for r in rows if (r["D_mib"], r["scenario"], r["mode"]) == (16, "S2", "on"))
     off = next(r for r in rows if (r["D_mib"], r["scenario"], r["mode"]) == (16, "S2", "off"))
     assert on["first_us"] == 400.0 and off["first_us"] == 900.0 and on["delta_first_us"] == 500.0 and on["by_index"][0] == 400.0
     assert on["persist_limit_bytes"] == on["D_bytes"] and on["hit_ratio"] == 1.0 and on["verify"] == "plain" and off["hit_ratio"] is None
+    assert on["persist_limit_req_bytes"] == on["D_bytes"] and on["window_ok"] and on["limit_ok"] and off["persist_limit_bytes"] == 0
+    assert on["d_le_l2"] and off["d_le_l2"] and on["kernel_nodes"] == off["kernel_nodes"] == 7   # off graph: same step() as on
+    assert not any("WARNING" in n for n in d["notes"]) and "verify1_us" not in d["config"]
+    assert any("naturally L2-resident" in n for n in d["notes"]) and d["config"]["l2_bytes"] == 96 * MIB
+    assert any("g_attn" in n for n in d["notes"]) and on["floor_us"] == 10.5 and on["floor_frac"] == pytest.approx(10.5 / on["step_us"])
     assert len(on["first_us_all"]) == 3 and on["noise_first_us"] == 0.0 and on["verify_gbps"] > 0
     big = next(r for r in rows if (r["D_mib"], r["scenario"], r["mode"]) == (160, "S1", "on"))
     assert big["persist_limit_bytes"] == 60 * MIB and big["window_bytes"] == 128 * MIB and big["window_clamped"]
@@ -280,12 +355,14 @@ def test_run_single_pdl_plumbing(fake_cuda, monkeypatch):
 
 
 def test_s3_skipped_when_probe_fails_and_kp1(fake_cuda, monkeypatch):
-    _patch_gpu(monkeypatch, probe_ok=False)
+    log = _patch_gpu(monkeypatch, probe_ok=False)
     assert e3d.main(["--quick", "--pdl", "0", "--D", "16", "--K", "4,8", "--verify-cols", "kp1", "--rounds", "3"]) == 0
     d = _result(fake_cuda)["data"]
     assert {r["scenario"] for r in d["rows"]} == {"S1", "S2"} and any("S3 skipped" in n for n in d["notes"])
-    assert d["config"]["verify_cols"] == {"4": 5, "8": 9}
+    assert d["config"]["verify_cols"] == {"4": 5, "8": 9} and d["config"]["verify1_us"] == 800.0
     assert next(r for r in d["rows"] if r["scenario"] == "S2" and r["K"] == 8)["verify_cols"] == 9
+    assert d["projection"] and all(p["baseline_us"] == 800.0 for p in d["projection"])
+    assert (1, False) in log["vgraphs"]
 
 
 def test_failed_D_kept_and_next_D_runs(fake_cuda, monkeypatch):
@@ -296,6 +373,19 @@ def test_failed_D_kept_and_next_D_runs(fake_cuda, monkeypatch):
     assert len(bad) == 6 and all("boom" in r["error"] and r["step_us"] is None for r in bad)
     assert all(r.get("step_us") for r in d["rows"] if r["D_mib"] == 72 and r["scenario"] == "S1")
     assert "calibration" not in d["config"] and any("D=16 failed" in n for n in d["notes"])
+
+
+@pytest.mark.parametrize("kw", [{"bad_window": True}, {"clip_limit": True}])
+def test_window_or_limit_mismatch_is_flagged(fake_cuda, monkeypatch, kw):
+    _patch_gpu(monkeypatch, **kw)
+    assert e3d.main(["--quick", "--pdl", "0", "--D", "16", "--no-calib", "--rounds", "3"]) == 0
+    d = _result(fake_cuda)["data"]
+    on = [r for r in d["rows"] if r["mode"] == "on"]
+    off = [r for r in d["rows"] if r["mode"] == "off"]
+    assert all(r["window_ok"] is False for r in on) if "bad_window" in kw else all(r["limit_ok"] is False for r in on)
+    assert all(r["window_ok"] and r["limit_ok"] for r in off)
+    assert any("WARNING: persisting window or limit" in n and "[16]" in n for n in d["notes"])
+    assert "floor_us" not in on[0]   # no calibration gap
 
 
 def test_both_pdl_runs_children_and_merges(fake_cuda, monkeypatch):
@@ -341,7 +431,7 @@ def _doc(gpu="rtx5090"):
     e3d.add_deltas(rows)
     e3d.add_cross(rows)
     return {"schema": 1, "exp": "e3d", "gpu": gpu, "env": {"persisting_l2_max_bytes": 60 * MIB},
-            "data": {"rows": rows, "projection": e3d.projection(rows)}}
+            "data": {"rows": rows, "projection": e3d.projection(rows), "config": {"l2_bytes": 96 * MIB}}}
 
 
 def test_plot_synthetic(tmp_path):
@@ -354,6 +444,8 @@ def test_plot_synthetic(tmp_path):
     assert list(docs) == ["rtx5090"] and plot_e3d.pdl_settings(docs["rtx5090"]) == [0, 1]
     out = plot_e3d.plot(docs["rtx5090"], tmp_path / "a.png", 1, 4)
     assert out.stat().st_size > 5000
+    docs["rtx5090"]["data"].pop("config")   # older result without the L2 size
+    assert plot_e3d.plot(docs["rtx5090"], tmp_path / "b.png", 0, 4).stat().st_size > 5000
     assert plot_e3d.main(["--results", str(root), "--out-dir", str(tmp_path / "o"), "--K", "4"]) == 0
     assert len(list((tmp_path / "o").glob("e3d_rtx5090_pdl*_K4.png"))) == 2
     g = plot_e3d.gain_series(docs["rtx5090"], 1, "S2", 4, "first_us")

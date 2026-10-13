@@ -6,7 +6,7 @@ Reads the newest e3d result JSON per GPU directory. One PNG per GPU and PDL sett
 Panels: (1) draft us/step vs D (S1 steady, S2 later steps, S2 first step; off grey, on blue),
 (2) gain of on vs off (%) with the paired-delta noise as error bars, (3) refill penalty first - later step (us),
 (4) projected speculative speedup (S2 source) for a = 0.6, 0.7, 0.8; off dashed, on solid.
-Vertical dotted line: device persisting max.
+Vertical dotted lines: device persisting max (red) and L2 size (grey; S1 off is naturally resident left of it).
 """
 from __future__ import annotations
 
@@ -82,6 +82,8 @@ def plot(doc: dict, out, pdl: int, k: int) -> pathlib.Path:
 
     fig, ax = plt.subplots(2, 2, figsize=(12.5, 9.0))
     pm = (doc.get("env") or {}).get("persisting_l2_max_bytes")
+    cfg = doc["data"].get("config") or {}
+    l2 = cfg.get("l2_bytes") or (cfg.get("device") or {}).get("l2_bytes")
     gpu = doc.get("gpu") or ""
     # 1: step time
     a = ax[0][0]
@@ -131,7 +133,9 @@ def plot(doc: dict, out, pdl: int, k: int) -> pathlib.Path:
         a.set_xscale("log", base=2)
         a.grid(True, alpha=0.25)
         if pm:
-            a.axvline(pm / MIB, color="#e34948", ls=":", lw=1.2)
+            a.axvline(pm / MIB, color="#e34948", ls=":", lw=1.2, label="persisting max")
+        if l2:
+            a.axvline(l2 / MIB, color="0.45", ls="-.", lw=1.0, label="L2")
         if a.get_legend_handles_labels()[0]:
             a.legend(fontsize=7)
     fig.tight_layout()

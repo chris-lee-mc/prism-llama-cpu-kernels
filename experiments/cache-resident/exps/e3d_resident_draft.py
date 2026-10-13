@@ -1,8 +1,11 @@
 """E3d: does a FULLY resident ternary draft decode step get faster, and does residency survive the target's verify pass?
 
-Draft = toy hybrid decode step (GDN + single-query attention + ternary MLP/projections + 48K-vocab head) with EVERYTHING
-it reads (weights, head, GDN state, KV, scratch) in one arena, sized to D MiB by scaling width, layers and F. One CUDA graph
-per draft step; "on" puts an access policy window over the arena on all graph kernel nodes, limit = min(D, device max).
+Draft = toy hybrid decode step (GDN + single-query attention + ternary MLP/projections + 48K-vocab head) with nearly
+everything it reads (weights, head, GDN state, KV, scratch) in one arena, sized to D MiB by scaling width, layers and F.
+Arena order: state, kv, scratch, norms, head, matrices; a clamped window then drops the matrix tail first.
+Outside the arena (OUTSIDE_ARENA): attention split scratch (g_attn_* device globals, tens of KiB, write then read),
+the x.copy_(x0) memcpy node (no window), and the logits of --head int8. All are tiny or write-before-read.
+One CUDA graph per draft step; "on" puts an access policy window over the arena on all graph kernel nodes, limit = min(D, device max).
 Target verify = a separate graph streaming V bytes of ternary weights with Bonsai 2 27B shapes (GEMV batch 1 = bandwidth proxy).
 Scenarios, each off vs on, timed in interleaved rounds (paired deltas, round spread = noise):
   S1 steady: K consecutive draft steps, us/step.
@@ -10,7 +13,9 @@ Scenarios, each off vs on, timed in interleaved rounds (paired deltas, round spr
   S3 cycle:  as S2, but the verify graph marks its own weights Streaming (one window per layer, set during capture).
 PDL is a process-wide knob (CR_GEMV_PDL read once), so --pdl both runs one child process per setting and merges the rows.
 The verify graph uses the same knob. Projection: tokens/cycle = (1 - a^(K+1)) / (1 - a), cycle = verify + K * draft step,
-speedup = tokens/cycle * verify_off / cycle (baseline = target-only decode = verify_off per token).
+speedup = tokens/cycle * verify_off / cycle (baseline = target-only decode = verify_off per token; with --verify-cols kp1
+the baseline is a separate 1-column verify graph).
+S1 off is naturally L2-resident for D <= L2 (row flag d_le_l2), so S1 deltas near 0 there are expected; S2/S3 first_us is the test.
 
   python -m exps.e3d_resident_draft [--D 16,32,...] [--K 4,8] [--V MiB] [--pdl 0|1|both] [--head ternary|int8]
         [--rounds 7] [--cycles 30] [--hit-ratio auto|r] [--verify-cols 1|kp1] [--quick] [--dry-run]
@@ -46,6 +51,8 @@ METRICS = ["step_us", "first_us", "later_us", "refill_us", "cycle_us", "verify_u
 ACCS = (0.6, 0.7, 0.8)
 MAX_VERIFY_NODES = 4000
 VRAM_RESERVE = 2 * GIB
+OUTSIDE_ARENA = ("attention split scratch (__device__ g_attn_* in toy_ops.cu)", "x.copy_(x0) memcpy node",
+                 "int8 head logits (allocated by int8_gemv)")
 
 
 # ---------------------------------------------------------------- draft sizing (pure)
@@ -79,15 +86,18 @@ def make_cfg(d: int, layers: int, F: int, ctx: int = CTX) -> toy.ToyConfig:
 
 
 def draft_layout(cfg: toy.ToyConfig, vocab: int = VOCAB, head: str = "ternary") -> dict:
-    """Offsets in the one arena and the byte split: weights (ternary mats + norms), head, state, kv, scratch, pad."""
-    ent, off = toy.arena_layout(cfg)
-    t = _Take(off)
+    """Offsets in the one arena and the byte split: weights (ternary mats + norms), head, state, kv, scratch, pad.
+
+    Order: state, kv, scratch, norms, head, matrices. Read-write and per-token data come first, so a window clamped
+    to the device max (or a hitRatio < 1 that favours the start) drops matrix bytes, not state or KV.
+    """
+    ent, _ = toy.arena_layout(cfg)
+    mat_end = ent["l0.n1"]["w_off"]  # the layer norms follow the matrices in the toy layout
+    t = _Take(0)
     d, kinds = cfg.d, cfg.layer_kinds()
     mats = toy.matrix_specs(cfg)
     wmat = sum(m["N"] * m["K"] // 4 + m["N"] * (m["K"] // QK) * 2 for m in mats)
-    lay: dict = {"ent": ent, "final_norm": t(d * 2)}
-    qb, sb = head_bytes(head, vocab, d)
-    lay["head_q"], lay["head_s"] = t(qb), t(sb)
+    lay: dict = {}
     ng, na = kinds.count("gdn"), kinds.count("attn")
     state = ng * cfg.H * cfg.dv * cfg.dk * 4
     lay["state"] = t(state)
@@ -102,8 +112,21 @@ def draft_layout(cfg: toy.ToyConfig, vocab: int = VOCAB, head: str = "ternary") 
     for name, n in sizes:
         lay[name] = t(n * 2)
         scratch += n * 2
+    for e in ent.values():
+        if "w_off" in e:  # layer norms: read every layer, keep them in the front part
+            e["w_off"] = t(e["n"] * 2)
+    lay["final_norm"] = t(d * 2)
+    qb, sb = head_bytes(head, vocab, d)
+    lay["head_q"], lay["head_s"] = t(qb), t(sb)
+    base = t.off
+    for e in ent.values():
+        for k in ("q_off", "s_off"):
+            if k in e:
+                e[k] += base
+    lay["ent"] = ent
+    lay["mat_start"] = base
+    lay["total"] = base + mat_end
     norms = 2 * cfg.layers * d * 2
-    lay["total"] = t.off
     by = {"weights": wmat + norms, "head": qb + sb + d * 2, "state": state, "kv": na * 2 * kvb, "scratch": scratch}
     by["pad"] = lay["total"] - sum(by.values())
     by["total"] = lay["total"]
@@ -117,7 +140,8 @@ def d_pref(d_mib: float) -> float:
 
 
 def plan_draft(d_mib: float, head: str = "ternary", vocab: int = VOCAB, ctx: int = CTX, tol: float = PLAN_TOL) -> dict:
-    """Pick (width, layers, F) whose arena is within tol of d_mib; prefer the width close to d_pref and F near 3.5 d."""
+    """Pick (width, layers, F) whose arena is at most d_mib and within tol below it (one-sided: a point planned at the
+    persisting max must not exceed it); prefer the width close to d_pref and F near 3.5 d."""
     target = d_mib * MIB
     cands = []
     for d in WIDTHS:
@@ -131,12 +155,12 @@ def plan_draft(d_mib: float, head: str = "ternary", vocab: int = VOCAB, ctx: int
                 tot = draft_layout(make_cfg(d, L, 128 * u, ctx), vocab, head)["total"]
                 err = abs(tot - target) / target
                 score = abs(math.log(d / d_pref(d_mib))) + 0.3 * abs(math.log(128 * u / (3.5 * d)))
-                cands.append((err, score, d, L, u))
-    ok = [c for c in cands if c[0] <= tol]
-    err, _, d, L, u = min(ok, key=lambda c: (c[1], c[0])) if ok else min(cands)
+                cands.append((err, score, d, L, u, tot))
+    ok = [c for c in cands if c[0] <= tol and c[5] <= target]
+    err, _, d, L, u, _ = min(ok, key=lambda c: (c[1], c[0])) if ok else min(cands)
     cfg = make_cfg(d, L, 128 * u, ctx)
     lay = draft_layout(cfg, vocab, head)
-    return {"d_mib": d_mib, "cfg": cfg, "layout": lay, "err": err, "within_tol": err <= tol}
+    return {"d_mib": d_mib, "cfg": cfg, "layout": lay, "err": err, "within_tol": err <= tol and lay["total"] <= target}
 
 
 def cfg_json(cfg: toy.ToyConfig) -> dict:
@@ -194,6 +218,32 @@ def window_params(arena_bytes: int, wmax: int, pmax: int, ratio) -> dict:
     return {"window_bytes": nbytes, "clamped": nbytes < arena_bytes, "limit": limit, "hit_ratio": r}
 
 
+def window_problems(rb: dict | None, base: int, nbytes: int, ratio: float | None) -> list[str]:
+    """Differences between a graph window readback and what was asked; ratio None = expect no window ([] = ok)."""
+    if ratio is None:
+        return ["window set on an off graph: %s" % rb] if rb and rb.get("num_bytes") else []
+    if not rb:
+        return ["no window readback"]
+    bad = []
+    if rb.get("base_ptr") != base:
+        bad.append("base_ptr %s != %s" % (rb.get("base_ptr"), base))
+    if rb.get("num_bytes") != nbytes:
+        bad.append("num_bytes %s != %s" % (rb.get("num_bytes"), nbytes))
+    if rb.get("hit_prop") != "persisting":
+        bad.append("hit_prop %s" % rb.get("hit_prop"))
+    if abs(float(rb.get("hit_ratio", -1.0)) - ratio) > 1e-3:
+        bad.append("hit_ratio %s != %.4f" % (rb.get("hit_ratio"), ratio))
+    return bad
+
+
+def floor_fields(r: dict, gap_us: float | None) -> None:
+    """floor_us = kernel nodes * per-node graph gap (lower bound of the launch floor); floor_frac = floor / step."""
+    if gap_us and r.get("kernel_nodes"):
+        r["floor_us"] = r["kernel_nodes"] * gap_us
+        if r.get("step_us"):
+            r["floor_frac"] = r["floor_us"] / r["step_us"]
+
+
 # ---------------------------------------------------------------- cells, summaries, deltas, projection (pure)
 
 def make_cells(scenarios, ks, s3_ok: bool = True) -> list[tuple[str, int, str]]:
@@ -239,7 +289,11 @@ def add_deltas(rows: list[dict]) -> None:
 
 
 def add_cross(rows: list[dict]) -> None:
-    """S3 rows: s3_gain_<m> = S2 - S3 (positive = streaming verify helps). S2 rows: first_minus_steady_us vs the S1 step."""
+    """S3 rows: s3_delta_<m> = S2 - S3 (positive = streaming verify helps).
+
+    S1 and S2 step times are not compared: S1 times K-step bursts, S2 records an event after every graph. Within S2,
+    refill_us (first - later step) is the residency-survival metric; both parts share one timing method.
+    """
     by = {(*_key(r), r["mode"]): r for r in rows}
     for r in rows:
         if r["scenario"] == "S3":
@@ -249,12 +303,6 @@ def add_cross(rows: list[dict]) -> None:
                 if p is not None:
                     r["s3_delta_" + m] = p["delta"]
                     r["s3_noise_" + m] = p["noise"]
-        elif r["scenario"] == "S2":
-            s1 = by.get((r["D_mib"], r.get("pdl"), "S1", r["K"], r["mode"]))
-            p = e1.paired(r.get("first_us_all"), s1.get("step_us_all") if s1 else None)
-            if p is not None:
-                r["first_minus_steady_us"] = p["delta"]
-                r["first_minus_steady_noise_us"] = p["noise"]
 
 
 def tokens_per_cycle(a: float, k: int) -> float:
@@ -265,16 +313,22 @@ def spec_speedup(a: float, k: int, verify_us: float, step_us: float, base_us: fl
     return tokens_per_cycle(a, k) * base_us / (verify_us + k * step_us)
 
 
-def projection(rows: list[dict], accs=ACCS) -> list[dict]:
+def projection(rows: list[dict], accs=ACCS, base_us: dict | None = None) -> list[dict]:
     """Speculative speedup off vs on per (D, pdl, K, a, source). Baseline = verify time of the S2 off row.
+
+    With a multi-column verify (kp1) that time is not a one-token step; the baseline is then base_us[pdl], the time of
+    a 1-column verify graph, and the rows are skipped when it is missing.
 
     Sources: S1 (steady draft step, verify from the S2 row of the same mode), S2 and S3 (their own steps and verify).
     """
     by = {(*_key(r), r["mode"]): r for r in rows if r.get("step_us") is not None}
     out = []
     for (d, pdl, src, k, mode) in sorted(by, key=str):
-        base = by.get((d, pdl, "S2", k, "off"))
-        if mode != "off" or base is None or not base.get("verify_us"):
+        base_row = by.get((d, pdl, "S2", k, "off"))
+        if mode != "off" or base_row is None:
+            continue
+        base_v = base_row.get("verify_us") if base_row.get("verify_cols") in (None, 1) else (base_us or {}).get(pdl)
+        if not base_v:
             continue
         res = {}
         for m in ("off", "on"):
@@ -285,11 +339,11 @@ def projection(rows: list[dict], accs=ACCS) -> list[dict]:
         if len(res) < 2:
             continue
         for a in accs:
-            sp = {m: spec_speedup(a, k, res[m][1], res[m][0], base["verify_us"]) for m in res}
+            sp = {m: spec_speedup(a, k, res[m][1], res[m][0], base_v) for m in res}
             out.append({"D_mib": d, "pdl": pdl, "K": k, "acc": a, "source": src, "speedup_off": sp["off"],
                         "speedup_on": sp["on"], "speedup_gain": sp["on"] / sp["off"] - 1.0,
                         "cycle_off_us": res["off"][1] + k * res["off"][0], "cycle_on_us": res["on"][1] + k * res["on"][0],
-                        "tokens_per_cycle": tokens_per_cycle(a, k)})
+                        "tokens_per_cycle": tokens_per_cycle(a, k), "baseline_us": base_v})
     return out
 
 
@@ -585,6 +639,20 @@ def time_cycles(dg, vg, k: int, cycles: int, warm: int = 3) -> list[tuple[float,
              e[0].elapsed_time(e[k + 1]) * 1e3) for e in ev]
 
 
+def time_verify(vg, n: int = 30) -> float:
+    """Median us of one verify graph replay (event pair around each replay)."""
+    import torch
+    for _ in range(3):
+        vg.replay()
+    ev = [(torch.cuda.Event(enable_timing=True), torch.cuda.Event(enable_timing=True)) for _ in range(n)]
+    for a, b in ev:
+        a.record()
+        vg.replay()
+        b.record()
+    ev[-1][1].synchronize()
+    return statistics.median(a.elapsed_time(b) * 1e3 for a, b in ev)
+
+
 # ---------------------------------------------------------------- run
 
 def dump_json(path: str, doc: dict) -> None:
@@ -611,7 +679,8 @@ def run_matrix(args, pdl: int) -> dict:
     config = {"design": "resident_draft", "pdl": pdl, "pdl_effective": bool(pdl and cc is not None and cc >= 9), "D_mib": args.D,
               "K": args.K, "scenarios": args.scenarios, "rounds": args.rounds, "cycles": args.cycles, "bursts": args.bursts,
               "head": args.head, "vocab": args.vocab, "ctx": args.ctx, "variant": args.variant, "hit_ratio_arg": args.hit_ratio,
-              "verify_cols_arg": args.verify_cols, "quick": args.quick, "device": dev, "window_max_bytes": wmax}
+              "verify_cols_arg": args.verify_cols, "quick": args.quick, "device": dev, "window_max_bytes": wmax,
+              "l2_bytes": l2, "persisting_max_bytes": pmax, "outside_arena": list(OUTSIDE_ARENA)}
     rows: list[dict] = []
 
     def snapshot():
@@ -655,6 +724,12 @@ def run_matrix(args, pdl: int) -> dict:
         cols_for = lambda k: 1  # noqa: E731
         notes.append("verify-cols kp1 needs too many graph nodes; used 1 column")
     config["verify_cols"] = {str(k): cols_for(k) for k in args.K}
+    if any(cols_for(k) != 1 for k in args.K):  # multi-column verify: projection baseline is one token
+        try:
+            set_persist(0)
+            config["verify1_us"] = statistics.median(time_verify(vgraph("plain", 1)[0]) for _ in range(3))
+        except Exception as e:
+            notes.append(f"1-column verify baseline failed: {type(e).__name__}: {e}")
     snapshot()
 
     for d in args.D:
@@ -669,6 +744,9 @@ def run_matrix(args, pdl: int) -> dict:
             wp = window_params(model.total, wmax, pmax, args.hit_ratio)
             graphs = {"off": build_draft_graph(model, None, 0), "on": build_draft_graph(model, wp["hit_ratio"], wp["window_bytes"])}
             limits = {"off": 0, "on": wp["limit"]}
+            nodes = graphs["on"][1].get("kernel_nodes") or graphs["off"][1].get("kernel_nodes")  # same step() in both
+            wprob = {"off": window_problems(graphs["off"][1].get("window_readback"), model.base, 0, None),
+                     "on": window_problems(graphs["on"][1].get("window_readback"), model.base, wp["window_bytes"], wp["hit_ratio"])}
             for (scn, k, mode) in cells:
                 kind = "stream" if scn == "S3" else "plain"
                 mrows[(scn, k, mode)] = {
@@ -676,8 +754,10 @@ def run_matrix(args, pdl: int) -> dict:
                     "step_bytes": model.step_bytes, "plan_err": pl["err"], "pdl": pdl, "scenario": scn, "K": k, "mode": mode,
                     "verify": None if scn == "S1" else kind, "verify_cols": None if scn == "S1" else cols_for(k),
                     "hit_ratio": wp["hit_ratio"] if mode == "on" else None, "window_bytes": wp["window_bytes"] if mode == "on" else 0,
-                    "window_clamped": wp["clamped"] and mode == "on", "persist_limit_bytes": limits[mode],
-                    "window_readback": graphs[mode][1].get("window_readback"), "kernel_nodes": graphs[mode][1].get("kernel_nodes"),
+                    "window_clamped": wp["clamped"] and mode == "on", "persist_limit_req_bytes": limits[mode],
+                    "persist_limit_bytes": None, "d_le_l2": model.total <= l2, "window_ok": not wprob[mode],
+                    "window_problems": wprob[mode], "limit_ok": True,
+                    "window_readback": graphs[mode][1].get("window_readback"), "kernel_nodes": nodes,
                     "finite": chk["finite"], "check_ok": chk["ok"], "max_abs_err": chk["max_abs_err"]}
             order = list(mrows)
             for rnd in range(args.rounds):
@@ -688,7 +768,10 @@ def run_matrix(args, pdl: int) -> dict:
                 for key in order[j:] + order[:j]:
                     scn, k, mode = key
                     r = mrows[key]
-                    set_persist(limits[mode])
+                    got = set_persist(limits[mode])
+                    r["persist_limit_bytes"] = got
+                    if got < limits[mode] or (mode == "off" and got != 0):
+                        r["limit_ok"] = False
                     dg = graphs[mode][0]
                     if scn == "S1":
                         r.setdefault("step_us_all", []).append(time_steady(dg, k, args.bursts))
@@ -709,8 +792,8 @@ def run_matrix(args, pdl: int) -> dict:
                     r["by_index"] = [statistics.median(c) for c in zip(*r["by_index_all"])]
                 if r.get("step_us"):
                     r["gbps_eff"] = r["step_bytes"] / (r["step_us"] * 1e3)
-                if r.get("verify_us"):
-                    r["verify_gbps"] = config["verify_bytes"] * r["verify_cols"] / (r["verify_us"] * 1e3)
+                if r.get("verify_us"):  # unique weight bytes: columns after the first re-read L2, not DRAM
+                    r["verify_gbps"] = config["verify_bytes"] / (r["verify_us"] * 1e3)
         except Exception as e:
             err = f"{type(e).__name__}: {e}"
             notes.append(f"D={d} failed: {err}")
@@ -783,11 +866,28 @@ def finalize(args, doc: dict) -> int:
     rows, notes = doc["rows"], doc["notes"]
     add_deltas(rows)
     add_cross(rows)
-    proj = projection(rows)
+    cfgs = doc["config"].get("pdl_configs") or {str(doc["config"].get("pdl")): doc["config"]}
+    proj = projection(rows, base_us={int(p): c["verify1_us"] for p, c in cfgs.items() if c.get("verify1_us")})
+    gap = (doc["config"].get("calibration") or {}).get("graph_node_gap_us")
+    for r in rows:
+        floor_fields(r, gap)
     notes.append("Deltas are off - on per round (positive = on faster); noise = half range of the paired deltas. "
                  "S2/S3 first_us = first draft step after the verify pass, later_us = mean of the other steps; refill_us = first - later. "
                  "Window: arena start, clamped to the device window max; hitRatio auto = min(1, limit / window). "
-                 "PDL knob also applies to the verify graph. Verify uses batch-1 GEMV as a bandwidth proxy.")
+                 "PDL knob also applies to the verify graph. Verify uses batch-1 GEMV as a bandwidth proxy. "
+                 "Arena order is state, kv, scratch, norms, head, matrices (a clamped window drops matrices first); "
+                 "not in the arena: %s. " % "; ".join(OUTSIDE_ARENA) +
+                 "S1 off is naturally L2-resident for D <= L2 (row flag d_le_l2): S1 deltas near 0 there are expected, "
+                 "S2/S3 first_us is the residency test. refill_us is the survival metric; S1 (burst events) and S2 "
+                 "(event per graph) step times are not compared. Rows have persist_limit_bytes (driver readback), "
+                 "persist_limit_req_bytes, window_ok and kernel_nodes; floor_us = kernel_nodes * graph_node_gap_us "
+                 "(lower bound of the launch floor, needs calibration), floor_frac = floor_us / step_us: a step made of "
+                 "100+ small kernels can gain only a few % even when fully resident. verify_gbps counts unique weight "
+                 "bytes. With --verify-cols kp1 the projection baseline is a 1-column verify (config verify1_us).")
+    bad = sorted({r["D_mib"] for r in rows if r.get("window_ok") is False or r.get("limit_ok") is False})
+    if bad:
+        notes.append("WARNING: persisting window or limit did not read back as asked for D=%s; see window_problems and "
+                     "persist_limit_bytes. A 'no gain' there is not valid." % bad)
     if any(r.get("finite") is False or r.get("check_ok") is False for r in rows):
         notes.append("WARNING: some draft outputs not finite or not matching the reference")
     common.write_result(EXP, args, doc["config"], rows, notes, False, extra={"projection": proj})
@@ -840,7 +940,7 @@ def plan_json(a) -> dict:
     for d in a.D:
         p = plan_draft(d, a.head, a.vocab, a.ctx)
         ds.append({"D_mib": d, "cfg": cfg_json(p["cfg"]), "bytes": p["layout"]["bytes"], "step_bytes": p["layout"]["step_bytes"],
-                   "plan_err": p["err"], "within_tol": p["within_tol"]})
+                   "plan_err": p["err"], "within_tol": p["within_tol"], "total_bytes": p["layout"]["total"]})
     shapes = plan_verify(int(a.V * MIB))
     pdls = [0, 1] if a.pdl == "both" else [int(a.pdl)]
     return {"exp": EXP, "D": ds, "K": a.K, "pdl": pdls, "scenarios": a.scenarios, "rounds": a.rounds, "cycles": a.cycles,
