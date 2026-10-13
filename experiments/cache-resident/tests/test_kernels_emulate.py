@@ -15,10 +15,8 @@ from kernels import ternary as T
 from kernels.toy_hybrid import ref_attn_decode
 
 TILE = 4
-SLOT = 32
-LUT_GROUP = 32 * SLOT
-X_HALF = 68
-X_GROUP = 2 * X_HALF
+PAIR = 12
+LUT_GROUP = 64 * PAIR
 
 
 def _f32(a):
@@ -37,32 +35,31 @@ def _splits(G, S):
 
 def q_chunk(r, c):
     """Mirror of q_chunk: swizzled 16 B slot of chunk c of tile row r."""
-    return r * 8 + (c ^ ((r & 3) << 1))
+    return r * 8 + (c ^ (r & 7))
 
 
 # ---------- variant (a): LUT ----------
 def lut_build(lut, xf, g0, ng):
-    """Mirror of lut_build. Returns, per 8-lane phase, the float offsets of the 128-bit stores."""
+    """Mirror of x_store (LUT). Returns, per 8-lane phase, the float offsets of the 128-bit stores."""
     phases = []
-    for e in range(ng * 256):
-        u, j, c = e >> 8, (e >> 3) & 31, e & 7
-        p = j + ((c >> 2) << 5)
+    for e in range(ng * 192):
+        u = e // 192
+        p = (e - u * 192) // 3
+        c1 = e % 3
         x0, x1 = xf[(g0 + u) * 128 + 2 * p], xf[(g0 + u) * 128 + 2 * p + 1]
-        c1 = c & 3
         t1 = x1 if c1 == 1 else (-x1 if c1 == 2 else np.float32(0))
-        off = u * LUT_GROUP + j * SLOT + 4 * c
-        lut[off : off + 4] = _f32([t1, t1 + x0, t1 - x0, t1])
+        assert 4 * e == u * LUT_GROUP + p * PAIR + 4 * c1
+        lut[4 * e : 4 * e + 4] = _f32([t1, t1 + x0, t1 - x0, t1])
         if e % 8 == 0:
             phases.append([])
-        phases[-1].append(off)
+        phases[-1].append(4 * e)
     return phases
 
 
-def lut_lookups(w, h):
-    """Mirror of lut_dot: (slot, byte offset) per lookup of one 32-bit word."""
-    hb = 0x40404040 if h else 0
-    ev = ((w << 2) & 0x3C3C3C3C) | hb
-    od = ((w >> 2) & 0x3C3C3C3C) | hb
+def lut_lookups(w):
+    """Mirror of lut_dot: (pair, byte offset) per lookup of one 32-bit word."""
+    ev = (w << 2) & 0x3C3C3C3C
+    od = (w >> 2) & 0x3C3C3C3C
     out = []
     for b in range(4):
         out.append((2 * b, _byte(ev, b)))
@@ -74,7 +71,7 @@ def emulate_lut(q, s, x, warps=4, S=1, check_banks=False):
     N = q.shape[0]
     K = x.numel()
     G = K // 128
-    RB = 16 * warps
+    RB = 32 * warps
     qw = q.numpy().astype(np.int64) & 0xFFFFFFFF
     sf = _f32(s.float().numpy())
     xf = _f32(x.float().numpy())
@@ -83,7 +80,7 @@ def emulate_lut(q, s, x, warps=4, S=1, check_banks=False):
     for rblk in range((N + RB - 1) // RB):
         red = np.zeros((S, RB), dtype=np.float32)
         for split, starts in enumerate(_splits(G, S)):
-            acc = np.zeros((warps, 32), dtype=np.float32)
+            acc = np.zeros(RB, dtype=np.float32)
             for g0 in starts:
                 ng = min(TILE, G - g0)
                 lut = np.zeros(TILE * LUT_GROUP, dtype=np.float32)
@@ -97,24 +94,25 @@ def emulate_lut(q, s, x, warps=4, S=1, check_banks=False):
                     for warp in range(warps):
                         addrs = {}
                         for lane in range(32):
-                            h = lane & 1
-                            row = min(rblk * RB + warp * 16 + (lane >> 1), N - 1)
-                            total = np.float32(0)
-                            for wd in range(4):
-                                w = int(qw[row, g * 8 + h * 4 + wd])
-                                for k, (sl, off) in enumerate(lut_lookups(w, h)):
-                                    assert off % 4 == 0
-                                    a = u * LUT_GROUP + (8 * wd + sl) * SLOT + off // 4
-                                    total += lut[a]
-                                    addrs.setdefault((wd, k), set()).add(a)
-                            acc[warp, lane] = np.float32(sf[row, g]) * total + acc[warp, lane]
+                            rl = warp * 32 + lane
+                            row = min(rblk * RB + rl, N - 1)
+                            d = np.float32(0)
+                            for hh in range(2):
+                                for wd in range(4):
+                                    w = int(qw[row, g * 8 + hh * 4 + wd])
+                                    for k, (pr, off) in enumerate(lut_lookups(w)):
+                                        assert off % 4 == 0 and off // 4 < PAIR
+                                        a = u * LUT_GROUP + 32 * hh * PAIR + (8 * wd + pr) * PAIR + off // 4
+                                        d += lut[a]
+                                        addrs.setdefault((hh, wd, k), set()).add(a)
+                            acc[rl] = np.float32(sf[row, g]) * d + acc[rl]
                         if check_banks:
                             for v in addrs.values():
                                 per_bank = {}
                                 for a in v:
                                     per_bank.setdefault(a % 32, set()).add(a)
                                 max_ways = max(max_ways, max(len(t) for t in per_bank.values()))
-            red[split] = (acc[:, 0::2] + acc[:, 1::2]).reshape(-1)
+            red[split] = acc
         rows = np.arange(RB) + rblk * RB
         ok = rows < N
         y[rows[ok]] = red.sum(0)[ok]
@@ -145,7 +143,7 @@ def emulate_fp4(q, s, x, warps=4, S=1):
     N = q.shape[0]
     K = x.numel()
     G = K // 128
-    RB = 16 * warps
+    RB = 32 * warps
     qw = q.numpy().astype(np.int64) & 0xFFFFFFFF
     sf = _f32(s.float().numpy())
     xf = _f32(x.float().numpy())
@@ -154,24 +152,21 @@ def emulate_fp4(q, s, x, warps=4, S=1):
     for rblk in range((N + RB - 1) // RB):
         red = np.zeros((S, RB), dtype=np.float32)
         for split, starts in enumerate(_splits(G, S)):
-            acc = np.zeros((warps, 32), dtype=np.float32)
+            acc = np.zeros(RB, dtype=np.float32)
             for g0 in starts:
                 ng = min(TILE, G - g0)
-                xs = np.zeros(TILE * X_GROUP, dtype=np.float32)
-                for e in range(ng * 128):
-                    u, k = e >> 7, e & 127
-                    xs[u * X_GROUP + (k >> 6) * X_HALF + (k & 63)] = xf[(g0 + u) * 128 + k]
+                xs = np.zeros(TILE * 128, dtype=np.float32)
+                xs[: ng * 128] = xf[g0 * 128 : (g0 + ng) * 128]
                 for u in range(ng):
                     g = g0 + u
-                    for warp in range(warps):
-                        for lane in range(32):
-                            h = lane & 1
-                            row = min(rblk * RB + warp * 16 + (lane >> 1), N - 1)
+                    for rl in range(RB):
+                        row = min(rblk * RB + rl, N - 1)
+                        d = np.float32(0)
+                        for hh in range(2):
                             sw = []
                             for wd in range(4):
-                                sw += list(to_e2m1(int(qw[row, g * 8 + h * 4 + wd])))
-                            xh = xs[u * X_GROUP + h * X_HALF :]
-                            total = np.float32(0)
+                                sw += list(to_e2m1(int(qw[row, g * 8 + hh * 4 + wd])))
+                            xh = xs[u * 128 + 64 * hh :]
                             for wd in range(4):
                                 ev, od = sw[2 * wd], sw[2 * wd + 1]
                                 el, eh = (ev << 2) & 0x3C3C3C3C, (ev >> 2) & 0x3C3C3C3C
@@ -179,9 +174,9 @@ def emulate_fp4(q, s, x, warps=4, S=1):
                                 for b in range(4):
                                     xv = xh[16 * wd + 4 * b : 16 * wd + 4 * b + 4]
                                     for wv, xi in ((el, 0), (ol, 1), (eh, 2), (oh, 3)):
-                                        total += tab[_byte(wv, b) // 4] * xv[xi]
-                            acc[warp, lane] = np.float32(sf[row, g]) * total + acc[warp, lane]
-            red[split] = (acc[:, 0::2] + acc[:, 1::2]).reshape(-1)
+                                        d += tab[_byte(wv, b) // 4] * xv[xi]
+                        acc[rl] = np.float32(sf[row, g]) * d + acc[rl]
+            red[split] = acc
         rows = np.arange(RB) + rblk * RB
         ok = rows < N
         y[rows[ok]] = red.sum(0)[ok]
@@ -212,7 +207,7 @@ def test_emulated_fp4_matches_reference(N, K):
     np.testing.assert_allclose(y, ref, rtol=1e-4, atol=1e-4 * np.abs(ref).max())
 
 
-@pytest.mark.parametrize("warps,S", [(4, 2), (4, 8), (2, 1), (4, 3)])
+@pytest.mark.parametrize("warps,S", [(4, 2), (2, 8), (1, 1), (2, 3)])
 def test_emulated_split_k(warps, S):
     q, s, x, ref = _case(21, 128 * 13, seed=3)
     y, _ = emulate_lut(q, s, x, warps=warps, S=S)
@@ -300,10 +295,9 @@ def test_attn_split_math_matches_reference(T_, Hq, Hkv, D):
 
 
 def test_q_tile_swizzle_is_conflict_free():
-    # copy: 8 lanes of a phase write the 8 chunks of one row; read: lanes (row r, half h) read chunk 2u + h
-    for r in range(64):
+    # copy: 8 lanes of a phase write the 8 chunks of one row; read: 8 lanes (rows) read the same chunk
+    for r in range(256):
         assert sorted(q_chunk(r, c) % 8 for c in range(8)) == list(range(8))
-    for base in range(0, 64, 4):
-        for u in range(4):
-            slots = [q_chunk(base + i, 2 * u + h) % 8 for i in range(4) for h in range(2)]
-            assert len(set(slots)) == 8
+    for base in range(0, 256, 8):
+        for c in range(8):
+            assert len({q_chunk(base + i, c) % 8 for i in range(8)}) == 8
