@@ -35,6 +35,7 @@ Scope: code for PLAN.md P0.1-P0.6 and E1-E5. Four units built in parallel by dif
 | CR_L2_BACKEND | auto (`cuda-python`, then `inline`); `auto` = unset | l2persist |
 | CR_REQUIRE_COUNTERS | 0 | runner aborts early with status `no_counters` if ncu probe fails |
 | CR_SESSION_CAP_USD | 300 | budget gate |
+| CR_ALLOWED_CUDA | unset (opt-in) | runpod.create_pod: passes allowedCudaVersions (e.g. 12.8,12.9,13.0). Leave unset: when set, every candidate showed no capacity, while an unfiltered PRO 6000 Server host worked |
 | CR_SESSION_ID | UTC date YYYY-MM-DD | ledger grouping |
 | CR_LEDGER | `EXP_DIR/.runpod_ledger.jsonl` | budget gate (gitignored) |
 | HF_HOME | `/workspace/hf` if /workspace exists else default | model downloads |

@@ -4,6 +4,8 @@
   python -m infra.runpod launch --exp E [--gpu KEY] [--cmd S] [--cloud any|community|secure]
                                 [--failsafe-min N] [--max-price X] [--build-llama] [--dry-run]
 The pod clones CR_BRANCH from CR_REPO_URL, so push the branch before launching.
+CR_ALLOWED_CUDA (opt-in, default unset) passes allowedCudaVersions to RunPod, e.g. 12.8,12.9,13.0. Leave it unset:
+with it set, every candidate showed "no capacity" in practice; use it only to dodge a known bad driver.
 """
 from __future__ import annotations
 
@@ -372,8 +374,15 @@ def _get_json(url: str, tries: int = 5, wait: float = 5.0) -> dict | None:
 
 
 def _is_result_json(path: str, exp: str, key: str) -> bool:
+    """True for <exp>/[<sub>/...]<tag>/<name>.json where tag is the cascade key or a variant of it (pro6000 -> pro6000-server).
+
+    Nested exp dirs (p0_smoke/p0_l2/rtx5090/x.json) count; logs/, raw/ and partial files do not.
+    """
     parts = pathlib.PurePosixPath(path).parts
-    return len(parts) >= 3 and parts[0] == exp and parts[1] == key and parts[-1].endswith(".json")
+    if len(parts) < 3 or parts[0] != exp or not parts[-1].endswith(".json") or ".partial" in parts[-1]:
+        return False
+    tag = parts[-2]
+    return tag == key or tag.startswith(key + "-")
 
 
 def _fetch_results(base: str, files: list[dict], dest: pathlib.Path) -> bool:
@@ -458,6 +467,8 @@ def launch(exp: str, gpu: str | None = None, *, cmd=None, cloud="any", failsafe_
     spent = ledger.session_spent()
     print(f"exp={exp} keys={keys} cloud={cloud} failsafe={failsafe_min}min build_llama={build_llama} "
           f"balance={balance} session_spent=${spent:.2f} cap=${cap:.2f}")
+    if os.environ.get("CR_ALLOWED_CUDA"):
+        print(f"note: CR_ALLOWED_CUDA={os.environ['CR_ALLOWED_CUDA']} restricts hosts (opt-in; often leaves no capacity)")
 
     plan = []  # (gpu_key, type_name, type_id, cloud_name, price)
     for key in keys:
@@ -522,7 +533,8 @@ def launch(exp: str, gpu: str | None = None, *, cmd=None, cloud="any", failsafe_
             chosen = (key, name, tid, cl, price)
             break
         if not pod_id:
-            print("error: no capacity on any candidate")
+            hint = " (CR_ALLOWED_CUDA is set and narrows the hosts; unset it)" if os.environ.get("CR_ALLOWED_CUDA") else ""
+            print(f"error: no capacity on any candidate{hint}")
             return 1
         key, name, tid, cl, price = chosen
         t0 = _now()
@@ -609,7 +621,7 @@ def launch(exp: str, gpu: str | None = None, *, cmd=None, cloud="any", failsafe_
         got = _fetch_results(base, files, dest)
         print(f"downloaded {len(files)} files to {dest}" if got else "error: some downloads failed")
         if done.get("status") == "ok" and not any(_is_result_json(f["path"], exp, key) for f in files):
-            print(f"error: status ok but MANIFEST lists no {exp}/{key}/*.json")
+            print(f"error: status ok but MANIFEST lists no {exp}/.../{key}[-*]/*.json")
             return 1
         return 0 if (got and done.get("status") == "ok") else 1
     except _PodUnknown as e:

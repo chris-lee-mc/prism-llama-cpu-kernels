@@ -494,3 +494,13 @@ def test_real_static_cache_stays_in_bounds_for_2x_cache_len(monkeypatch):
             fn()
     assert all(int(c) == ctx + 1 for c in counters)
     assert len(slots) == 3 and method in ("views_inplace", "views_pinned_copy")
+
+
+def test_analyze_time_proxy():
+    rows = [{"ctx": 0, "head": "int8_48k", "condition": "off", "us_per_token": 1000.0, "persisted_bytes": 0},
+            {"ctx": 0, "head": "int8_48k", "condition": "both", "us_per_token": 990.0, "persisted_bytes": 10_000_000}]
+    out = e3.analyze(rows, peak_gbps=1000.0)
+    assert out["go_no_go"] is None
+    px = out["go_no_go_time_proxy"]
+    assert abs(px["value"] - 1.0) < 1e-9 and px["go"] is True
+    assert e3.analyze(rows)["go_no_go_time_proxy"] is None

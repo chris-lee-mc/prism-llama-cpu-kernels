@@ -193,3 +193,45 @@ def test_gdn_impl_reads_hub_wrapper_closure(monkeypatch):
     monkeypatch.delattr(mod, "torch_chunk_gated_delta_rule")
     monkeypatch.delattr(mod, "torch_recurrent_gated_delta_rule")
     assert e2.gdn_impl(model) == "unknown"
+
+
+def test_kernel_category_and_summary():
+    assert e2.kernel_category("fused_recurrent_gated_delta_rule_fwd_kernel") == "gdn"
+    assert e2.kernel_category("nvjet_tst_64x8_64x16_4x1_v_bz_TNT") == "gemm"
+    assert e2.kernel_category("Memcpy DtoD (Device -> Device)") == "memcpy"
+    assert e2.kernel_category("void at::native::vectorized_elementwise_kernel<4, mul>") == "other_elementwise"
+    ev = [("gemv_a", 10.0), ("gemv_a", 10.0), ("fused_recurrent_x", 4.0), ("mul", 2.0)]
+    out = e2.summarize_kernels(ev, steps=2)
+    assert out["kernels_per_token"] == 2 and out["kernel_us_per_token"] == 13.0
+    assert out["by_category"]["gemm"] == {"us": 10.0, "n": 1.0} and list(out["by_category"])[0] == "gemm"
+    assert out["top_kernels"][0]["name"] == "gemv_a" and out["top_kernels"][0]["us_per_token"] == 10.0
+
+
+def test_no_autograd_context():
+    import torch
+    w = torch.nn.Parameter(torch.ones(2))
+    torch.autograd.set_detect_anomaly(True)
+    try:
+        with e2.no_autograd():
+            assert not torch.is_grad_enabled() and not torch.is_anomaly_enabled()
+            assert not (w * 2).requires_grad
+        assert torch.is_anomaly_enabled()
+    finally:
+        torch.autograd.set_detect_anomaly(False)
+
+
+def test_impl_and_ref_reads_wrapper_closure():
+    def ref(x):
+        return x
+
+    def impl(x):
+        return x + 1
+
+    def make():
+        implementation, torch_function = impl, ref
+
+        def wrapped(x):
+            return implementation(x) if torch_function else None
+        return wrapped
+    assert e2._impl_and_ref(make()) == (impl, ref)
+    assert e2._impl_and_ref(ref) == (ref, ref)

@@ -383,6 +383,26 @@ def test_ok_without_result_json_fails(env, monkeypatch):
     assert api.terminated == ["pod1"]
 
 
+def test_is_result_json_accepts_tag_variants_and_nesting():
+    f = runpod._is_result_json
+    assert f("e2_08b/pro6000-server/20261013T122904Z.json", "e2_08b", "pro6000")
+    assert f("p0_smoke/p0_l2/rtx5090/20261013T041003Z.json", "p0_smoke", "rtx5090")
+    assert f("e1/rtx5090/x.json", "e1", "rtx5090")
+    assert not f("e2_08b/pro6000-server/raw/partial.json", "e2_08b", "pro6000")
+    assert not f("e2_08b/pro6000-server/logs/x.log", "e2_08b", "pro6000")
+    assert not f("e2_08b/rtx5090/x.json", "e2_08b", "pro6000")
+    assert not f("e3/rtx5090/x.json", "e2_08b", "rtx5090")
+
+
+def test_create_pod_cuda_filter_is_opt_in(env, monkeypatch):
+    api = FakeAPI()
+    monkeypatch.delenv("CR_ALLOWED_CUDA", raising=False)
+    api.create_pod(name="n", gpu_type_id="g", cloud="SECURE", image="i", env={}, docker_args="d", disk_gb=40)
+    assert "allowedCudaVersions" not in api.created[-1]
+    monkeypatch.setenv("CR_ALLOWED_CUDA", "12.8, 12.9")
+    api.create_pod(name="n", gpu_type_id="g", cloud="SECURE", image="i", env={}, docker_args="d", disk_gb=40)
+    assert api.created[-1]["allowedCudaVersions"] == ["12.8", "12.9"]
+
 def test_bad_done_json_is_polled_again(env, monkeypatch):
     res, led = env
     serve_http(monkeypatch)

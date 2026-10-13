@@ -13,14 +13,21 @@ reduce-overhead -> default -> cuda_graph_manual -> eager and records compile_mod
 A dynamic (growing) cache changes the KV length every step, so compile would recompile each step and
 graph replay is invalid: such rows run eager only. A compiled mode that recompiles in the timed loop is
 rejected and the next mode is tried; dynamo_recompiles is recorded per row.
+All model work runs under torch.no_grad() with anomaly detection off and requires_grad cleared: with grad on,
+AOTAutograd traces a joint fwd/bwd graph (under detect_anomaly) and eager steps build autograd graphs.
+GDN: transformers dispatches to fla (fla-core) when importable; setup checks the fla kernels against the torch reference
+on the GPU and, if they fail, falls back to the torch path explicitly (gdn_impl and fla_check are recorded).
+Each row has a breakdown: us/token split into kernel time by category (profiler), GPU idle, host issue time.
 Phase 1 times every ctx; phase 2 runs the ncu passes (NCU_STEPS decode steps each) on the leftover budget, smallest and
 largest ctx first, each capped to its share of the time left. Without ncu bytes on every row the fit uses analytic bytes.
 """
 from __future__ import annotations
 
 import argparse
+import contextlib
 import gc
 import inspect
+import re
 import sys
 import time
 
@@ -116,6 +123,46 @@ def fit_rows(rows: list[dict], n_layers: int) -> dict | None:
     return f
 
 
+KERNEL_CATS = (
+    ("gdn", r"gated_delta|fused_recurrent|chunk_.*(fwd|kernel)|recompute_w_u|solve_tril|l2norm|chunk_local_cumsum|kkt"),
+    ("attn", r"flash|fmha|attention|sdpa|softmax|efficient"),
+    ("gemm", r"gemv|gemm|cutlass|cublas|nvjet|xmma|matmul|splitk|dot_kernel"),
+    ("conv", r"conv"),
+    ("norm", r"norm|rsqrt"),
+    ("memcpy", r"^memcpy|^memset"),
+    ("copy_cat_index", r"copy|cat|index|gather|scatter|fill"),
+)
+
+
+def kernel_category(name: str) -> str:
+    n = name.lower()
+    for cat, rx in KERNEL_CATS:
+        if re.search(rx, n):
+            return cat
+    return "other_elementwise"
+
+
+def summarize_kernels(events: list[tuple[str, float]], steps: int, top: int = 10) -> dict:
+    """events: (kernel name, duration us) over `steps` decode steps -> per-token totals by category and top kernels."""
+    by: dict = {}
+    names: dict = {}
+    for name, us in events:
+        c = by.setdefault(kernel_category(name), {"us": 0.0, "n": 0})
+        c["us"] += us
+        c["n"] += 1
+        e = names.setdefault(name, [0.0, 0])
+        e[0] += us
+        e[1] += 1
+    k = max(1, steps)
+    for c in by.values():
+        c["us"] /= k
+        c["n"] /= k
+    tops = sorted(names.items(), key=lambda kv: -kv[1][0])[:top]
+    return {"kernel_us_per_token": sum(c["us"] for c in by.values()), "kernels_per_token": len(events) / k,
+            "by_category": dict(sorted(by.items(), key=lambda kv: -kv[1]["us"])),
+            "top_kernels": [{"name": n[:120], "us_per_token": v[0] / k, "n_per_token": v[1] / k} for n, v in tops]}
+
+
 # ---------------------------------------------------------------- model loading (GPU pod)
 
 class LMWrap(torch.nn.Module):
@@ -168,7 +215,20 @@ def load_text_model(repo: str, info: dict):
         model = LMWrap(full)
     info["class"] = type(model).__name__
     model = model.to(DEVICE).eval()
+    model.requires_grad_(False)
     return model
+
+
+@contextlib.contextmanager
+def no_autograd():
+    """Decode context: no grad, no anomaly detection (both also stop AOTAutograd from tracing a backward)."""
+    prev = torch.is_anomaly_enabled()
+    torch.autograd.set_detect_anomaly(False)
+    try:
+        with torch.no_grad():
+            yield
+    finally:
+        torch.autograd.set_detect_anomaly(prev)
 
 
 def text_config(model):
@@ -406,14 +466,90 @@ def gdn_impl(model) -> str:
 def record_gdn_impl(model, info: dict) -> None:
     for mod in ("fla", "causal_conv1d"):
         try:
-            __import__(mod)
+            m = __import__(mod)
             info[f"{mod}_available"] = True
-        except Exception:
+            info[f"{mod}_version"] = getattr(m, "__version__", None)
+        except Exception as e:
             info[f"{mod}_available"] = False
+            info[f"{mod}_import_error"] = f"{type(e).__name__}: {str(e)[:200]}"
     try:
         info["gdn_impl"] = gdn_impl(model)
     except Exception:
         info["gdn_impl"] = "unknown"
+
+
+def gdn_module(model):
+    """The modeling module that holds the GDN functions (the GatedDeltaNet layer's module), or None."""
+    for m in model.modules():
+        if "GatedDeltaNet" in type(m).__name__:
+            return sys.modules.get(type(m).__module__)
+    return None
+
+
+def _impl_and_ref(fn):
+    """(dispatched implementation, torch reference) of a transformers hub wrapper; (fn, fn) if not a wrapper."""
+    try:
+        nl = inspect.getclosurevars(fn).nonlocals
+    except (TypeError, ValueError):
+        nl = {}
+    impl, ref = nl.get("implementation"), nl.get("torch_function")
+    return (impl if callable(impl) else fn), (ref if callable(ref) else fn)
+
+
+def _gdn_inputs(t: int, h: int = 16, d: int = 128, seed: int = 0):
+    g = torch.Generator(device=DEVICE).manual_seed(seed)
+    r = lambda *sh: torch.randn(*sh, generator=g, device=DEVICE)  # noqa: E731
+    q, k, v = (r(1, t, h, d).to(torch.bfloat16) for _ in range(3))
+    gate = -torch.nn.functional.softplus(r(1, t, h))          # log decay < 0
+    beta = torch.sigmoid(r(1, t, h)).to(torch.bfloat16)
+    s0 = r(1, h, d, d) * 0.05
+    return q, k, v, gate, beta, s0
+
+
+def rel_err(a: torch.Tensor, b: torch.Tensor) -> float:
+    a, b = a.float(), b.float()
+    return float((a - b).abs().max() / b.abs().max().clamp_min(1e-6))
+
+
+FLA_TOL = 3e-2
+
+
+def fla_check(model, info: dict) -> None:
+    """Run the dispatched GDN functions (decode T=1 recurrent, T=64 chunk) against the torch reference on the GPU.
+
+    On failure the module functions are set to the torch reference, so the model runs the torch path explicitly.
+    Records info['fla_check'] and updates info['gdn_impl'].
+    """
+    mod = gdn_module(model)
+    res: dict = {"ran": False}
+    info["fla_check"] = res
+    if mod is None or info.get("gdn_impl") != "fla":
+        res["skipped"] = f"gdn_impl={info.get('gdn_impl')}"
+        return
+    names = [n for n in GDN_FNS if getattr(mod, n, None) is not None]
+    try:
+        res["ran"] = True
+        for name, t in (("torch_recurrent_gated_delta_rule", 1), ("torch_chunk_gated_delta_rule", 64)):
+            if name not in names:
+                continue
+            impl, ref = _impl_and_ref(getattr(mod, name))
+            q, k, v, gate, beta, s0 = _gdn_inputs(t)
+            kw = dict(g=gate, beta=beta, initial_state=s0.clone(), output_final_state=True, use_qk_l2norm_in_kernel=True)
+            o1, st1 = impl(q, k, v, **kw)
+            kw["initial_state"] = s0.clone()
+            o2, st2 = ref(q, k, v, **kw)
+            torch.cuda.synchronize()
+            res[name] = {"T": t, "out_rel_err": rel_err(o1, o2), "state_rel_err": rel_err(st1, st2)}
+        errs = [e for n in names if isinstance(res.get(n), dict) for e in (res[n]["out_rel_err"], res[n]["state_rel_err"])]
+        res["ok"] = bool(errs) and all(e == e and e < FLA_TOL for e in errs)
+    except Exception as e:
+        res["ok"] = False
+        res["error"] = f"{type(e).__name__}: {str(e)[:300]}"
+    if not res["ok"]:
+        for n in names:
+            setattr(mod, n, _impl_and_ref(getattr(mod, n))[1])
+        info["gdn_impl"] = "torch_fallback"
+        info["gdn_fallback_reason"] = "fla check failed on this GPU: " + str(res.get("error") or {n: res.get(n) for n in names})
 
 
 def setup(args, info):
@@ -427,6 +563,8 @@ def setup(args, info):
     info["repo_used"] = repo
     model = load_text_model(repo, info)
     record_gdn_impl(model, info)
+    if DEVICE == "cuda":
+        fla_check(model, info)
     return model, keep_kw(model)
 
 
@@ -477,6 +615,73 @@ def run_inner(args) -> int:
     return 0
 
 
+PROFILE_STEPS = 6
+
+
+def profile_kernels(d, steps: int = PROFILE_STEPS) -> list[tuple[str, float]]:
+    """Kernel (name, us) for `steps` decode steps via torch.profiler (CUPTI; sees kernels inside graph replays)."""
+    from torch.profiler import ProfilerActivity, profile
+    d.reset()
+    for _ in range(2):
+        d.once()
+    torch.cuda.synchronize()
+    with profile(activities=[ProfilerActivity.CUDA]) as prof:
+        for _ in range(steps):
+            d.once()
+        torch.cuda.synchronize()
+    out = []
+    for e in prof.events():
+        if getattr(e, "device_type", None) == torch.autograd.DeviceType.CUDA:
+            out.append((e.name, float(e.time_range.elapsed_us())))
+    return out
+
+
+def host_and_replay_us(d, n: int) -> dict:
+    """Host issue time per step (Python + launch), GPU time per step, and bare graph replay time when there is a graph."""
+    d.reset()
+    torch.cuda.synchronize()
+    ev = [torch.cuda.Event(enable_timing=True) for _ in range(4)]
+    ev[0].record()
+    t = time.perf_counter()
+    for _ in range(n):
+        d.once()
+    host = (time.perf_counter() - t) * 1e6 / n
+    ev[1].record()
+    torch.cuda.synchronize()
+    out = {"host_issue_us_per_token": host, "gpu_us_per_token": ev[0].elapsed_time(ev[1]) * 1000.0 / n,
+           "graph_replay_only_us": None}
+    g = getattr(d, "graph", None)
+    if g is not None:
+        d.reset()
+        torch.cuda.synchronize()
+        ev[2].record()
+        for _ in range(n):
+            g.replay()
+        ev[3].record()
+        torch.cuda.synchronize()
+        out["graph_replay_only_us"] = ev[2].elapsed_time(ev[3]) * 1000.0 / n
+    d.reset()
+    return out
+
+
+def breakdown(model, cache, kk, d, eff: int, n: int, ana: dict, peak_gbps: float | None) -> dict:
+    """us/token split: kernel time by category, GPU idle (launch gaps), host issue time, bandwidth floor."""
+    out = host_and_replay_us(d, n)
+    ev = profile_kernels(d)
+    src = "decoder"
+    if not ev:  # profiler saw no kernels (e.g. inside a graph): profile an eager step on the same cache
+        ev = profile_kernels(Decoder(model, cache, eff, kk, "eager"))
+        src = "eager"
+        d.reset()
+    out.update(summarize_kernels(ev, PROFILE_STEPS))
+    out["profile_source"] = src
+    out["gpu_idle_us_per_token"] = out["gpu_us_per_token"] - out["kernel_us_per_token"]
+    nbytes = ana["weight_bytes"] + 2 * ana["gdn_state_bytes"] + ana["kv_bytes"]
+    out["analytic_bytes_per_token"] = nbytes
+    out["bw_floor_us"] = nbytes / (peak_gbps * 1e3) if peak_gbps else None
+    return out
+
+
 def free_gpu() -> None:
     gc.collect()
     torch._dynamo.reset()
@@ -517,12 +722,17 @@ def measure_ctx(model, kk, args, ctx: int, info: dict, weight_bytes: int) -> dic
                 skipped.append(mode)  # compile time is inside the timing: reject, try the next mode
                 d = None
                 torch.cuda.empty_cache()
+            ana = analytic(args.model, ctx, args.decode, static, weight_bytes)
+            try:
+                bd = breakdown(model, cache, kk, d, eff, min(args.decode, 64), ana, getattr(args, "peak_gbps", None))
+            except Exception as e:
+                bd = {"error": f"{type(e).__name__}: {str(e)[:300]}"}
             row = {"model": args.model, "ctx": ctx, "tok_s": args.decode / sec, "us_per_token": sec * 1e6 / args.decode,
                    "compile_mode_used": mode, "cache_kind": "static" if static else "dynamic", "dynamo_recompiles": max(recompiles, 0),
                    "modes_rejected_recompile": skipped, "dram_bytes_per_token": None,
                    "l2_hit_rate": None, "ncu_us_per_token": None, "counters_ok": False, "gdn_impl": info.get("gdn_impl"),
-                   "analytic": analytic(args.model, ctx, args.decode, static, weight_bytes),
-                   "prefill_and_compile_s": time.monotonic() - t0}
+                   "analytic": ana, "breakdown": bd, "grad_enabled": torch.is_grad_enabled(),
+                   "anomaly_enabled": torch.is_anomaly_enabled(), "prefill_and_compile_s": time.monotonic() - t0}
             if static_error:
                 row["static_cache_error"] = static_error
             return row
@@ -557,6 +767,9 @@ def finish(args, rows, notes, info, dev, counters_all, nl, budget_note) -> None:
     if any(r.get("cache_kind") == "dynamic" for r in rows):
         notes.append("rows with cache_kind dynamic ran eager only (growing KV length would recompile every step)")
     notes.append("reduce-overhead can skip CUDA graphs silently (mutated inputs); compare us/token with the other modes")
+    notes.append("breakdown: kernel_us_per_token from torch.profiler (sum of kernel durations), gpu_idle = gpu time - kernel "
+                 "time (launch gaps); host_issue_us_per_token >= gpu_us_per_token means the Python/launch path is the limit; "
+                 "bw_floor_us = analytic bytes / peak DRAM bandwidth")
     if info.get("gdn_impl") != "fla":
         notes.append(f"gdn_impl={info.get('gdn_impl')}: GatedDeltaNet runs HF torch ops (several state-sized fp32 temporaries per "
                      "layer per token), not a fused fla kernel; fit.floor_us_per_layer and fit.eff_bw_gbps describe that path, "
@@ -575,6 +788,11 @@ def run(args) -> int:
         print("error: no CUDA device (use --dry-run for the plan)", file=sys.stderr)
         return 2
     args.gpu = common.gpu_tag(args)
+    try:
+        from infra.gpus import peak_dram_gbps
+        args.peak_gbps = peak_dram_gbps(args.gpu)
+    except Exception:
+        args.peak_gbps = None
     exp = EXP_NAMES[args.model]
     info: dict = {}
     notes: list[str] = []
@@ -679,11 +897,12 @@ def main(argv=None) -> int:
     if a.dry_run:
         common.print_plan(plan_json(a))
         return 0
-    if a.inner:
-        a.ctx = [a.ctx[0]]
-        return run_inner(a)
-    with common.term_exits():
-        return run(a)
+    with no_autograd():
+        if a.inner:
+            a.ctx = [a.ctx[0]]
+            return run_inner(a)
+        with common.term_exits():
+            return run(a)
 
 
 if __name__ == "__main__":

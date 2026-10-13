@@ -10,3 +10,8 @@ pytest
 transformers==5.19.0
 accelerate
 huggingface_hub[hf_transfer]
+# GDN kernels for transformers (fla.ops.gated_delta_rule). fla-core is the ops part of flash-linear-attention 0.5.2;
+# the full package also imports fla.models, which registers configs with transformers and is not needed here.
+# Pure Triton (needs triton >= 3.3, torch >= 2.7); e2/e3 run a GPU check against the torch reference and record gdn_impl.
+einops
+fla-core==0.5.2

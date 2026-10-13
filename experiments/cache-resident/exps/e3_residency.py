@@ -11,7 +11,8 @@ off, gdn (window over states), head (window over head), both (one window over th
 Pruned heads keep vocab ids 0..49151 (measurement only; output ids are not valid tokens).
 PLAN's "48K-pruned INT8 98 MB" matches bf16_48k (or int8 at hidden 2048); both are run.
 Cache contents are random (the cache is filled, not prefilled): bytes and time do not depend on values.
-Go/no-go metric: DRAM bytes saved per persisted byte for condition both with int8_48k.
+Go/no-go metric: DRAM bytes saved per persisted byte for condition both with int8_48k. Without ncu counters (RunPod hosts
+deny them) a time proxy is reported: (us_off - us_cond) x peak DRAM bandwidth / persisted bytes.
 State write-back runs as an elementwise add kernel (ArenaView), not as a cudaMemcpy graph node: a memcpy node
 gets no access policy window and ncu does not profile it. Rows record graph_nodes (kernel / memcpy counts).
 Exit 4 before any timing if gdn/both are requested and the state cannot be placed in the arena (--allow-no-gdn skips them).
@@ -69,9 +70,12 @@ def window_region(cond: str, lay: dict) -> tuple[int, int] | None:
     raise ValueError(cond)
 
 
-def analyze(rows: list[dict]) -> dict:
-    """Per (ctx, head): gain vs off, DRAM bytes saved per persisted byte. Go/no-go on both + int8_48k."""
-    out: dict = {"per_config": [], "go_no_go": None}
+def analyze(rows: list[dict], peak_gbps: float | None = None) -> dict:
+    """Per (ctx, head): gain vs off, DRAM bytes saved per persisted byte. Go/no-go on both + int8_48k.
+
+    go_no_go_time_proxy uses time saved x peak bandwidth as the saved bytes (an upper-bound style proxy, no counters).
+    """
+    out: dict = {"per_config": [], "go_no_go": None, "go_no_go_time_proxy": None}
     keys = sorted({(r["ctx"], r["head"]) for r in rows})
     for ctx, head in keys:
         grp = {r["condition"]: r for r in rows if r["ctx"] == ctx and r["head"] == head}
@@ -84,6 +88,10 @@ def analyze(rows: list[dict]) -> dict:
             e: dict = {"ctx": ctx, "head": head, "condition": cond, "persisted_bytes": r.get("persisted_bytes")}
             if off.get("us_per_token") and r.get("us_per_token"):
                 e["time_gain_pct"] = 100.0 * (off["us_per_token"] - r["us_per_token"]) / off["us_per_token"]
+                e["time_saved_us"] = off["us_per_token"] - r["us_per_token"]
+                pb = r.get("persisted_bytes")
+                if peak_gbps and pb:
+                    e["proxy_saved_per_persisted_byte"] = e["time_saved_us"] * 1e-6 * peak_gbps * 1e9 / pb
             if off.get("dram_bytes_per_token") is not None and r.get("dram_bytes_per_token") is not None:
                 saved = off["dram_bytes_per_token"] - r["dram_bytes_per_token"]
                 e["dram_saved_bytes_per_token"] = saved
@@ -96,6 +104,13 @@ def analyze(rows: list[dict]) -> dict:
         worst = min(e["saved_per_persisted_byte"] for e in both)
         out["go_no_go"] = {"metric": "dram bytes saved / persisted byte (both, int8_48k)", "value": worst,
                            "threshold": GO_RATIO, "go": worst >= GO_RATIO}
+    px = [e for e in out["per_config"] if e["condition"] == "both" and e["head"] == "int8_48k"
+          and e.get("proxy_saved_per_persisted_byte") is not None]
+    if px:
+        worst = min(e["proxy_saved_per_persisted_byte"] for e in px)
+        out["go_no_go_time_proxy"] = {"metric": "time saved x peak bw / persisted byte (both, int8_48k), no counters",
+                                      "value": worst, "threshold": GO_RATIO, "go": worst >= GO_RATIO,
+                                      "per_ctx": {e["ctx"]: e["proxy_saved_per_persisted_byte"] for e in px}}
     return out
 
 
@@ -463,7 +478,7 @@ def run(args) -> int:
     orig_head = model.lm_head  # setup_config swaps the head; always put this one back
     config = {"ctx": args.ctx, "heads": args.heads, "conditions": args.conditions, "window_method": args.window_method,
               "iters": args.iters, "repeats": args.repeats, "ncu_ctx": args.ncu_ctx, "ncu_heads": args.ncu_heads,
-              "gdn_persist_method": methods, "cache_fill": "random", "head_bytes": {
+              "gdn_persist_method": methods, "cache_fill": "random", "grad_enabled": torch.is_grad_enabled(), "head_bytes": {
                   k: head_bytes(k, 248320, 1024) for k in HEADS}, "quick": args.quick, "device": dev, "load": info}
 
     def save():
@@ -552,7 +567,12 @@ def run(args) -> int:
                                                                       row["l2_hit_rate"]), flush=True)
     if ncu_jobs:
         notes.append("ncu pass limited to ncu_ctx x ncu_heads (see config); other rows have timing only")
-    ana = analyze(rows)
+    try:
+        from infra.gpus import peak_dram_gbps
+        peak = peak_dram_gbps(args.gpu)
+    except Exception:
+        peak = None
+    ana = analyze(rows, peak)
     notes.append("pruned heads use vocab ids 0..49151 (measurement only); bf16_48k matches PLAN's 98 MB figure")
     notes.append("GDN state write-back is an add kernel (ArenaView), so it is a kernel node with the window and counted by ncu; "
                  "ncu DRAM bytes still exclude any remaining memcpy graph nodes (see rows[].graph_nodes.memcpy)")
@@ -561,6 +581,10 @@ def run(args) -> int:
     if info.get("gdn_impl") != "fla":
         notes.append(f"gdn_impl={info.get('gdn_impl')}: GatedDeltaNet runs HF torch ops (many state-sized fp32 temporaries per layer), "
                      "not a fused fla kernel; the state is a small part of GDN traffic and gdn/both effects are not representative")
+    if ana["go_no_go_time_proxy"]:
+        px = ana["go_no_go_time_proxy"]
+        notes.append("GO/NO-GO time proxy %s: %.3f vs threshold %.2f -> %s" % (px["metric"], px["value"], GO_RATIO,
+                                                                             "GO" if px["go"] else "NO-GO"))
     if ana["go_no_go"]:
         notes.append("GO/NO-GO %s: %.3f vs threshold %.2f -> %s" % (ana["go_no_go"]["metric"], ana["go_no_go"]["value"],
                                                                      GO_RATIO, "GO" if ana["go_no_go"]["go"] else "NO-GO"))
@@ -625,10 +649,11 @@ def main(argv=None) -> int:
     if a.dry_run:
         common.print_plan(plan_json(a))
         return 0
-    if a.inner:
-        return run_inner(a)
-    with common.term_exits():
-        return run(a)
+    with e2.no_autograd():
+        if a.inner:
+            return run_inner(a)
+        with common.term_exits():
+            return run(a)
 
 
 if __name__ == "__main__":
