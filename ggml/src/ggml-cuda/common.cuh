@@ -132,6 +132,15 @@ static __device__ __forceinline__ void ggml_cuda_pdl_lc() {
 #endif // defined(GGML_CUDA_USE_PDL) && defined(__CUDA_ARCH__) && __CUDA_ARCH__ >= GGML_CUDA_CC_HOPPER
 }
 
+// L2-only prefetch for use before ggml_cuda_pdl_sync(). Only for data no earlier kernel writes (weights).
+static __device__ __forceinline__ void ggml_cuda_pdl_prefetch_l2(const void * p) {
+#if defined(GGML_CUDA_USE_PDL) && defined(__CUDA_ARCH__) && __CUDA_ARCH__ >= GGML_CUDA_CC_HOPPER
+    asm volatile("prefetch.global.L2 [%0];" :: "l"(__cvta_generic_to_global(p)));
+#else
+    GGML_UNUSED(p);
+#endif // defined(GGML_CUDA_USE_PDL) && defined(__CUDA_ARCH__) && __CUDA_ARCH__ >= GGML_CUDA_CC_HOPPER
+}
+
 #ifdef __CUDA_ARCH_LIST__
 constexpr bool ggml_cuda_has_arch_impl(int) {
     return false;
@@ -179,6 +188,16 @@ static int ggml_cuda_highest_compiled_arch(const int arch) {
 static inline bool ggml_cuda_batch_invariant() {
     static const bool enabled = getenv("GGML_CUDA_BATCH_INVARIANT") != nullptr;
     return enabled;
+}
+
+// GGML_CUDA_PDL_PREFETCH=N: mat-vec kernels prefetch the weights of their first N K iterations to L2
+// before the PDL wait, so the DRAM fetch overlaps the tail of the previous kernel. 0 (default) = off.
+static inline int ggml_cuda_pdl_prefetch() {
+    static const int n = [] {
+        const char * env = getenv("GGML_CUDA_PDL_PREFETCH");
+        return env == nullptr ? 0 : std::max(0, std::atoi(env));
+    }();
+    return n;
 }
 
 #define MATRIX_ROW_PADDING 512 // last row of quant. matrices is a multiple of this to avoid out-of-bounds memory accesses

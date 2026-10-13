@@ -581,7 +581,7 @@ static __global__ void mul_mat_vec_q(
         const uint32_t stride_col_dst, const uint3 channel_ratio, const uint32_t stride_channel_x,
         const uint32_t stride_channel_y, const uint32_t stride_channel_dst, const uint3 sample_ratio,
         const uint32_t stride_sample_x, const uint32_t stride_sample_y, const uint32_t stride_sample_dst,
-        const uint32_t ids_stride) {
+        const uint32_t ids_stride, const int pdl_prefetch) {
     const void    * GGML_CUDA_RESTRICT vx  = vx_ptr;
     const void    * GGML_CUDA_RESTRICT vy  = vy_ptr;
     const int32_t * GGML_CUDA_RESTRICT ids = ids_ptr;
@@ -607,6 +607,33 @@ static __global__ void mul_mat_vec_q(
     uint32_t channel_x;
     uint32_t channel_y;
     uint32_t sample_dst;
+
+    using pdl_block_t = std::conditional_t<type == GGML_TYPE_PQ2_0, block_pq2_0,
+        std::conditional_t<type == GGML_TYPE_PTQ1_0, block_ptq1_0,
+        std::conditional_t<type == GGML_TYPE_Q8_0, block_q8_0, void>>>;
+    if constexpr (!std::is_void_v<pdl_block_t>) {
+        // ids is written by an earlier kernel, so only the plain path can find its weight rows before the wait
+        if (!ids && tid % (qi/vdr) == 0) {
+            const int kbx_offset_pf = fastdiv(blockIdx.z, sample_ratio)*stride_sample_x +
+                fastdiv(channel_dst, channel_ratio)*stride_channel_x + row0*stride_row_x;
+            for (int it = 0; it < pdl_prefetch; ++it) {
+                const int kbx = tid / (qi/vdr) + it*blocks_per_iter;
+                if (kbx >= blocks_per_row_x) {
+                    break;
+                }
+#pragma unroll
+                for (int i = 0; i < rows_per_cuda_block; ++i) {
+                    if (rows_per_cuda_block > 1 && uint32_t(row0 + i) >= stride_col_dst) {
+                        break;
+                    }
+                    ggml_cuda_pdl_prefetch_l2((const pdl_block_t *) vx + kbx_offset_pf + i*stride_row_x + kbx);
+                    if constexpr (has_fusion && has_gate) {
+                        ggml_cuda_pdl_prefetch_l2((const pdl_block_t *) fusion.gate + kbx_offset_pf + i*stride_row_x + kbx);
+                    }
+                }
+            }
+        }
+    }
 
     ggml_cuda_pdl_sync();
     channel_x  = ncols_dst == 1 && ids ? ids[channel_dst]                     : fastdiv(channel_dst, channel_ratio);
@@ -1127,14 +1154,14 @@ static void mul_mat_vec_q_launch(const bool y_soa, const ggml_cuda_kernel_launch
     if constexpr (type == GGML_TYPE_PTQ1_0 && c_ncols_dst == 1) {
         if (y_soa) {
             ggml_cuda_kernel_launch(mul_mat_vec_q<type, c_ncols_dst, has_fusion, has_gate, small_k, halve_iters, true>,
-                                    launch_params, std::forward<Args>(args)...);
+                                    launch_params, std::forward<Args>(args)..., ggml_cuda_pdl_prefetch());
             return;
         }
     } else {
         GGML_ASSERT(!y_soa);
     }
     ggml_cuda_kernel_launch(mul_mat_vec_q<type, c_ncols_dst, has_fusion, has_gate, small_k, halve_iters, false>,
-                            launch_params, std::forward<Args>(args)...);
+                            launch_params, std::forward<Args>(args)..., ggml_cuda_pdl_prefetch());
 }
 
 template<ggml_type type, int c_ncols_dst, bool small_k = false, bool halve_iters = false>
