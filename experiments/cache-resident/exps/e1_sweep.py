@@ -295,13 +295,16 @@ def time_graph(g, tpg: int, tokens: int) -> float:
     return timing.replay_time_us(g, iters=replays_for(tokens, tpg), warmup=2) / tpg
 
 
-def time_split(hot_g, cold_g, tokens: int) -> tuple[float, float]:
-    """Median us of the hot and the cold part of one token (1-token graphs replayed in turn, events between)."""
+def time_split(hot_g, cold_g, tokens: int) -> tuple[float, float, float]:
+    """(hot, cold, wall): median us of the hot and the cold part of one token (1-token graphs replayed in turn,
+    events between), and wall us per token over the whole loop (shows idle gaps between graphs)."""
     import torch
     for _ in range(2):
         hot_g.replay()
         cold_g.replay()
     ev = [[torch.cuda.Event(enable_timing=True) for _ in range(3)] for _ in range(tokens)]
+    start = torch.cuda.Event(enable_timing=True)
+    start.record()
     for e in ev:
         e[0].record()
         hot_g.replay()
@@ -311,7 +314,34 @@ def time_split(hot_g, cold_g, tokens: int) -> tuple[float, float]:
     ev[-1][2].synchronize()
     hot = statistics.median(e[0].elapsed_time(e[1]) * 1e3 for e in ev)
     cold = statistics.median(e[1].elapsed_time(e[2]) * 1e3 for e in ev)
-    return hot, cold
+    return hot, cold, start.elapsed_time(ev[-1][2]) * 1e3 / tokens
+
+
+def nvml_state() -> dict | None:
+    """Clocks (MHz), power (W), temperature, P-state and clock event reasons of GPU 0; None without NVML."""
+    try:
+        import pynvml as nv
+        nv.nvmlInit()
+        h = nv.nvmlDeviceGetHandleByIndex(0)
+        get_reasons = getattr(nv, "nvmlDeviceGetCurrentClocksEventReasons", None) or nv.nvmlDeviceGetCurrentClocksThrottleReasons
+        return {"sm_mhz": nv.nvmlDeviceGetClockInfo(h, nv.NVML_CLOCK_SM), "mem_mhz": nv.nvmlDeviceGetClockInfo(h, nv.NVML_CLOCK_MEM),
+                "max_sm_mhz": nv.nvmlDeviceGetMaxClockInfo(h, nv.NVML_CLOCK_SM), "max_mem_mhz": nv.nvmlDeviceGetMaxClockInfo(h, nv.NVML_CLOCK_MEM),
+                "power_w": nv.nvmlDeviceGetPowerUsage(h) / 1e3, "power_limit_w": nv.nvmlDeviceGetEnforcedPowerLimit(h) / 1e3,
+                "temp_c": nv.nvmlDeviceGetTemperature(h, nv.NVML_TEMPERATURE_GPU), "pstate": nv.nvmlDeviceGetPerformanceState(h),
+                "event_reasons": hex(get_reasons(h))}
+    except Exception as e:
+        return {"error": f"{type(e).__name__}: {e}"}
+
+
+def busy_state(enqueue, wait_s: float = 0.25) -> dict | None:
+    """nvml_state sampled while work queued by enqueue() runs on the GPU."""
+    import time
+    import torch
+    enqueue()
+    time.sleep(wait_s)
+    st = nvml_state()
+    torch.cuda.synchronize()
+    return st
 
 
 def calibrate(variant: str, shapes, tag: str, l2: int) -> dict:
@@ -326,6 +356,8 @@ def calibrate(variant: str, shapes, tag: str, l2: int) -> dict:
     b = torch.empty_like(a)
     us = timing.cuda_time_us(lambda: b.copy_(a), iters=20, warmup=3)
     out["copy_gbps"] = 2 * n / us / 1e3
+    out["nvml_idle"] = nvml_state()
+    out["nvml_copy_busy"] = busy_state(lambda: [b.copy_(a) for _ in range(int(0.6e6 / us) + 1)])
     del a, b
     torch.cuda.empty_cache()
     gap = bench_gemv.gap_estimate_us()
@@ -355,10 +387,26 @@ def diag_chain(variant: str, w_mib: int) -> dict:
         g = timing.capture_graph(fn)
         us = time_graph(g, tpg, 50) / L
         out[name] = {"us_per_layer": us, "gbps": nb / us / 1e3}
+        if name == "fixed_x":
+            out[name]["nvml_busy"] = busy_state(lambda: [g.replay() for _ in range(int(0.6e6 / (us * L * tpg)) + 1)])
         if name == "pingpong":
             out[name]["finite"] = bool(torch.isfinite(lay.y.float()).all().item() and torch.isfinite(lay.y2.float()).all().item())
         del g
-    del lay
+    # same 1-token graph back to back vs with 2 ms host idle before each replay (clock / power behavior)
+    import time
+    g1 = timing.capture_graph(lambda: lay.launch(torch.cuda.current_stream().cuda_stream))
+    out["one_token_b2b_us_per_layer"] = time_graph(g1, 1, 30) / L
+    a, b, t = torch.cuda.Event(enable_timing=True), torch.cuda.Event(enable_timing=True), []
+    for _ in range(30):
+        torch.cuda.synchronize()
+        time.sleep(0.002)
+        a.record()
+        g1.replay()
+        b.record()
+        b.synchronize()
+        t.append(a.elapsed_time(b) * 1e3 / L)
+    out["one_token_gapped_us_per_layer"] = statistics.median(t)
+    del g1, lay
     torch.cuda.empty_cache()
     return out
 
@@ -452,16 +500,18 @@ def run(args) -> int:
                         r["persist_limit_bytes"] = got
                         r["us_per_token_all"].append(time_graph(gs[c][0], tpg[c], args.tokens))
                         if c:
-                            h, cu = time_split(gs["hot1"][0], cold_g, args.tokens)
+                            h, cu, wall = time_split(gs["hot1"][0], cold_g, args.tokens)
                             r["hot_us_all"].append(h)
                             r["cold_us_all"].append(cu)
+                            r.setdefault("split_wall_us_all", []).append(wall)
                         else:
                             r["hot_us_all"].append(r["us_per_token_all"][-1])
             set_persist(0)
+            config.setdefault("nvml_per_W", {})[str(w)] = nvml_state()
             chk = hot.check()
             for r in mrows.values():
-                for key in ("us_per_token", "hot_us", "cold_us"):
-                    a = r[key + "_all"]
+                for key in ("us_per_token", "hot_us", "cold_us", "split_wall_us"):
+                    a = r.get(key + "_all") or []
                     r[key] = statistics.median(a) if a else None
                     r[key + "_spread"] = _spread(a)
                 if not r["cold_us_all"]:

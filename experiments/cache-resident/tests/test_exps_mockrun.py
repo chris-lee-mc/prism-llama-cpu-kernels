@@ -91,7 +91,7 @@ def _patch_e1(monkeypatch, fail=False):
     monkeypatch.setattr(l2persist, "max_window_bytes", lambda dev=0: 128 * MIB)
     monkeypatch.setattr(e1, "build_graph", fake_build)
     monkeypatch.setattr(e1, "time_graph", fake_time)
-    monkeypatch.setattr(e1, "time_split", lambda h, c, tokens: (20.0 if h[1] is None else 10.0, 300.0))
+    monkeypatch.setattr(e1, "time_split", lambda h, c, tokens: (20.0 if h[1] is None else 10.0, 300.0, 320.0))
     monkeypatch.setattr(e1, "set_persist", lambda lim: limits.append(lim) or lim)
     monkeypatch.setattr(e1, "calibrate", lambda *a: {"copy_gbps": 1.0})
     monkeypatch.setattr(e1, "diag_chain", lambda *a: {"L": 1})
