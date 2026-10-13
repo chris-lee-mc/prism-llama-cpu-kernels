@@ -155,3 +155,55 @@ def test_run_does_all_bench_rows_before_ncu(tmp_path, monkeypatch):
     rows = calls[-1][1]
     assert [r["depth"] for r in rows] == [0, 32768, 131072, 262144]
     assert rows[0]["dram_bytes_per_token"] == 1e9 and rows[2]["dram_bytes_per_token"] is None and rows[2]["tg_tok_s"] == 50.0
+
+
+KERN_SUM = """Processing [x.sqlite] with [cuda_gpu_kern_sum.py]...
+"Time (%)","Total Time (ns)","Instances","Avg (ns)","Med (ns)","Min (ns)","Max (ns)","StdDev (ns)","Name"
+60.0,6000000,1600,3750.0,3700.0,3000,5000,100.0,"void mul_mat_vec_q<(ggml_type)41, 1, false, false>(...)"
+20.0,2000000,320,6250.0,6000.0,5000,8000,100.0,"void gated_delta_net_cuda<128>(...)"
+10.0,1000000,160,6250.0,6000.0,5000,8000,100.0,"void fwht_quantize_q8_1<256, 64, 1, float, true>(...)"
+10.0,1000000,500,2000.0,2000.0,1000,3000,100.0,"void rms_norm_f32<1024>(...)"
+"""
+
+
+def test_nsys_kern_sum_buckets():
+    k = e4.parse_kern_sum(KERN_SUM)
+    assert [x["count"] for x in k] == [1600, 320, 160, 500] and k[0]["time_ns"] == 6e6
+    b = e4.nsys_buckets(k, 16)
+    assert b["mul_mat_vec"]["us_per_token"] == pytest.approx(375.0) and b["mul_mat_vec"]["time_share"] == pytest.approx(0.6)
+    assert b["hadamard"]["count"] == 160 and b["gated_delta_net"]["count"] == 320 and b["other"]["count"] == 500
+    assert e4.parse_kern_sum("no header here") == []
+
+
+def test_nsys_cmds():
+    p = e4.nsys_profile_cmd("nsys", ["tool", "-d", "0"], "/o/x")
+    assert p[:2] == ["nsys", "profile"] and "--capture-range=cudaProfilerApi" in p and "--cuda-graph-trace=node" in p
+    assert p[-3:] == ["tool", "-d", "0"]
+    assert e4.nsys_stats_cmd("nsys", "/o/x.nsys-rep")[-1] == "/o/x.nsys-rep"
+
+
+def test_run_uses_nsys_split_without_counters(tmp_path, monkeypatch):
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    (bin_dir / "llama-bench").write_text("")
+    calls, res = [], []
+    monkeypatch.setenv("CR_LLAMA_BIN", str(bin_dir))
+    monkeypatch.setattr(e4.common, "gpu_tag", lambda a: "gpu")
+    monkeypatch.setattr(e4.common, "counters_available", lambda a: (False, "no counters"))
+    monkeypatch.setattr(e4.common, "write_partial", lambda *a, **k: None)
+    monkeypatch.setattr(e4.common, "write_result", lambda exp, args, config, rows, notes, ok, **k: res.append((rows, notes)))
+    monkeypatch.setattr(e4, "download", lambda q, n: ("m.gguf", {}))
+    monkeypatch.setattr(e4, "find_nsys", lambda: "/x/nsys")
+    monkeypatch.setattr(e4, "build_prof_tool", lambda b, n: tmp_path / "tool")
+    monkeypatch.setattr(e4, "raw_path", lambda *a: "x")
+    monkeypatch.setattr(e4, "run_bench", lambda cmd, t: ({"tok_s": 50.0, "stddev": 0.1}, None))
+    monkeypatch.setattr(e4, "nsys_split", lambda nsys, argv, n, t, out: calls.append(argv) or
+                        {"ok": True, "error": None, "buckets": {"mul_mat_vec": {"time_share": 0.7}}, "kernel_us_per_token": 9000.0,
+                         "kernels_top": []})
+    a = e4.parse_args(["--depths", "0,32768,131072", "--kv", "f16", "--ncu-kv", "f16"])
+    assert e4.run(a) == 0
+    assert [int(c[c.index("-d") + 1]) for c in calls] == [0, 32768]
+    assert calls[0][calls[0].index("-n") + 1] == str(e4.NSYS_TOKENS)
+    rows, notes = res[-1]
+    assert rows[0]["nsys_kernel_us_per_token"] == 9000.0 and rows[2].get("nsys_buckets") is None
+    assert any("mul_mat_vec 70%" in n for n in notes)

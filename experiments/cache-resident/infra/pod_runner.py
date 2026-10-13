@@ -151,14 +151,21 @@ def sha256_file(p: pathlib.Path) -> str:
     return h.hexdigest()
 
 
-def write_manifest(root: pathlib.Path, exp: str) -> list[dict]:
+def write_manifest(root: pathlib.Path, exp: str, since: float | None = None) -> list[dict]:
+    """All files under root/exp, plus files of other exp dirs modified at or after since (chained commands)."""
     files = []
-    base = root / exp
-    if base.is_dir():
+    bases = [root / exp]
+    if since is not None and root.is_dir():
+        bases += [d for d in sorted(root.iterdir()) if d.is_dir() and d.name not in (exp, "_status") and _NAME_RE.match(d.name)]
+    for base in bases:
+        if not base.is_dir():
+            continue
         for p in sorted(base.rglob("*")):
-            if p.is_file() and not p.name.startswith("."):
-                files.append({"path": p.relative_to(root).as_posix(), "size": p.stat().st_size,
-                              "sha256": sha256_file(p)})
+            if not p.is_file() or p.name.startswith("."):
+                continue
+            if base.name != exp and p.stat().st_mtime < since:
+                continue
+            files.append({"path": p.relative_to(root).as_posix(), "size": p.stat().st_size, "sha256": sha256_file(p)})
     write_json_atomic(root / "_status" / "MANIFEST.json", {"files": files})
     return files
 
@@ -312,7 +319,7 @@ def main(argv=None) -> int:
     logf.close()
 
     st.phase("uploading")
-    files = write_manifest(root, a.exp)
+    files = write_manifest(root, a.exp, since=t_start)
     write_json_atomic(root / "_status" / "DONE.json", {
         "exp": a.exp, "gpu": gpu, "status": status, "exit_code": code, "cmd": cmd,
         "started_utc": started, "finished_utc": utc_now()})

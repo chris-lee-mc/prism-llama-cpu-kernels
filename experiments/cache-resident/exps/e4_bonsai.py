@@ -9,16 +9,23 @@ depth and calls cudaProfilerStart/Stop around the decode, so no launch counting 
 If the tool cannot be built, depth 0 falls back to ncu on llama-bench (-p 0 -n 4 -r 1 --no-warmup) and
 deeper depths get no kernel split. llama-bench never calls cudaProfilerStart, so that fallback profiles from
 the start of the process (no --profile-from-start off). PQ2_0/PTQ1_0 unpack is fused inside mul_mat_vec.
-All llama-bench rows run first, then the ncu passes use the leftover time budget. Rows are written to
+When ncu has no counters (RunPod), the split comes from nsys instead: CUDA trace of cr_decode_prof with
+--capture-range=cudaProfilerApi and --cuda-graph-trace=node, kernel times summed per bucket (no DRAM bytes).
+All llama-bench rows run first, then the ncu/nsys passes use the leftover time budget. Rows are written to
 raw/partial.json as they complete, and every subprocess timeout is bounded by the time budget.
 Needs CR_LLAMA_BIN (default <repo>/build-cuda/bin) with llama-bench built (CR_BUILD_LLAMA=1).
 """
 from __future__ import annotations
 
 import argparse
+import csv
+import glob
+import io
 import json
 import os
 import pathlib
+import re
+import shutil
 import subprocess
 import sys
 
@@ -31,6 +38,8 @@ DEFAULT_DEPTHS = [0, 32768, 131072, 262144]
 UB = 2048
 N_GEN = 128
 NCU_TOKENS = 4
+NSYS_TOKENS = 16
+NSYS_GLOBS = ("/usr/local/cuda*/bin/nsys", "/opt/nvidia/nsight-systems/*/bin/nsys", "/opt/nvidia/nsight-systems/*/target-linux-x64/nsys")
 REPO_ROOT = common.EXP_DIR.parent.parent
 PROF_SRC = common.EXP_DIR / "exps" / "csrc" / "cr_decode_prof.cpp"
 
@@ -125,12 +134,64 @@ def make_row(quant: str, depth: int, kv: str, tg: dict | None, ncu: dict | None,
             "bw_bound_ratio": bw_bound_ratio(dram, us, peak)}
 
 
+def find_nsys() -> str | None:
+    """CR_NSYS, else nsys on PATH, else a CUDA / Nsight Systems install dir."""
+    env = os.environ.get("CR_NSYS")
+    if env:
+        return env if os.path.exists(env) else None
+    hit = shutil.which("nsys")
+    if hit:
+        return hit
+    for g in NSYS_GLOBS:
+        found = sorted(glob.glob(g))
+        if found:
+            return found[-1]
+    return None
+
+
+def nsys_profile_cmd(nsys: str, argv: list[str], out_prefix: str) -> list[str]:
+    return [nsys, "profile", "-t", "cuda", "--sample=none", "--cpuctxsw=none", "--cuda-graph-trace=node",
+            "--capture-range=cudaProfilerApi", "--capture-range-end=stop", "-f", "true", "-o", out_prefix, *argv]
+
+
+def nsys_stats_cmd(nsys: str, rep_path: str) -> list[str]:
+    return [nsys, "stats", "-r", "cuda_gpu_kern_sum", "-f", "csv", "--force-export=true", rep_path]
+
+
+def parse_kern_sum(text: str) -> list[dict]:
+    """cuda_gpu_kern_sum CSV (header row has 'Total Time (ns)' and 'Name'; other lines are ignored) -> [{name, time_ns, count}]."""
+    lines = text.splitlines()
+    start = next((i for i, ln in enumerate(lines) if "Total Time (ns)" in ln and "Name" in ln), None)
+    if start is None:
+        return []
+    out = []
+    for r in csv.DictReader(io.StringIO("\n".join(lines[start:]))):
+        try:
+            out.append({"name": r["Name"], "time_ns": float(r["Total Time (ns)"]), "count": int(float(r["Instances"]))})
+        except (KeyError, TypeError, ValueError):
+            continue
+    return out
+
+
+def nsys_buckets(kerns: list[dict], tokens: int) -> dict:
+    """Same buckets as ncu (first match wins, rest in other), time only."""
+    pats = [(n, re.compile(rx, re.IGNORECASE)) for n, rx in BUCKETS.items()]
+    acc = {n: [0.0, 0] for n, _ in pats}
+    acc["other"] = [0.0, 0]
+    for k in kerns:
+        name = next((n for n, p in pats if p.search(k["name"])), "other")
+        acc[name][0] += k["time_ns"]
+        acc[name][1] += k["count"]
+    tot = sum(v[0] for v in acc.values()) or 1.0
+    return {n: {"us_per_token": v[0] / 1000.0 / tokens, "count": v[1], "time_share": v[0] / tot} for n, v in acc.items()}
+
+
 def verdict(rows: list[dict]) -> str | None:
     """One line on bandwidth-bound vs unpack-bound from the depth-0 f16 row."""
-    r = next((x for x in rows if x["depth"] == 0 and x.get("buckets")), None)
+    r = next((x for x in rows if x["depth"] == 0 and (x.get("buckets") or x.get("nsys_buckets"))), None)
     if not r:
         return None
-    b = r["buckets"]
+    b = r.get("buckets") or r["nsys_buckets"]
     unpack = b.get("hadamard", {}).get("time_share", 0) + b.get("act_quant", {}).get("time_share", 0)
     mmv = b.get("mul_mat_vec", {}).get("time_share", 0)
     ratio = r.get("bw_bound_ratio")
@@ -182,6 +243,32 @@ def ncu_split(argv, tokens: int, timeout: float, csv_out: str | None, from_start
     return out
 
 
+def nsys_split(nsys: str, argv: list[str], tokens: int, timeout: float, out_prefix: str) -> dict:
+    """Kernel time per bucket from an nsys CUDA trace of the profiler range. Never raises."""
+    out = {"ok": False, "error": None, "kernels_top": None, "buckets": None, "kernel_us_per_token": None}
+    try:
+        p = subprocess.run(nsys_profile_cmd(nsys, argv, out_prefix), capture_output=True, text=True, timeout=max(1.0, timeout))
+        rep_path = out_prefix + ".nsys-rep"
+        if p.returncode != 0 or not os.path.exists(rep_path):
+            out["error"] = f"nsys profile exit {p.returncode}: {((p.stderr or '') + (p.stdout or ''))[-300:].strip()}"
+            return out
+        st = subprocess.run(nsys_stats_cmd(nsys, rep_path), capture_output=True, text=True, timeout=300)
+    except subprocess.TimeoutExpired:
+        out["error"] = "timeout"
+        return out
+    except OSError as e:
+        out["error"] = f"{type(e).__name__}: {e}"
+        return out
+    kerns = parse_kern_sum(st.stdout)
+    if not kerns:
+        out["error"] = f"nsys stats gave no kernels (exit {st.returncode}): {(st.stderr or '')[-300:].strip()}"
+        return out
+    kerns.sort(key=lambda k: -k["time_ns"])
+    out.update(ok=True, buckets=nsys_buckets(kerns, tokens), kernel_us_per_token=sum(k["time_ns"] for k in kerns) / 1000.0 / tokens,
+               kernels_top=[dict(k, name=k["name"][:160], us_per_token=k["time_ns"] / 1000.0 / tokens) for k in kerns[:15]])
+    return out
+
+
 def raw_path(exp: str, name: str, gpu: str) -> str:
     from infra.results import artifact_path
     return str(artifact_path(exp, name, gpu))
@@ -218,9 +305,15 @@ def run(args) -> int:
         common.write_result(exp, args, {"quant": args.quant, "hf": hf_ids.resolve("bonsai2", args.quant)}, [], notes, False)
         print(f"error: {notes[-1]}", file=sys.stderr)
         return 3
-    tool = build_prof_tool(bin_dir, notes) if ncu_ok else None
+    nsys = None if ncu_ok or args.no_nsys else find_nsys()
+    if not ncu_ok and not args.no_nsys:
+        notes.append(f"kernel split via nsys {nsys}" if nsys else "no ncu counters and no nsys: no kernel split")
+    tool = build_prof_tool(bin_dir, notes) if (ncu_ok or nsys) else None
+    if nsys and tool is None:
+        notes.append("nsys found but cr_decode_prof did not build: no kernel split")
+        nsys = None
     config = {"quant": args.quant, "depths": args.depths, "kv": args.kv, "ncu_depths": args.ncu_depths,
-              "ncu_kv": args.ncu_kv, "ub": UB, "n_gen": N_GEN, "bench_cmd_example": bench_cmd(bin_dir, model, 0, "f16"),
+              "ncu_kv": args.ncu_kv, "nsys": nsys, "nsys_tokens": NSYS_TOKENS, "ub": UB, "n_gen": N_GEN, "bench_cmd_example": bench_cmd(bin_dir, model, 0, "f16"),
               "model_path": model, "hf": hf_info, "buckets": BUCKETS, "peak_gbps": peak, "prof_tool": str(tool) if tool else None,
               "quick": args.quick}
     rows: list[dict] = []
@@ -244,6 +337,19 @@ def run(args) -> int:
             print("[e4] %s depth=%d kv=%s tg=%s tok/s" % (args.quant, depth, kv, row["tg_tok_s"]), flush=True)
     for i, tg in benched:  # then spend the leftover budget on kernel splits
         depth, kv = rows[i]["depth"], rows[i]["kv"]
+        if nsys and depth in args.ncu_depths and kv in args.ncu_kv:
+            if budget.expired(180):
+                rows[i]["nsys_error"] = "skipped: time budget"
+                continue
+            res = nsys_split(nsys, prof_cmd(tool, model, depth, kv, NSYS_TOKENS), NSYS_TOKENS, budget.timeout(1200, reserve_s=60),
+                             raw_path(exp, f"nsys-d{depth}-{kv}", args.gpu))
+            rows[i].update(nsys_buckets=res["buckets"], nsys_kernel_us_per_token=res["kernel_us_per_token"],
+                           nsys_kernels_top=res["kernels_top"], nsys_error=res["error"])
+            if not res["ok"]:
+                notes.append(f"depth {depth} kv {kv} nsys failed: {res['error']}")
+            common.write_partial(exp, args, config, rows, notes, False)
+            print("[e4] nsys %s depth=%d kv=%s kernel us/tok=%s" % (args.quant, depth, kv, res["kernel_us_per_token"]), flush=True)
+            continue
         if not (ncu_ok and depth in args.ncu_depths and kv in args.ncu_kv):
             continue
         if budget.expired(240):
@@ -294,6 +400,7 @@ def parse_args(argv=None):
     ap.add_argument("--kv", type=_strs, default=["f16", "q8_0"])
     ap.add_argument("--ncu-depths", type=_ints, default=[0, 32768])
     ap.add_argument("--ncu-kv", type=_strs, default=["f16", "q8_0"])
+    ap.add_argument("--no-nsys", action="store_true", help="no nsys kernel split when ncu has no counters")
     a = ap.parse_args(argv)
     if a.quick:
         a.depths, a.ncu_depths, a.kv, a.ncu_kv = [0], [0], ["f16"], ["f16"]

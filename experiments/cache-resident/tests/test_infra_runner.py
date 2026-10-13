@@ -196,3 +196,16 @@ def test_manifest_cmd_lookup(tmp_path, monkeypatch):
     assert pod_runner.load_cmd("x", str(m)) == "echo from-manifest"
     assert pod_runner.load_cmd("y", str(m)) is None
     assert pod_runner.load_cmd("x", str(tmp_path / "missing.json")) is None
+
+
+def test_manifest_lists_other_exps_written_by_chained_cmd(results_dir):
+    old = results_dir / "old" / "testgpu" / "x.json"
+    old.parent.mkdir(parents=True)
+    old.write_text("{}")
+    os.utime(old, (time.time() - 3600, time.time() - 3600))
+    cmd = WRITE_CMD + " && " + WRITE_CMD.replace("'t1'", "'t2'")
+    r = run_runner(results_dir, "--exp", "t1", "--cmd", cmd, "--no-serve", "--linger-min", "0")
+    assert r.returncode == 0, r.stdout + r.stderr
+    paths = {f["path"] for f in read(results_dir, "_status/MANIFEST.json")["files"]}
+    assert any(p.startswith("t1/testgpu/") for p in paths) and any(p.startswith("t2/testgpu/") for p in paths)
+    assert not any(p.startswith("old/") or p.startswith("_status/") for p in paths)
