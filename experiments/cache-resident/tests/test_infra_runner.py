@@ -209,3 +209,12 @@ def test_manifest_lists_other_exps_written_by_chained_cmd(results_dir):
     paths = {f["path"] for f in read(results_dir, "_status/MANIFEST.json")["files"]}
     assert any(p.startswith("t1/testgpu/") for p in paths) and any(p.startswith("t2/testgpu/") for p in paths)
     assert not any(p.startswith("old/") or p.startswith("_status/") for p in paths)
+
+
+def test_login_shell_cannot_restore_api_key(results_dir, tmp_path):
+    home = tmp_path / "home"
+    home.mkdir()
+    (home / ".bash_profile").write_text("export RUNPOD_API_KEY=from-profile\n")
+    cmd = "python -c \"import os; assert 'RUNPOD_API_KEY' not in os.environ\""
+    r = run_runner(results_dir, "--exp", "t1", "--cmd", cmd, "--no-serve", "--linger-min", "0", env_extra={"HOME": str(home)})
+    assert r.returncode == 0, r.stdout + r.stderr

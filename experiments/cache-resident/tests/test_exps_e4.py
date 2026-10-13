@@ -207,3 +207,11 @@ def test_run_uses_nsys_split_without_counters(tmp_path, monkeypatch):
     rows, notes = res[-1]
     assert rows[0]["nsys_kernel_us_per_token"] == 9000.0 and rows[2].get("nsys_buckets") is None
     assert any("mul_mat_vec 70%" in n for n in notes)
+
+
+def test_nsys_env_has_no_secrets(monkeypatch):
+    monkeypatch.setenv("RUNPOD_API_KEY", "x")
+    monkeypatch.setenv("HF_TOKEN", "y")
+    monkeypatch.setenv("CR_GPU_TAG", "z")
+    env = e4.scrubbed_env()
+    assert "RUNPOD_API_KEY" not in env and "HF_TOKEN" not in env and env["CR_GPU_TAG"] == "z"

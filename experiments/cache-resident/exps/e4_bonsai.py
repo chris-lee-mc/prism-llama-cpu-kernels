@@ -39,6 +39,7 @@ UB = 2048
 N_GEN = 128
 NCU_TOKENS = 4
 NSYS_TOKENS = 16
+SECRET_ENV_RE = re.compile(r"KEY|TOKEN|SECRET|PASSWORD|CREDENTIAL|RUNPOD_", re.IGNORECASE)
 NSYS_GLOBS = ("/usr/local/cuda*/bin/nsys", "/opt/nvidia/nsight-systems/*/bin/nsys", "/opt/nvidia/nsight-systems/*/target-linux-x64/nsys")
 REPO_ROOT = common.EXP_DIR.parent.parent
 PROF_SRC = common.EXP_DIR / "exps" / "csrc" / "cr_decode_prof.cpp"
@@ -255,22 +256,34 @@ def ncu_split(argv, tokens: int, timeout: float, csv_out: str | None, from_start
     return out
 
 
+def scrubbed_env() -> dict:
+    """Environment without secrets: an nsys report stores the process environment."""
+    return {k: v for k, v in os.environ.items() if not SECRET_ENV_RE.search(k)}
+
+
 def nsys_split(nsys: str, argv: list[str], tokens: int, timeout: float, out_prefix: str) -> dict:
-    """Kernel time per bucket from an nsys CUDA trace of the profiler range. Never raises."""
+    """Kernel time per bucket from an nsys CUDA trace of the profiler range. Never raises. The report files are deleted."""
     out = {"ok": False, "error": None, "kernels_top": None, "buckets": None, "kernel_us_per_token": None}
+    rep_path = out_prefix + ".nsys-rep"
     try:
-        p = subprocess.run(nsys_profile_cmd(nsys, argv, out_prefix), capture_output=True, text=True, timeout=max(1.0, timeout))
-        rep_path = out_prefix + ".nsys-rep"
+        p = subprocess.run(nsys_profile_cmd(nsys, argv, out_prefix), capture_output=True, text=True, timeout=max(1.0, timeout),
+                           env=scrubbed_env())
         if p.returncode != 0 or not os.path.exists(rep_path):
             out["error"] = f"nsys profile exit {p.returncode}: {((p.stderr or '') + (p.stdout or ''))[-300:].strip()}"
             return out
-        st = subprocess.run(nsys_stats_cmd(nsys, rep_path), capture_output=True, text=True, timeout=300)
+        st = subprocess.run(nsys_stats_cmd(nsys, rep_path), capture_output=True, text=True, timeout=300, env=scrubbed_env())
     except subprocess.TimeoutExpired:
         out["error"] = "timeout"
         return out
     except OSError as e:
         out["error"] = f"{type(e).__name__}: {e}"
         return out
+    finally:
+        for ext in (".nsys-rep", ".sqlite"):
+            try:
+                os.remove(out_prefix + ext)
+            except OSError:
+                pass
     kerns = parse_kern_sum(st.stdout)
     if not kerns:
         out["error"] = f"nsys stats gave no kernels (exit {st.returncode}): {(st.stderr or '')[-300:].strip()}"

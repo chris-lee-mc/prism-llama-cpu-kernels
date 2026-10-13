@@ -311,7 +311,8 @@ def main(argv=None) -> int:
     if status == "ok":
         st.phase("running")
         log(f"cmd: {cmd}")
-        code, to = run_logged(["bash", "-lc", cmd], env, logf, remaining(), holder)
+        # a login shell can restore RUNPOD_API_KEY from the host profile, so unset it again inside the shell
+        code, to = run_logged(["bash", "-lc", "unset RUNPOD_API_KEY; " + cmd], env, logf, remaining(), holder)
         if to:
             status, code = "timeout", 124
         elif code != 0:
