@@ -314,15 +314,15 @@ def test_cascade_falls_back_on_no_capacity(env, monkeypatch):
     assert len(launches) == 1 and launches[0]["cloud"] == "SECURE" and launches[0]["price_hr"] == 1.19
 
 
-def test_pro6000_cascade_prefers_maxq_then_workstation(env, monkeypatch):
+def test_pro6000_cascade_prefers_workstation_then_maxq(env, monkeypatch):
     res, led = env
     serve_http(monkeypatch, files={"p0_x/pro6000/r.json": FILE})
     api = FakeAPI(create_errors=["no longer any instances", "no longer any instances", "no longer any instances"])
     man = {"p0_x": dict(MAN["p0_x"], gpus=["pro6000"])}
     assert runpod.launch("p0_x", None, manifest=man, client=api, ledger=led) == 0
     ids = [c["gpuTypeId"] for c in api.calls]
-    assert ids[0].endswith("Max-Q Workstation Edition") and ids[1] == ids[0]
-    assert ids[2].endswith("Blackwell Workstation Edition") and "Max-Q" not in ids[2]
+    assert ids[0].endswith("Blackwell Workstation Edition") and "Max-Q" not in ids[0] and ids[1] == ids[0]
+    assert ids[2].endswith("Max-Q Workstation Edition")  # Server is not in TYPES
     assert ids[3] == ids[2] and len(ids) == 4
 
 

@@ -54,7 +54,7 @@ Phase 1 exit: measured persisting max on 3 GPUs; E1 knee plot with 3090 control;
 
 ## 7. Launch cascade
 
-PRO 6000: try `NVIDIA RTX PRO 6000 Blackwell Max-Q Workstation Edition`, then Workstation, then Server Edition. 5090: community cloud.
+PRO 6000: try `NVIDIA RTX PRO 6000 Blackwell Workstation Edition`, then Server Edition (both 600 W), then Max-Q Workstation (300 W; timings not comparable to the 600 W E4/E5 runs). 5090: community cloud.
 
 ## 8. l2persist sketch (untested)
 

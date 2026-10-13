@@ -44,9 +44,9 @@ def test_peak():
 def test_cascade_order():
     c = gpus.cascade("pro6000")
     assert [x[1] for x in c] == ["COMMUNITY", "SECURE"] * 3
-    assert "Max-Q" in c[0][0] and c[0][0] == c[1][0]
-    assert "Max-Q" not in c[2][0] and "Workstation" in c[2][0]
-    assert "Server" in c[4][0]
+    assert "Max-Q" not in c[0][0] and "Workstation" in c[0][0] and c[0][0] == c[1][0]
+    assert "Server" in c[2][0]
+    assert "Max-Q" in c[4][0]
     assert gpus.cascade("rtx5090") == [("NVIDIA GeForce RTX 5090", "COMMUNITY"), ("NVIDIA GeForce RTX 5090", "SECURE")]
     assert [x[1] for x in gpus.cascade("l40s", "secure")] == ["SECURE"]
     assert [x[1] for x in gpus.cascade("rtx4090", "community")] == ["COMMUNITY"]

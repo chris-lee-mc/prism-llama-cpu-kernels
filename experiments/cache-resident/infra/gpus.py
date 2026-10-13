@@ -27,10 +27,11 @@ _PEAK_GBPS: dict[str, float] = {
 }
 
 RUNPOD_CANDIDATES: dict[str, list[str]] = {
+    # 600 W editions first: E4/E5 timings are from a 600 W Workstation host; Max-Q (300 W) is the fallback
     "pro6000": [
-        "NVIDIA RTX PRO 6000 Blackwell Max-Q Workstation Edition",
         "NVIDIA RTX PRO 6000 Blackwell Workstation Edition",
         "NVIDIA RTX PRO 6000 Blackwell Server Edition",
+        "NVIDIA RTX PRO 6000 Blackwell Max-Q Workstation Edition",
     ],
     "rtx5090": ["NVIDIA GeForce RTX 5090"],
     "rtx4090": ["NVIDIA GeForce RTX 4090"],
