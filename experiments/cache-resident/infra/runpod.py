@@ -30,6 +30,10 @@ MAX_FAILSAFE_MIN = 90
 CAPACITY_HINTS = ("no longer any instances", "no instances", "not available", "unavailable", "out of stock",
                   "capacity", "no gpus", "required specifications", "does not have the resources")
 OUT_OF_STOCK = ("none", "out of stock", "outofstock", "out_of_stock", "unavailable")
+BOOTSTRAP_MIN = 5       # clone, apt, torch install
+LLAMA_BUILD_MIN = 12    # cold ggml-cuda build
+MAX_POD_FAILS = 10      # consecutive pod() errors before the poll gives up
+TERM_TRIES = 36         # x 5 s; terminate is resent every 3rd try
 
 # Indirection so tests can run without sleeping.
 _sleep = time.sleep
@@ -59,12 +63,15 @@ def est_cost(price_hr: float, failsafe_min: int) -> float:
 
 def budget_gate(balance: float, price_hr: float, failsafe_min: int, session_spent: float, cap: float,
                 margin: float = 2.0) -> tuple[bool, str]:
+    """Hard gate: session cap only. Low balance is a warning, the account auto-tops-up."""
     est = est_cost(price_hr, failsafe_min)
-    if balance < est + margin:
-        return False, f"balance ${balance:.2f} < est ${est:.2f} + margin ${margin:.2f}"
     if session_spent + est > cap:
         return False, f"session spend ${session_spent:.2f} + est ${est:.2f} > cap ${cap:.2f}"
-    return True, f"ok: est ${est:.2f}, balance ${balance:.2f}, session ${session_spent:.2f}/{cap:.2f}"
+    bal = "unknown" if balance is None else f"${balance:.2f}"
+    why = f"ok: est ${est:.2f}, balance {bal}, session ${session_spent:.2f}/{cap:.2f}"
+    if balance is not None and balance < est + margin:
+        why += f" WARNING: low balance {bal} < est + ${margin:.2f}"
+    return True, why
 
 
 def session_id_default() -> str:
@@ -147,7 +154,7 @@ cr_term() {{
       runpodctl remove pod "$RUNPOD_POD_ID" >/dev/null 2>&1
     fi
   fi
-  kill -TERM 1
+  kill -TERM -1
 }}
 if [ -e /root/.cr_started ]; then
   echo "container restart detected, terminating"
@@ -157,9 +164,10 @@ if [ -e /root/.cr_started ]; then
 fi
 touch /root/.cr_started
 ( sleep $((CR_FAILSAFE_MIN * 60)); cr_term ) &
-if ! command -v git >/dev/null 2>&1 || ! command -v curl >/dev/null 2>&1; then
+if ! command -v git >/dev/null 2>&1 || ! command -v curl >/dev/null 2>&1 || ! command -v python3 >/dev/null 2>&1; then
   export DEBIAN_FRONTEND=noninteractive
-  apt-get update -qq && apt-get install -y -qq --no-install-recommends git curl ca-certificates
+  apt-get update -qq && apt-get install -y -qq --no-install-recommends git curl ca-certificates \\
+    python3 python3-pip python3-dev build-essential
 fi
 mkdir -p /workspace
 ok=0
@@ -191,8 +199,11 @@ class RunPod:
         import requests
         if not self.api_key:
             raise RuntimeError("RUNPOD_API_KEY is not set")
-        r = requests.post(GRAPHQL_URL, json={"query": query, "variables": variables or {}}, timeout=60,
-                          headers={"Authorization": f"Bearer {self.api_key}", "User-Agent": "cache-resident/1"})
+        try:
+            r = requests.post(GRAPHQL_URL, json={"query": query, "variables": variables or {}}, timeout=60,
+                              headers={"Authorization": f"Bearer {self.api_key}", "User-Agent": "cache-resident/1"})
+        except requests.RequestException as e:
+            raise RuntimeError(f"RunPod request failed: {type(e).__name__}")
         try:
             body = r.json()
         except ValueError:
@@ -218,12 +229,12 @@ class RunPod:
         return self._post(q)["myself"]["pods"] or []
 
     def create_pod(self, *, name, gpu_type_id, cloud, image, env: dict, docker_args: str, disk_gb: int,
-                   ports="8000/http") -> str:
+                   ports="8000/http", min_vcpu: int = 4) -> str:
         q = ("mutation($input: PodFindAndDeployOnDemandInput) { podFindAndDeployOnDemand(input: $input) "
              "{ id desiredStatus costPerHr machineId } }")
         inp = {"cloudType": cloud, "gpuCount": 1, "gpuTypeId": gpu_type_id, "name": name, "imageName": image,
                "dockerArgs": docker_args, "containerDiskInGb": int(disk_gb), "volumeInGb": 0,
-               "minVcpuCount": 4, "minMemoryInGb": 16, "ports": ports,
+               "minVcpuCount": int(min_vcpu), "minMemoryInGb": 16, "ports": ports,
                "env": [{"key": k, "value": str(v)} for k, v in env.items()]}
         d = self._post(q, {"input": inp})
         pod = d.get("podFindAndDeployOnDemand")
@@ -295,6 +306,70 @@ class _Interrupt(BaseException):
     pass
 
 
+class _PodUnknown(Exception):
+    pass
+
+
+_UNKNOWN = object()  # pod() raised: state unknown, not "gone"
+
+
+def _terminate_confirmed(client: RunPod, pod_id) -> bool:
+    """Send terminate (resent every 3rd try and after each failure) until the pod reads gone or TERM_TRIES pass."""
+    resend = True
+    for i in range(TERM_TRIES):
+        if resend or i % 3 == 0:
+            try:
+                client.terminate(pod_id)
+                resend = False
+            except Exception as e:
+                print(f"WARNING: terminate raised: {e}")
+                resend = True
+        try:
+            p = client.pod(pod_id)
+            if p is None or p.get("desiredStatus") in ("TERMINATED", "EXITED"):
+                return True
+        except Exception as e:
+            print(f"WARNING: pod query raised: {e}")
+        _sleep(5)
+    return False
+
+
+def _reap_orphans(client: RunPod, ledger: Ledger, label, exp, key, tid, cl, price, failsafe_min) -> None:
+    """After a failed or interrupted create: terminate and record any live pod that carries our label."""
+    try:
+        found = [x for x in client.pods() if x.get("name") == label and x.get("desiredStatus") not in ("TERMINATED", "EXITED")]
+    except Exception as e:
+        print(f"WARNING: cannot list pods to look for {label}: {e}")
+        return
+    for x in found:
+        pid = x["id"]
+        print(f"WARNING: found orphan pod {pid} ({label}), terminating")
+        ledger.record_launch(pid, exp, key, tid, cl, price, failsafe_min)
+        ok = _terminate_confirmed(client, pid)
+        ledger.record_end(pid, round(price * 5 / 60.0, 4) if ok else round(est_cost(price, failsafe_min), 4))
+
+
+def _get_json(url: str, tries: int = 5, wait: float = 5.0) -> dict | None:
+    """GET url and parse a JSON object. Retry on HTTP error or bad JSON. None when all tries fail."""
+    for i in range(tries):
+        code, body = http_get(url)
+        if code == 200:
+            try:
+                obj = json.loads(body.decode("utf-8"))
+                if isinstance(obj, dict):
+                    return obj
+            except ValueError:
+                pass
+        if i + 1 < tries:
+            _sleep(wait)
+    return None
+
+
+def _is_result_json(path: str, exp: str, key: str) -> bool:
+    parts = pathlib.PurePosixPath(path).parts
+    return len(parts) >= 3 and parts[0] == exp and parts[1] == key and parts[-1].endswith(".json")
+
+
 def _fetch_results(base: str, files: list[dict], dest: pathlib.Path) -> bool:
     """Download every listed file, verify sha256. Returns True when all files are good."""
     all_ok = True
@@ -343,6 +418,16 @@ def launch(exp: str, gpu: str | None = None, *, cmd=None, cloud="any", failsafe_
     if build_llama is None:
         build_llama = bool(ent.get("build_llama"))
     disk_gb = int(ent.get("disk_gb") or 40)
+    # The pod failsafe counts from container start, so bootstrap and the llama build eat into it.
+    need_min = int(ent.get("est_min") or 0) + BOOTSTRAP_MIN + (LLAMA_BUILD_MIN if build_llama else 0)
+    if need_min > failsafe_min - 5:
+        sug = -(-(need_min + 5) // 5) * 5
+        print(f"WARNING: est {need_min} min (command + bootstrap{' + llama build' if build_llama else ''}) "
+              f"does not fit failsafe {failsafe_min} min; the run would likely end as timeout")
+        if not allow_long:
+            print(f"error: refusing; pass --failsafe-min {sug} --allow-long")
+            return 2
+    min_vcpu = 16 if build_llama else 4
     cap = float(os.environ.get("CR_SESSION_CAP_USD", 25))
     ledger = ledger or Ledger()
     env = {"RUNPOD_API_KEY": "<redacted>", "CR_EXP": exp, "CR_FAILSAFE_MIN": failsafe_min,
@@ -398,25 +483,6 @@ def launch(exp: str, gpu: str | None = None, *, cmd=None, cloud="any", failsafe_
 
     run_env = dict(env)
     run_env["RUNPOD_API_KEY"] = client.api_key
-    pod_id, chosen = None, None
-    for key, name, tid, cl, price in plan:
-        label = f"cr-{exp}-{key}-{dt.datetime.now(dt.timezone.utc).strftime('%H%M')}"
-        try:
-            pod_id = client.create_pod(name=label, gpu_type_id=tid, cloud=cl, image=IMAGE, env=run_env,
-                                       docker_args=docker_args(script), disk_gb=disk_gb)
-        except Exception as e:
-            print(f"  create failed for {name} [{cl}]: {e}")
-            if _is_capacity_error(e):
-                continue
-            return 1
-        chosen = (key, name, tid, cl, price)
-        break
-    if not pod_id:
-        print("error: no capacity on any candidate")
-        return 1
-    key, name, tid, cl, price = chosen
-    print(f"created pod {pod_id} ({name} [{cl}] ${price:.2f}/hr)")
-    ledger.record_launch(pod_id, exp, key, tid, cl, price, failsafe_min)
 
     def on_signal(signum, frame):
         raise _Interrupt(f"signal {signum}")
@@ -428,17 +494,66 @@ def launch(exp: str, gpu: str | None = None, *, cmd=None, cloud="any", failsafe_
         except ValueError:
             pass  # not in main thread
 
+    pod_id, chosen, recorded = None, None, False
     t0 = _now()
-    cost_hr = price
+    cost_hr = price = plan[0][4]
     rc = 1
     try:
+        for key, name, tid, cl, price in plan:
+            label = f"cr-{exp}-{key}-{dt.datetime.now(dt.timezone.utc).strftime('%H%M')}"
+            try:
+                pod_id = client.create_pod(name=label, gpu_type_id=tid, cloud=cl, image=IMAGE, env=run_env,
+                                           docker_args=docker_args(script), disk_gb=disk_gb, min_vcpu=min_vcpu)
+            except (_Interrupt, KeyboardInterrupt):
+                _reap_orphans(client, ledger, label, exp, key, tid, cl, price, failsafe_min)
+                raise
+            except Exception as e:
+                print(f"  create failed for {name} [{cl}]: {e}")
+                if _is_capacity_error(e):
+                    continue
+                _reap_orphans(client, ledger, label, exp, key, tid, cl, price, failsafe_min)
+                return 1
+            chosen = (key, name, tid, cl, price)
+            break
+        if not pod_id:
+            print("error: no capacity on any candidate")
+            return 1
+        key, name, tid, cl, price = chosen
+        t0 = _now()
+        cost_hr = price
+        print(f"created pod {pod_id} ({name} [{cl}] ${price:.2f}/hr)")
+        ledger.record_launch(pod_id, exp, key, tid, cl, price, failsafe_min)
+        recorded = True
+
+        fails = [0]
+
+        def poll_pod():
+            """Pod record, or None when the pod is gone. Raises _PodUnknown after MAX_POD_FAILS API errors in a row."""
+            try:
+                p = client.pod(pod_id)
+            except Exception as e:
+                fails[0] += 1
+                print(f"  pod query failed ({fails[0]}/{MAX_POD_FAILS}): {e}")
+                if fails[0] >= MAX_POD_FAILS:
+                    raise _PodUnknown(f"{MAX_POD_FAILS} pod queries failed in a row")
+                return _UNKNOWN
+            fails[0] = 0
+            return p
+
         base = proxy_url(pod_id)
         ready_deadline = t0 + 15 * 60
+        seen_running = False
         while True:
-            p = client.pod(pod_id)
-            if p and p.get("costPerHr"):
-                cost_hr = float(p["costPerHr"])
-            up = bool(p and p.get("desiredStatus") == "RUNNING" and p.get("runtime"))
+            p = poll_pod()
+            if p is not _UNKNOWN:
+                if p and p.get("costPerHr"):
+                    cost_hr = float(p["costPerHr"])
+                seen_running = seen_running or bool(p and p.get("desiredStatus") == "RUNNING")
+                gone = p is None or p.get("desiredStatus") in ("TERMINATED", "EXITED")
+                if gone and (seen_running or _now() - t0 > 60):
+                    print("error: pod is gone before it became ready")
+                    return 1
+            up = bool(p and p is not _UNKNOWN and p.get("desiredStatus") == "RUNNING" and p.get("runtime"))
             if up and http_get(base)[0] == 200:
                 break
             if _now() > ready_deadline:
@@ -451,8 +566,13 @@ def launch(exp: str, gpu: str | None = None, *, cmd=None, cloud="any", failsafe_
         while _now() < deadline:
             code, body = http_get(base + "_status/DONE.json")
             if code == 200:
-                done = json.loads(body.decode("utf-8"))
-                break
+                try:
+                    done = json.loads(body.decode("utf-8"))
+                except ValueError:
+                    done = None  # partial write, poll again
+                if isinstance(done, dict):
+                    break
+                done = None
             code, body = http_get(base + "_status/STATUS.json")
             if code == 200:
                 try:
@@ -462,24 +582,33 @@ def launch(exp: str, gpu: str | None = None, *, cmd=None, cloud="any", failsafe_
                 if ph != phase:
                     print(f"  phase: {ph}")
                     phase = ph
-            p = client.pod(pod_id)
-            if p is None or p.get("desiredStatus") in ("TERMINATED", "EXITED"):
-                print("pod is gone before DONE")
-                break
-            if p.get("costPerHr"):
-                cost_hr = float(p["costPerHr"])
+            p = poll_pod()
+            if p is not _UNKNOWN:
+                if p is None or p.get("desiredStatus") in ("TERMINATED", "EXITED"):
+                    print("pod is gone before DONE")
+                    break
+                if p.get("costPerHr"):
+                    cost_hr = float(p["costPerHr"])
             _sleep(20)
         if done is None:
             print("error: no DONE marker")
             return 1
         print(f"DONE status={done.get('status')} exit_code={done.get('exit_code')}")
-        code, body = http_get(base + "_status/MANIFEST.json")
-        files = json.loads(body.decode("utf-8")).get("files", []) if code == 200 else []
+        man_doc = _get_json(base + "_status/MANIFEST.json")
+        files = man_doc.get("files") if man_doc else None
+        if not isinstance(files, list) or not all(isinstance(f, dict) and "path" in f for f in files):
+            print("error: MANIFEST.json missing or invalid; results not downloaded")
+            return 1
         dest = pathlib.Path(os.environ.get("CR_RESULTS_DIR") or (EXP_DIR / "results"))
         got = _fetch_results(base, files, dest)
         print(f"downloaded {len(files)} files to {dest}" if got else "error: some downloads failed")
-        rc = 0 if (got and done.get("status") == "ok") else 1
-        return rc
+        if done.get("status") == "ok" and not any(_is_result_json(f["path"], exp, key) for f in files):
+            print(f"error: status ok but MANIFEST lists no {exp}/{key}/*.json")
+            return 1
+        return 0 if (got and done.get("status") == "ok") else 1
+    except _PodUnknown as e:
+        print(f"error: {e}; giving up and terminating")
+        return 1
     except (_Interrupt, KeyboardInterrupt) as e:
         print(f"interrupted: {e}")
         return 130
@@ -489,23 +618,18 @@ def launch(exp: str, gpu: str | None = None, *, cmd=None, cloud="any", failsafe_
                 signal.signal(s, signal.SIG_IGN)
             except ValueError:
                 pass
-        wall_h = (_now() - t0) / 3600.0
-        term_ok = False
-        try:
-            client.terminate(pod_id)
-            for _ in range(12):
-                p = client.pod(pod_id)
-                if p is None or p.get("desiredStatus") in ("TERMINATED", "EXITED"):
-                    term_ok = True
-                    break
-                _sleep(5)
-        except Exception as e:
-            print(f"WARNING: terminate raised: {e}")
-        if not term_ok:
-            print(f"WARNING: could not confirm pod {pod_id} is terminated; check the RunPod console now")
-        cost = cost_hr * wall_h
-        ledger.record_end(pod_id, round(cost, 4))
-        print(f"pod {pod_id} terminated={term_ok} wall={wall_h * 60:.1f}min cost~${cost:.3f}")
+        if pod_id:
+            if not recorded:
+                ledger.record_launch(pod_id, exp, chosen[0], chosen[2], chosen[3], chosen[4], failsafe_min)
+            wall_h = (_now() - t0) / 3600.0
+            term_ok = _terminate_confirmed(client, pod_id)
+            if term_ok:
+                cost = cost_hr * wall_h
+            else:
+                print(f"WARNING: could not confirm pod {pod_id} is terminated; check the RunPod console now")
+                cost = est_cost(cost_hr, failsafe_min)  # pod may bill until its own failsafe
+            ledger.record_end(pod_id, round(cost, 4))
+            print(f"pod {pod_id} terminated={term_ok} wall={wall_h * 60:.1f}min cost~${cost:.3f}")
         for s, h in old.items():
             signal.signal(s, h)
 

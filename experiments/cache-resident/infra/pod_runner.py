@@ -67,7 +67,7 @@ def detect_gpu_tag() -> str:
 
 
 def self_terminate() -> None:
-    """Terminate this pod via the RunPod API, then SIGTERM pid 1. No-op off RunPod."""
+    """Terminate this pod via the RunPod API, then SIGTERM all processes but pid 1. No-op off RunPod."""
     pod = os.environ.get("RUNPOD_POD_ID")
     if not pod:
         log("self_terminate: RUNPOD_POD_ID not set, nothing to do")
@@ -81,15 +81,27 @@ def self_terminate() -> None:
                     "Authorization": f"Bearer {key}", "Content-Type": "application/json",
                     "User-Agent": "cache-resident-runner/1"})
                 with urllib.request.urlopen(req, timeout=20) as r:
-                    log(f"podTerminate http {r.status}")
+                    status = r.status
+                    try:
+                        errs = json.loads(r.read().decode("utf-8", "replace")).get("errors")
+                    except ValueError:
+                        errs = None
+                if errs:
+                    # GraphQL errors come back in a 200 body
+                    msg = "; ".join(str(e.get("message")) for e in errs if isinstance(e, dict))
+                    log(f"podTerminate attempt {attempt + 1} API error: {msg[:200]}")
+                    time.sleep(2)
+                    continue
+                log(f"podTerminate http {status}")
                 break
             except Exception as e:
                 log(f"podTerminate attempt {attempt + 1} failed: {type(e).__name__}")
                 time.sleep(2)
     else:
         log("self_terminate: RUNPOD_API_KEY not set")
+    # pid 1 ignores default-disposition signals; -1 reaches the rest so the container exits
     try:
-        os.kill(1, signal.SIGTERM)
+        os.kill(-1, signal.SIGTERM)
     except Exception:
         pass
 

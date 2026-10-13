@@ -1,0 +1,142 @@
+{
+ "p0_smoke": {
+  "cmd": "bash exps/run_p0.sh",
+  "gpus": [
+   "rtx5090",
+   "rtx4090",
+   "rtx3090"
+  ],
+  "est_min": 25,
+  "failsafe_min": 40,
+  "build_llama": false,
+  "disk_gb": 40,
+  "desc": "P0 smoke: persisting-L2 check, GEMV bench, toy hybrid graph, gpu pytest"
+ },
+ "p0_l2": {
+  "cmd": "python3 -m harness.p0_l2_check",
+  "gpus": [
+   "rtx5090",
+   "rtx3090",
+   "pro6000"
+  ],
+  "est_min": 8,
+  "failsafe_min": 40,
+  "build_llama": false,
+  "disk_gb": 40,
+  "desc": "P0.2 persisting-L2 exit check on one GPU"
+ },
+ "e1": {
+  "cmd": "python3 -m exps.e1_sweep",
+  "gpus": [
+   "rtx5090",
+   "pro6000",
+   "rtx3090"
+  ],
+  "est_min": 30,
+  "failsafe_min": 40,
+  "build_llama": false,
+  "disk_gb": 40,
+  "desc": "E1 working-set sweep: ternary GEMV chain, persisting off/0.5/0.75/1.0, ncu hit and DRAM bytes"
+ },
+ "e2_08b": {
+  "cmd": "python3 -m exps.e2_hybrid_bf16 --model 0.8B",
+  "gpus": [
+   "rtx5090"
+  ],
+  "est_min": 30,
+  "failsafe_min": 40,
+  "build_llama": false,
+  "disk_gb": 60,
+  "desc": "E2 Qwen3.5-0.8B BF16 decode vs context, bytes split by diffing contexts"
+ },
+ "e2_2b": {
+  "cmd": "python3 -m exps.e2_hybrid_bf16 --model 2B",
+  "gpus": [
+   "rtx5090"
+  ],
+  "est_min": 30,
+  "failsafe_min": 40,
+  "build_llama": false,
+  "disk_gb": 60,
+  "desc": "E2 Qwen3.5-2B BF16 decode vs context, bytes split by diffing contexts"
+ },
+ "e3": {
+  "cmd": "python3 -m exps.e3_residency",
+  "gpus": [
+   "rtx5090"
+  ],
+  "est_min": 30,
+  "failsafe_min": 40,
+  "build_llama": false,
+  "disk_gb": 60,
+  "desc": "E3 GDN state and LM head residency (bf16/int8/48k heads)"
+ },
+ "e4_pq2": {
+  "cmd": "python3 -m exps.e4_bonsai --quant PQ2_0",
+  "gpus": [
+   "pro6000",
+   "rtx5090"
+  ],
+  "est_min": 35,
+  "failsafe_min": 40,
+  "build_llama": true,
+  "disk_gb": 80,
+  "desc": "E4 Bonsai 2 27B PQ2_0 llama-bench sweep and ncu kernel split"
+ },
+ "e4_ptq1": {
+  "cmd": "python3 -m exps.e4_bonsai --quant PTQ1_0",
+  "gpus": [
+   "pro6000",
+   "rtx5090"
+  ],
+  "est_min": 35,
+  "failsafe_min": 40,
+  "build_llama": true,
+  "disk_gb": 80,
+  "desc": "E4 Bonsai 2 27B PTQ1_0 llama-bench sweep and ncu kernel split"
+ },
+ "e5_base": {
+  "cmd": "python3 -m exps.e5_spec --k 0",
+  "gpus": [
+   "pro6000"
+  ],
+  "est_min": 30,
+  "failsafe_min": 40,
+  "build_llama": true,
+  "disk_gb": 80,
+  "desc": "E5 baseline: Bonsai 2 27B PQ2_0 without speculation, 200 prompts"
+ },
+ "e5_k4": {
+  "cmd": "python3 -m exps.e5_spec --k 4",
+  "gpus": [
+   "pro6000"
+  ],
+  "est_min": 30,
+  "failsafe_min": 40,
+  "build_llama": true,
+  "disk_gb": 80,
+  "desc": "E5 speculative decoding K=4 with Qwen3.5-0.8B BF16 draft"
+ },
+ "e5_k6": {
+  "cmd": "python3 -m exps.e5_spec --k 6",
+  "gpus": [
+   "pro6000"
+  ],
+  "est_min": 30,
+  "failsafe_min": 40,
+  "build_llama": true,
+  "disk_gb": 80,
+  "desc": "E5 speculative decoding K=6 with Qwen3.5-0.8B BF16 draft"
+ },
+ "e5_k8": {
+  "cmd": "python3 -m exps.e5_spec --k 8",
+  "gpus": [
+   "pro6000"
+  ],
+  "est_min": 30,
+  "failsafe_min": 40,
+  "build_llama": true,
+  "disk_gb": 80,
+  "desc": "E5 speculative decoding K=8 with Qwen3.5-0.8B BF16 draft"
+ }
+}

@@ -26,12 +26,21 @@ def test_bootstrap_pinned_content():
     assert re.search(r'\[ "\$\{CR_BUILD_LLAMA:-0\}" = "1" \]', s)
 
 
+def test_bootstrap_installs_toolchain_and_sanity_checks():
+    s = (INFRA / "bootstrap.sh").read_text()
+    for needle in ("python3-dev", "build-essential", "Python.h", "g++", "load_inline", "torch.cuda.is_available()",
+                   "import torch, triton"):
+        assert needle in s, needle
+    assert "sanity:" in s and "MISSING+=" in s
+
+
 def test_requirements_pinned_content():
     s = (INFRA / "requirements-pod.txt").read_text()
-    for needle in ("cuda-python>=12.8,<13", "cupy-cuda12x", "nvidia-ml-py", "pytest", "transformers",
+    for needle in ("cuda-python>=12.8,<13", "cupy-cuda12x", "nvidia-ml-py", "pytest", "transformers==5.19.0",
                    "huggingface_hub[hf_transfer]"):
         assert needle in s
     assert not re.search(r"^kernels\b", s, re.M)
+    assert "transformers: " in (INFRA / "bootstrap.sh").read_text()
 
 
 def test_pod_entry_hands_over_to_runner():

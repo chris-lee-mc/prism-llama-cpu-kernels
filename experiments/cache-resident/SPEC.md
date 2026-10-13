@@ -32,7 +32,7 @@ Scope: code for PLAN.md P0.1-P0.6 and E1-E5. Four units built in parallel by dif
 | CR_GPU_TAG | auto from device name | results helper |
 | CR_GIT_SHA | from `git rev-parse HEAD` | results helper fallback |
 | CR_NCU | auto search | counters |
-| CR_L2_BACKEND | auto (`cuda-python`, then `inline`) | l2persist |
+| CR_L2_BACKEND | auto (`cuda-python`, then `inline`); `auto` = unset | l2persist |
 | CR_REQUIRE_COUNTERS | 0 | runner aborts early with status `no_counters` if ncu probe fails |
 | CR_SESSION_CAP_USD | 25 | budget gate |
 | CR_SESSION_ID | UTC date YYYY-MM-DD | ledger grouping |
@@ -139,10 +139,11 @@ def log_device(dev: int = 0) -> dict                   # prints one line, return
 - Inline fallback: `csrc/l2persist_ext.cpp` (torch/extension.h + cuda_runtime.h, pybind11 functions with int64 ptr/stream args mirroring the API), built via `torch.utils.cpp_extension.load(name="cr_l2persist_ext", ...)`.
 
 ### 3.2 harness/p0_l2_check.py (Phase 0 exit check)
-`python -m harness.p0_l2_check [--mb 64] [--reps 100] [--hit-ratio 1.0] [--no-ncu] [--inner off|on]`
+`python -m harness.p0_l2_check [--mb 64] [--reps 100] [--hit-ratio 1.0] [--no-ncu] [--inner off|on] [--method all|eager|graph-nodes|graph-stream] [--ncu-timeout 300] [--ncu-budget 900]`
 - Buffer of `--mb` MiB fp32; reread kernel `cr_reread` (cupy RawKernel; float4 loads, block partial sums) launched `--reps` times on one stream. Window covers the buffer, clamped to persisting max (record the clamp).
-- Outer mode: for window off/on, time with CUDA events (always) and run itself under ncu (`--inner off|on`) with `kernel_regex="cr_reread"`, `launch_skip=5`. Writes `write_result("p0_l2", None, {...})` with `device_info`, both conditions (us per rep, hit_rate, dram_bytes per rep), `pass`.
-- Pass rule: `hit_on - hit_off >= 0.20` and `dram_on <= 0.5 * dram_off` when `persisting_max >= 0.75 * buffer`; else `"control": true` and pass means `abs(hit_on - hit_off) < 0.05`. If counters unavailable, decide on timing (on >= 1.3x faster) and set `counters_ok: false`.
+- `--method all` (default) repeats the check for eager (stream window), graph-nodes (window on graph kernel nodes) and graph-stream (stream window set before capture, then cleared, so only the window copied into the nodes counts). One verdict per method under `methods`, plus `methods_honored` (passed, non-control). Graph methods record the window read back from a kernel node. Top-level `conditions` / `verdict` are those of the first method; `pass` is true only when every method passes.
+- Outer mode: for window off/on, time with CUDA events (always) and run itself under ncu (`--inner off|on`) with `kernel_regex="cr_reread"`, `launch_skip=5`. Writes `write_result("p0_l2", None, {...})` with `device_info`, both conditions (us per rep, hit_rate, dram_bytes per rep, replay_mode, ncu_cmd), `pass`. A timing-only result (`partial: true`) is written before ncu starts and replaced by the final file; each ncu call is limited by `--ncu-timeout`, all together by `--ncu-budget`.
+- Pass rule: `hit_on - hit_off >= 0.20` and `dram_on <= 0.5 * dram_off` when `persisting_max >= 0.75 * buffer`; else `"control": true` and pass means `abs(hit_on - hit_off) < 0.05 + persisting_max / buffer` (a working window holds up to persisting_max bytes, so that share of re-reads hits legitimately; a plain 0.05 bound fails a correct 3090 run). If counters unavailable, decide on timing (on >= 1.3x faster) and set `counters_ok: false`. Counters taken with kernel replay are flagged (`counters_basis`, `counters_suspect`).
 
 ### 3.3 harness/counters.py (P0.3)
 ```python
@@ -152,7 +153,7 @@ def build_ncu_cmd(argv: list[str], *, kernel_regex=None, nvtx_include=None, laun
 def parse_ncu_csv(text: str) -> list[dict]   # rows: {id, name, hit_sectors, miss_sectors, hit_rate, dram_bytes, time_ns}
 def summarize(rows: list[dict], tokens: int) -> dict   # {hit_rate, dram_bytes_per_token, us_per_token, n_kernels, dram_bytes_total, time_ns_total}
 def bucket(rows: list[dict], buckets: dict[str, str]) -> dict  # name -> {time_ns, dram_bytes, hit_rate, count}; unmatched -> "other"; first regex wins
-def run_ncu(argv, tokens: int, *, kernel_regex=None, nvtx_include=None, launch_skip=0, launch_count=None, env=None, timeout=1800, csv_out: str | None = None) -> dict
+def run_ncu(argv, tokens: int, *, kernel_regex=None, nvtx_include=None, launch_skip=0, launch_count=None, env=None, timeout=1800, csv_out: str | None = None) -> dict   # ncu runs in its own session; timeout or SIGTERM kills the whole group; result also has timed_out
 def probe() -> dict   # profiles a tiny kernel; {"ok": bool, "error": str | None}
 ```
 - Fixed ncu flags: `--csv --page raw --target-processes all --cache-control none --clock-control none --metrics <list>`. `--cache-control none` is mandatory (default flushes L2 and kills the effect we measure). Kernel filter: `-k regex:<re> --kernel-name-base function`. NVTX: `--nvtx --nvtx-include "cr_decode/"`.

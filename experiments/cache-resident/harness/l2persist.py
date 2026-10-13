@@ -1,7 +1,7 @@
 """Persisting-L2 control (PLAN P0.2).
 
 Two backends with the same surface: `cuda-python` (cuda.bindings.runtime) and `inline`
-(torch load() of csrc/l2persist_ext.cpp). CR_L2_BACKEND forces one; default tries cuda-python first.
+(torch load() of csrc/l2persist_ext.cpp). CR_L2_BACKEND forces one; unset or "auto" tries cuda-python first.
 
 Limit and stream window act on the current device. All functions raise RuntimeError("no CUDA device")
 without CUDA; importing this module never needs a GPU.
@@ -174,25 +174,42 @@ class _CudaPythonBackend:
         w = val.accessPolicyWindow
         return [int(w.base_ptr), int(w.num_bytes), int(w.hitProp), int(w.missProp)], float(w.hitRatio)
 
-    def apply_window_to_graph(self, graph, ptr, nbytes, hit_ratio, hit_prop, miss_prop):
+    def _kernel_nodes(self, graph):
         rt = self.rt
         n = self._chk(rt.cudaGraphGetNodes(graph), "cudaGraphGetNodes(count)")
         count_nodes = n[1] if isinstance(n, (list, tuple)) else 0
         if not count_nodes:
-            return 0
+            return []
         res = rt.cudaGraphGetNodes(graph, count_nodes)
         nodes, got = self._chk(res, "cudaGraphGetNodes")
+        out = []
+        for node in list(nodes)[: int(got)]:
+            ntype = self._chk(rt.cudaGraphNodeGetType(node), "cudaGraphNodeGetType")
+            if ntype == rt.cudaGraphNodeType.cudaGraphNodeTypeKernel:
+                out.append(node)
+        return out
+
+    def apply_window_to_graph(self, graph, ptr, nbytes, hit_ratio, hit_prop, miss_prop):
+        rt = self.rt
+        nodes = self._kernel_nodes(graph)
+        if not nodes:
+            return 0
         val = rt.cudaKernelNodeAttrValue()
         self._fill(val.accessPolicyWindow, ptr, nbytes, hit_ratio, hit_prop, miss_prop)
         attr = self._attr_id("kernel")
-        count = 0
-        for node in list(nodes)[: int(got)]:
-            ntype = self._chk(rt.cudaGraphNodeGetType(node), "cudaGraphNodeGetType")
-            if ntype != rt.cudaGraphNodeType.cudaGraphNodeTypeKernel:
-                continue
+        for node in nodes:
             self._chk(rt.cudaGraphKernelNodeSetAttribute(node, attr, val), "cudaGraphKernelNodeSetAttribute")
-            count += 1
-        return count
+        return len(nodes)
+
+    def get_graph_window(self, graph):
+        """([base_ptr, num_bytes, hit_prop, miss_prop], hit_ratio) of the first kernel node, or None."""
+        nodes = self._kernel_nodes(graph)
+        if not nodes:
+            return None
+        val = self._chk(self.rt.cudaGraphKernelNodeGetAttribute(nodes[0], self._attr_id("kernel")),
+                        "cudaGraphKernelNodeGetAttribute")
+        w = val.accessPolicyWindow
+        return [int(w.base_ptr), int(w.num_bytes), int(w.hitProp), int(w.missProp)], float(w.hitRatio)
 
 
 class _InlineBackend:
@@ -238,14 +255,21 @@ class _InlineBackend:
         return int(self.ext.apply_window_to_graph(int(graph), int(ptr), int(nbytes), float(hit_ratio),
                                                   int(hit_prop), int(miss_prop)))
 
+    def get_graph_window(self, graph):
+        r = self.ext.get_graph_window(int(graph))
+        if r is None:
+            return None
+        vals, ratio = r
+        return [int(v) for v in vals], float(ratio)
+
 
 def backend() -> str:
-    """Active backend name: CR_L2_BACKEND if set, else cuda-python when importable, else inline."""
+    """Active backend name: CR_L2_BACKEND if cuda-python or inline, else (unset or "auto") cuda-python when importable, else inline."""
     forced = os.environ.get("CR_L2_BACKEND", "").strip().lower()
     if forced in ("cuda-python", "inline"):
         return forced
-    if forced:
-        raise ValueError("CR_L2_BACKEND must be cuda-python or inline, got %r" % forced)
+    if forced not in ("", "auto"):
+        raise ValueError("CR_L2_BACKEND must be auto, cuda-python or inline, got %r" % forced)
     try:
         from cuda.bindings import runtime  # noqa: F401
     except ImportError:
@@ -311,6 +335,16 @@ def set_stream_window(ptr, nbytes: int | None = None, hit_ratio: float = 1.0, st
 def get_stream_window(stream=None) -> dict:
     """Read back the stream window as the driver reports it."""
     (base, size, hit_prop, miss_prop), ratio = _be().get_stream_window(_stream_handle(stream))
+    return {"base_ptr": base, "num_bytes": size, "hit_ratio": ratio,
+            "hit_prop": _PROP_NAMES.get(hit_prop, str(hit_prop)), "miss_prop": _PROP_NAMES.get(miss_prop, str(miss_prop))}
+
+
+def get_graph_window(graph) -> dict | None:
+    """Read back the window of the first kernel node of a graph (keep_graph template or int cudaGraph_t); None without kernel nodes."""
+    r = _be().get_graph_window(_graph_handle(graph))
+    if r is None:
+        return None
+    (base, size, hit_prop, miss_prop), ratio = r
     return {"base_ptr": base, "num_bytes": size, "hit_ratio": ratio,
             "hit_prop": _PROP_NAMES.get(hit_prop, str(hit_prop)), "miss_prop": _PROP_NAMES.get(miss_prop, str(miss_prop))}
 

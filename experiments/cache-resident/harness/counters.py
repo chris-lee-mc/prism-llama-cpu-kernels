@@ -19,15 +19,18 @@ CLI:
 from __future__ import annotations
 
 import argparse
+import contextlib
 import csv
 import glob
 import json
 import os
 import re
 import shutil
+import signal
 import subprocess
 import sys
 import tempfile
+import threading
 
 METRICS = [
     "lts__t_sectors_lookup_hit.sum",
@@ -234,16 +237,54 @@ def _error_from(text: str, rc: int) -> str:
     return "ncu exit code %d" % rc
 
 
+def _kill_group(proc) -> None:
+    """SIGKILL the whole process group of proc (ncu and the profiled target)."""
+    try:
+        os.killpg(proc.pid, signal.SIGKILL)
+    except OSError:
+        pass
+    try:
+        proc.kill()
+    except OSError:
+        pass
+
+
+def _drain(proc, wait: float = 30.0) -> str:
+    """Collect the output left in the pipes of a killed process and reap it."""
+    try:
+        out, _ = proc.communicate(timeout=wait)
+        return out or ""
+    except (subprocess.TimeoutExpired, OSError, ValueError):
+        return ""
+
+
+@contextlib.contextmanager
+def _term_raises():
+    """Main thread only: SIGTERM raises SystemExit so the ncu group (own session) is killed with us."""
+    old = None
+    if threading.current_thread() is threading.main_thread():
+        def _handler(signum, frame):
+            raise SystemExit(128 + signum)
+        old = signal.signal(signal.SIGTERM, _handler)
+    try:
+        yield
+    finally:
+        if old is not None:
+            signal.signal(signal.SIGTERM, old)
+
+
 def run_ncu(argv, tokens: int, *, kernel_regex=None, nvtx_include=None, launch_skip=0, launch_count=None,
             env=None, timeout=1800, csv_out: str | None = None, extra=(), cwd=None) -> dict:
-    """Run argv under ncu. Returns {ok, error, cmd, rows, summary, csv_path}.
+    """Run argv under ncu. Returns {ok, error, timed_out, cmd, rows, summary, csv_path}.
 
     csv_out: where to save the raw ncu output (stdout+stderr). ok is False with error "ERR_NVGPUCTRPERM"
     when the host denies counters (see module doc for the fallback).
+    ncu runs in its own session; on timeout (or SIGTERM / Ctrl-C) the whole group is killed, so the
+    profiled target cannot outlive ncu and keep using the GPU.
     """
     cmd = build_ncu_cmd(argv, kernel_regex=kernel_regex, nvtx_include=nvtx_include, launch_skip=launch_skip,
                         launch_count=launch_count, extra=extra)
-    res = {"ok": False, "error": None, "cmd": cmd, "rows": [], "summary": None, "csv_path": None}
+    res = {"ok": False, "error": None, "timed_out": False, "cmd": cmd, "rows": [], "summary": None, "csv_path": None}
     if ncu_path() is None:
         res["error"] = "ncu not found (set CR_NCU or install nsight-compute)"
         return res
@@ -251,16 +292,24 @@ def run_ncu(argv, tokens: int, *, kernel_regex=None, nvtx_include=None, launch_s
     if env:
         full_env.update(env)
     try:
-        p = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, errors="replace",
-                           env=full_env, timeout=timeout, cwd=cwd)
-        text, rc = p.stdout or "", p.returncode
-    except subprocess.TimeoutExpired as e:
-        out = e.stdout.decode(errors="replace") if isinstance(e.stdout, bytes) else (e.stdout or "")
-        text, rc = out, -1
-        res["error"] = "timeout after %ss" % timeout
+        proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, errors="replace",
+                                env=full_env, cwd=cwd, start_new_session=True)
     except OSError as e:
         res["error"] = "cannot run ncu: %s" % e
         return res
+    with _term_raises():
+        try:
+            text, _ = proc.communicate(timeout=timeout)
+            text, rc = text or "", proc.returncode
+        except subprocess.TimeoutExpired:
+            _kill_group(proc)
+            text, rc = _drain(proc), -1
+            res["error"] = "timeout after %ss" % timeout
+            res["timed_out"] = True
+        except BaseException:
+            _kill_group(proc)
+            _drain(proc, 5.0)
+            raise
     if csv_out:
         os.makedirs(os.path.dirname(os.path.abspath(csv_out)), exist_ok=True)
         with open(csv_out, "w") as f:

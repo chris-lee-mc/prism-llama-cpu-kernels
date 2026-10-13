@@ -93,6 +93,7 @@ def test_self_terminate_calls_api(monkeypatch):
 
     class Resp:
         status = 200
+        def read(self): return b'{"data": {"podTerminate": null}}'
         def __enter__(self): return self
         def __exit__(self, *a): return False
 
@@ -110,7 +111,25 @@ def test_self_terminate_calls_api(monkeypatch):
     pod_runner.self_terminate()
     assert seen["url"] == "https://api.runpod.io/graphql" and seen["auth"] == "Bearer k9"
     assert 'podTerminate(input: {podId: "pod9"})' in seen["body"]["query"]
-    assert killed and killed[0][0] == 1
+    assert killed and killed[0][0] == -1  # pid 1 drops default signals; -1 reaches the others
+
+
+def test_self_terminate_retries_graphql_errors(monkeypatch):
+    calls = []
+
+    class Resp:
+        status = 200
+        def read(self): return b'{"errors": [{"message": "bad scope"}]}'
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+
+    monkeypatch.setattr(pod_runner.urllib.request, "urlopen", lambda req, timeout=0: calls.append(1) or Resp())
+    monkeypatch.setattr(pod_runner.time, "sleep", lambda s: None)
+    monkeypatch.setenv("RUNPOD_POD_ID", "pod9")
+    monkeypatch.setenv("RUNPOD_API_KEY", "k9")
+    monkeypatch.setattr(pod_runner.os, "kill", lambda *a: None)
+    pod_runner.self_terminate()
+    assert len(calls) == 3
 
 
 def test_require_counters_blocks_cmd(results_dir):

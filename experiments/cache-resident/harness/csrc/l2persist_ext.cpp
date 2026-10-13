@@ -68,8 +68,7 @@ static std::tuple<std::vector<int64_t>, double> get_stream_window(int64_t stream
     return std::make_tuple(out, (double) w.hitRatio);
 }
 
-// set the window on every kernel node of a cudaGraph_t, returns the node count touched
-static int64_t apply_window_to_graph(int64_t graph, int64_t ptr, int64_t nbytes, double hit_ratio, int64_t hit_prop, int64_t miss_prop) {
+static std::vector<cudaGraphNode_t> kernel_nodes(int64_t graph) {
     cudaGraph_t g = (cudaGraph_t) (intptr_t) graph;
     size_t n = 0;
     CR_CHECK(cudaGraphGetNodes(g, nullptr, &n));
@@ -77,20 +76,41 @@ static int64_t apply_window_to_graph(int64_t graph, int64_t ptr, int64_t nbytes,
     if (n > 0) {
         CR_CHECK(cudaGraphGetNodes(g, nodes.data(), &n));
     }
-    cudaKernelNodeAttrValue v;
-    memset(&v, 0, sizeof(v));
-    v.accessPolicyWindow = make_window(ptr, nbytes, hit_ratio, hit_prop, miss_prop);
-    int64_t count = 0;
+    std::vector<cudaGraphNode_t> out;
     for (size_t i = 0; i < n; i++) {
         cudaGraphNodeType t;
         CR_CHECK(cudaGraphNodeGetType(nodes[i], &t));
-        if (t != cudaGraphNodeTypeKernel) {
-            continue;
+        if (t == cudaGraphNodeTypeKernel) {
+            out.push_back(nodes[i]);
         }
-        CR_CHECK(cudaGraphKernelNodeSetAttribute(nodes[i], cudaKernelNodeAttributeAccessPolicyWindow, &v));
-        count++;
     }
-    return count;
+    return out;
+}
+
+// set the window on every kernel node of a cudaGraph_t, returns the node count touched
+static int64_t apply_window_to_graph(int64_t graph, int64_t ptr, int64_t nbytes, double hit_ratio, int64_t hit_prop, int64_t miss_prop) {
+    cudaKernelNodeAttrValue v;
+    memset(&v, 0, sizeof(v));
+    v.accessPolicyWindow = make_window(ptr, nbytes, hit_ratio, hit_prop, miss_prop);
+    std::vector<cudaGraphNode_t> nodes = kernel_nodes(graph);
+    for (cudaGraphNode_t node : nodes) {
+        CR_CHECK(cudaGraphKernelNodeSetAttribute(node, cudaKernelNodeAttributeAccessPolicyWindow, &v));
+    }
+    return (int64_t) nodes.size();
+}
+
+// first kernel node window as ([base_ptr, num_bytes, hit_prop, miss_prop], hit_ratio), or None without kernel nodes
+static py::object get_graph_window(int64_t graph) {
+    std::vector<cudaGraphNode_t> nodes = kernel_nodes(graph);
+    if (nodes.empty()) {
+        return py::none();
+    }
+    cudaKernelNodeAttrValue v;
+    memset(&v, 0, sizeof(v));
+    CR_CHECK(cudaGraphKernelNodeGetAttribute(nodes[0], cudaKernelNodeAttributeAccessPolicyWindow, &v));
+    const cudaAccessPolicyWindow & w = v.accessPolicyWindow;
+    std::vector<int64_t> out = {(int64_t) (intptr_t) w.base_ptr, (int64_t) w.num_bytes, (int64_t) w.hitProp, (int64_t) w.missProp};
+    return py::make_tuple(out, (double) w.hitRatio);
 }
 
 PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
@@ -103,4 +123,5 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
     m.def("set_stream_window", &set_stream_window);
     m.def("get_stream_window", &get_stream_window);
     m.def("apply_window_to_graph", &apply_window_to_graph);
+    m.def("get_graph_window", &get_graph_window);
 }

@@ -35,8 +35,12 @@ FILES = {"p0_x/rtx5090/r.json": FILE}
 
 
 class FakeAPI(RunPod):
-    def __init__(self, balance=50.0, create_errors=(), types=TYPES):
+    def __init__(self, balance=50.0, create_errors=(), types=TYPES, pod_errors=(), term_errors=(), stuck=False):
         super().__init__(api_key="sekrit-key")
+        self.pod_errors = list(pod_errors)    # raised by successive pod() queries
+        self.term_errors = list(term_errors)  # raised by successive terminate calls
+        self.stuck = stuck                    # terminate never takes effect
+        self.pod_queries = 0
         self.balance_v = balance
         self.create_errors = list(create_errors)
         self.types = types
@@ -58,12 +62,22 @@ class FakeAPI(RunPod):
                 raise RuntimeError(self.create_errors.pop(0))
             self.created.append(inp)
             self.alive = True
+            self.name = inp["name"]
             return {"podFindAndDeployOnDemand": {"id": "pod1", "desiredStatus": "RUNNING", "costPerHr": 0.69}}
         if "podTerminate" in query:
             self.terminated.append(variables["id"])
-            self.alive = False
+            if self.term_errors:
+                raise RuntimeError(self.term_errors.pop(0))
+            self.alive = self.stuck
             return {"podTerminate": None}
+        if "myself { pods" in query:
+            if not self.alive:
+                return {"myself": {"pods": []}}
+            return {"myself": {"pods": [{"id": "pod1", "name": self.name, "desiredStatus": "RUNNING"}]}}
         if "pod(input" in query:
+            self.pod_queries += 1
+            if self.pod_errors:
+                raise RuntimeError(self.pod_errors.pop(0))
             if not self.alive:
                 return {"pod": None}
             return {"pod": {"id": "pod1", "desiredStatus": "RUNNING", "costPerHr": 0.69,
@@ -114,14 +128,21 @@ def test_est_cost():
 
 @pytest.mark.parametrize("bal,price,spent,cap,ok", [
     (50, 0.69, 0, 25, True),
-    (2.5, 0.69, 0, 25, False),      # est 0.52 + 2.0 margin > 2.5
-    (2.6, 0.69, 0, 25, True),
+    (2.5, 0.69, 0, 25, True),       # low balance only warns (auto top-up)
+    (0.0, 0.69, 0, 25, True),
     (50, 0.69, 24.9, 25, False),    # cap
     (50, 0.69, 24.4, 25, True),
 ])
 def test_budget_gate(bal, price, spent, cap, ok):
     r, why = budget_gate(bal, price, 40, spent, cap)
     assert r is ok and why
+
+
+def test_budget_gate_low_balance_warning():
+    r, why = budget_gate(1.0, 0.69, 40, 0, 25)
+    assert r and "WARNING" in why
+    assert "WARNING" not in budget_gate(50, 0.69, 40, 0, 25)[1]
+    assert budget_gate(None, 0.69, 40, 0, 25)[0]
 
 
 def test_ledger_math(tmp_path, monkeypatch):
@@ -150,13 +171,22 @@ def test_startup_script_content():
     assert ".cr_started" in s
     assert "CR_FAILSAFE_MIN * 60" in s and "sleep" in s
     assert "git clone --depth 1 -b \"$CR_BRANCH\"" in s and "exp/cache-resident" in s
-    assert "podTerminate" in s and "kill -TERM 1" in s
+    assert "podTerminate" in s and "kill -TERM -1" in s and "kill -TERM 1" not in s
     assert "/workspace/repo" in s and "infra/pod_entry.sh" in s
     assert s.index(".cr_started") < s.index("sleep $((") < s.index("git clone")
     assert s.rstrip().splitlines()[-1].startswith("exec bash")
     s.encode("ascii")
     r = subprocess.run(["bash", "-n"], input=s, text=True, capture_output=True)
     assert r.returncode == 0, r.stderr
+
+
+def test_startup_script_installs_python_before_exec():
+    s = startup_script({})
+    apt = s[s.index("apt-get install"):s.index("mkdir -p /workspace")]
+    for pkg in ("git", "curl", "python3", "python3-pip", "python3-dev", "build-essential"):
+        assert re.search(rf"(?<![\w-]){pkg}(?![\w-])", apt), pkg
+    assert "command -v python3" in s
+    assert s.index("apt-get install") < s.index("exec bash ")
 
 
 def test_startup_script_uses_custom_branch():
@@ -187,7 +217,7 @@ def test_cr_term_function_sends_terminate(tmp_path):
     assert "https://api.runpod.io/graphql" in args and "Authorization: Bearer k" in args
     body = json.loads(args[args.index("-d") + 1])
     assert body["query"] == 'mutation { podTerminate(input: {podId: "abc123"}) }'
-    assert (tmp_path / "kill.out").read_text().strip() == "KILL -TERM 1"
+    assert (tmp_path / "kill.out").read_text().strip() == "KILL -TERM -1"
 
 
 def test_proxy_url():
@@ -265,7 +295,7 @@ def test_cascade_falls_back_on_no_capacity(env, monkeypatch):
 
 def test_pro6000_cascade_prefers_maxq_then_workstation(env, monkeypatch):
     res, led = env
-    serve_http(monkeypatch)
+    serve_http(monkeypatch, files={"p0_x/pro6000/r.json": FILE})
     api = FakeAPI(create_errors=["no longer any instances", "no longer any instances", "no longer any instances"])
     man = {"p0_x": dict(MAN["p0_x"], gpus=["pro6000"])}
     assert runpod.launch("p0_x", None, manifest=man, client=api, ledger=led) == 0
@@ -315,6 +345,63 @@ def test_failed_experiment_still_downloads_and_terminates(env, monkeypatch):
     assert (res / "p0_x" / "rtx5090" / "r.json").exists() and api.terminated == ["pod1"]
 
 
+def test_manifest_fetch_retried(env, monkeypatch):
+    res, led = env
+    serve_http(monkeypatch)
+    real = runpod.http_get
+    n = [0]
+
+    def flaky(url, timeout=20.0):
+        if url.endswith("MANIFEST.json"):
+            n[0] += 1
+            if n[0] < 3:
+                return (502, b"")
+        return real(url, timeout)
+
+    monkeypatch.setattr(runpod, "http_get", flaky)
+    api = FakeAPI()
+    assert runpod.launch("p0_x", "rtx5090", manifest=MAN, client=api, ledger=led) == 0
+    assert n[0] == 3 and (res / "p0_x" / "rtx5090" / "r.json").exists() and api.terminated == ["pod1"]
+
+
+@pytest.mark.parametrize("bad", [(502, b""), (200, b"not json"), (200, b"[1]"), (200, b'{"files": 3}')])
+def test_manifest_unavailable_fails(env, monkeypatch, bad):
+    res, led = env
+    serve_http(monkeypatch)
+    real = runpod.http_get
+    monkeypatch.setattr(runpod, "http_get", lambda url, timeout=20.0: bad if url.endswith("MANIFEST.json") else real(url, timeout))
+    api = FakeAPI()
+    assert runpod.launch("p0_x", "rtx5090", manifest=MAN, client=api, ledger=led) == 1
+    assert api.terminated == ["pod1"]
+
+
+def test_ok_without_result_json_fails(env, monkeypatch):
+    res, led = env
+    serve_http(monkeypatch, files={"p0_x/rtx5090/log.txt": b"x"})
+    api = FakeAPI()
+    assert runpod.launch("p0_x", "rtx5090", manifest=MAN, client=api, ledger=led) == 1
+    assert api.terminated == ["pod1"]
+
+
+def test_bad_done_json_is_polled_again(env, monkeypatch):
+    res, led = env
+    serve_http(monkeypatch)
+    real = runpod.http_get
+    n = [0]
+
+    def torn(url, timeout=20.0):
+        if url.endswith("DONE.json"):
+            n[0] += 1
+            if n[0] == 1:
+                return 200, b'{"exp": '
+        return real(url, timeout)
+
+    monkeypatch.setattr(runpod, "http_get", torn)
+    api = FakeAPI()
+    assert runpod.launch("p0_x", "rtx5090", manifest=MAN, client=api, ledger=led) == 0
+    assert n[0] == 2 and api.terminated == ["pod1"]
+
+
 def test_bad_sha_not_saved(env, monkeypatch):
     res, led = env
     serve_http(monkeypatch)
@@ -338,11 +425,13 @@ def test_path_traversal_skipped(env, monkeypatch):
     assert not (res.parent / "evil.txt").exists()
 
 
-def test_gate_refuses_low_balance(env, monkeypatch):
+def test_low_balance_only_warns(env, monkeypatch, capsys):
     res, led = env
+    serve_http(monkeypatch)
     api = FakeAPI(balance=1.0)
-    assert runpod.launch("p0_x", "rtx5090", manifest=MAN, client=api, ledger=led) == 1
-    assert api.calls == [] and api.terminated == []
+    assert runpod.launch("p0_x", "rtx5090", manifest=MAN, client=api, ledger=led) == 0
+    assert len(api.calls) == 1 and api.terminated == ["pod1"]
+    assert "low balance" in capsys.readouterr().out
 
 
 def test_gate_refuses_session_cap(env, monkeypatch):
@@ -391,9 +480,10 @@ def test_dry_run_creates_nothing(env, capsys):
     assert "sekrit-key" not in out
 
 
-def test_dry_run_reports_gate_refusal(env, capsys):
+def test_dry_run_reports_gate_refusal(env, capsys, monkeypatch):
     res, led = env
-    api = FakeAPI(balance=0.5)
+    monkeypatch.setenv("CR_SESSION_CAP_USD", "0.1")
+    api = FakeAPI()
     assert runpod.launch("p0_x", "rtx5090", dry_run=True, manifest=MAN, client=api, ledger=led) == 1
     assert "REFUSE" in capsys.readouterr().out
 
@@ -464,3 +554,129 @@ def test_terminate_idempotent_and_pod_none():
 
     with pytest.raises(RuntimeError):
         B(api_key="k").terminate("x")
+
+
+# ---- poll resilience, terminate retry, orphans, fit check
+
+def test_transient_pod_errors_do_not_kill_run(env, monkeypatch):
+    res, led = env
+    serve_http(monkeypatch)
+    api = FakeAPI(pod_errors=["RunPod request failed: ConnectionError", "RunPod HTTP 502", "RunPod HTTP 502"])
+    assert runpod.launch("p0_x", "rtx5090", manifest=MAN, client=api, ledger=led) == 0
+    assert (res / "p0_x" / "rtx5090" / "r.json").read_bytes() == FILE
+    assert api.terminated == ["pod1"]
+
+
+def test_pod_errors_give_up_after_n_in_a_row(env, monkeypatch):
+    res, led = env
+    serve_http(monkeypatch, fail=None)
+    monkeypatch.setattr(runpod, "http_get", lambda url, timeout=20.0: (200, b"listing") if url.endswith(".net/") else (404, b""))
+    api = FakeAPI(pod_errors=["boom"] * runpod.MAX_POD_FAILS)
+    assert runpod.launch("p0_x", "rtx5090", manifest=MAN, client=api, ledger=led) == 1
+    assert api.terminated == ["pod1"]
+    assert [json.loads(x)["event"] for x in led.path.read_text().splitlines()] == ["launch", "end"]
+
+
+def test_post_wraps_request_exceptions(monkeypatch):
+    import requests
+
+    def boom(*a, **k):
+        raise requests.ConnectionError("down")
+
+    monkeypatch.setattr(requests, "post", boom)
+    with pytest.raises(RuntimeError, match="ConnectionError"):
+        RunPod(api_key="k")._post("query { x }")
+
+
+def test_terminate_is_retried(env, monkeypatch):
+    res, led = env
+    serve_http(monkeypatch)
+    api = FakeAPI(term_errors=["api down", "api down"])
+    assert runpod.launch("p0_x", "rtx5090", manifest=MAN, client=api, ledger=led) == 0
+    assert api.terminated == ["pod1"] * 3 and not api.alive
+
+
+def test_unconfirmed_terminate_records_worst_case(env, monkeypatch, capsys):
+    res, led = env
+    serve_http(monkeypatch)
+    api = FakeAPI(stuck=True)
+    runpod.launch("p0_x", "rtx5090", manifest=MAN, client=api, ledger=led)
+    assert len(api.terminated) > 1
+    assert "could not confirm" in capsys.readouterr().out
+    end = [json.loads(x) for x in led.path.read_text().splitlines()][-1]
+    assert end["event"] == "end" and end["cost_usd"] == pytest.approx(est_cost(0.69, 40), abs=1e-3)
+
+
+def test_orphan_pod_reaped_after_create_error(env, monkeypatch):
+    res, led = env
+
+    class A(FakeAPI):
+        def create_pod(self, **kw):
+            super().create_pod(**kw)  # pod exists, but the response is lost
+            raise RuntimeError("RunPod request failed: ReadTimeout")
+
+    api = A()
+    assert runpod.launch("p0_x", "rtx5090", manifest=MAN, client=api, ledger=led) == 1
+    assert api.terminated == ["pod1"] and not api.alive
+    ev = [json.loads(x) for x in led.path.read_text().splitlines()]
+    assert [e["event"] for e in ev] == ["launch", "end"] and ev[0]["pod_id"] == "pod1"
+
+
+def test_interrupt_during_create_reaps_orphan(env, monkeypatch):
+    res, led = env
+
+    class A(FakeAPI):
+        def create_pod(self, **kw):
+            super().create_pod(**kw)
+            raise KeyboardInterrupt()
+
+    api = A()
+    assert runpod.launch("p0_x", "rtx5090", manifest=MAN, client=api, ledger=led) == 130
+    assert api.terminated == ["pod1"]
+
+
+def test_ready_loop_stops_when_pod_is_gone(env, monkeypatch, capsys):
+    res, led = env
+    monkeypatch.setattr(runpod, "http_get", lambda url, timeout=20.0: (0, b""))
+
+    class A(FakeAPI):
+        def _post(self, query, variables=None):
+            r = super()._post(query, variables)
+            if "pod(input" in query and self.pod_queries >= 2:
+                self.alive = False
+            return r
+
+    api = A()
+    assert runpod.launch("p0_x", "rtx5090", manifest=MAN, client=api, ledger=led) == 1
+    assert "gone before it became ready" in capsys.readouterr().out
+    assert api.pod_queries < 20
+
+
+def test_launch_refuses_when_est_exceeds_failsafe(env, capsys):
+    res, led = env
+    man = {"e4": dict(MAN["p0_x"], est_min=35, build_llama=True, gpus=["pro6000"])}
+    api = FakeAPI()
+    assert runpod.launch("e4", None, manifest=man, client=api, ledger=led) == 2
+    out = capsys.readouterr().out
+    assert "WARNING" in out and "--allow-long" in out and "--failsafe-min 60" in out
+    assert api.calls == []
+    # the warning is required in a dry run too
+    assert runpod.launch("e4", None, dry_run=True, manifest=man, client=api, ledger=led) == 2
+    assert "WARNING" in capsys.readouterr().out
+
+
+def test_long_failsafe_with_allow_long_launches(env, monkeypatch):
+    res, led = env
+    serve_http(monkeypatch, files={"e4/rtx5090/r.json": FILE})
+    man = {"e4": dict(MAN["p0_x"], est_min=35, build_llama=True, gpus=["rtx5090"])}
+    api = FakeAPI()
+    assert runpod.launch("e4", None, failsafe_min=60, allow_long=True, manifest=man, client=api, ledger=led) == 0
+    assert api.created[0]["minVcpuCount"] == 16
+
+
+def test_min_vcpu_default_without_llama_build(env, monkeypatch):
+    res, led = env
+    serve_http(monkeypatch)
+    api = FakeAPI()
+    assert runpod.launch("p0_x", "rtx5090", manifest=MAN, client=api, ledger=led) == 0
+    assert api.created[0]["minVcpuCount"] == 4

@@ -33,11 +33,20 @@ if [ -f "$STAMP" ] && [ "$(cat "$STAMP" 2>/dev/null)" = "$REQ_HASH" ]; then
 fi
 
 # 1) apt packages
-APT_PKGS=(git curl cmake ninja-build ccache python3-pip python3-venv)
+# python3-dev and build-essential are only Recommends of python3-pip: torch cpp_extension, triton and cmake need them
+APT_PKGS=(git curl cmake ninja-build ccache python3 python3-pip python3-venv python3-dev build-essential)
+have_pyh() {
+  command -v python3 >/dev/null 2>&1 || return 1
+  local inc
+  inc="$(python3 -c 'import sysconfig;print(sysconfig.get_paths()["include"])' 2>/dev/null)" || return 1
+  [ -f "$inc/Python.h" ]
+}
 need_apt=()
 for p in "${APT_PKGS[@]}"; do
   case "$p" in
-    ninja-build) c=ninja ;; python3-pip) c=pip3 ;; python3-venv) c="" ;; *) c="$p" ;;
+    ninja-build) c=ninja ;; python3-pip) c=pip3 ;; python3-venv) c="" ;; build-essential) c=g++ ;;
+    python3-dev) c=""; have_pyh || need_apt+=("$p") ;;
+    *) c="$p" ;;
   esac
   if [ -n "$c" ] && ! command -v "$c" >/dev/null 2>&1; then need_apt+=("$p"); fi
 done
@@ -70,7 +79,23 @@ fi
 # 3) the rest of the python deps
 say "pip install -r requirements-pod.txt"
 "$PY" -m pip install -r "$REQ" || MISSING+=("pip:requirements-pod.txt")
+say "transformers: $("$PY" -c 'import transformers; print(transformers.__version__)' 2>/dev/null || echo missing)"
 "$PY" -c "import triton" 2>/dev/null || "$PY" -m pip install triton || MISSING+=("pip:triton")
+
+# 3b) sanity: torch + CUDA + triton import, and a tiny C++ extension build (needs Python.h and g++)
+if ! "$PY" -c 'import torch, triton; assert torch.cuda.is_available()' >/dev/null 2>&1; then
+  say "sanity: torch/triton import or cuda.is_available failed"
+  MISSING+=("sanity:torch-triton-cuda")
+fi
+if ! TORCH_EXTENSIONS_DIR="$(mktemp -d)" "$PY" - >/dev/null 2>&1 <<'PYEOF'
+from torch.utils.cpp_extension import load_inline
+m = load_inline("cr_probe", cpp_sources="int cr_probe() { return 7; }", functions=["cr_probe"])
+assert m.cr_probe() == 7
+PYEOF
+then
+  say "sanity: cpp_extension.load_inline failed (Python.h or g++ missing?)"
+  MISSING+=("sanity:cpp-extension")
+fi
 
 # 4) Nsight Compute
 find_ncu() {

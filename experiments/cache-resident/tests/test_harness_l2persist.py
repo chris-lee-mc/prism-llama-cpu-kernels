@@ -66,7 +66,11 @@ def test_backend_selection(monkeypatch):
     with pytest.raises(ValueError):
         l2.backend()
     monkeypatch.delenv("CR_L2_BACKEND")
-    assert l2.backend() in ("cuda-python", "inline")
+    auto = l2.backend()
+    assert auto in ("cuda-python", "inline")
+    for v in ("auto", "AUTO", " auto "):
+        monkeypatch.setenv("CR_L2_BACKEND", v)
+        assert l2.backend() == auto
 
 
 @pytest.mark.skipif(HAS_CUDA, reason="checks the no-GPU path")
@@ -122,7 +126,14 @@ class FakeBE:
 
     def apply_window_to_graph(self, graph, ptr, nbytes, ratio, hp, mp):
         self.calls.append(("graph", graph, ptr, nbytes, ratio, hp, mp))
+        self.node_window = [ptr, nbytes, hp, mp], ratio
         return self.graph_nodes
+
+    node_window = None
+
+    def get_graph_window(self, graph):
+        self.calls.append(("get_graph", graph))
+        return self.node_window
 
 
 @pytest.fixture
@@ -172,6 +183,14 @@ def test_persist_context_order_and_cleanup_on_error(fake):
     assert [c[0] for c in fake.calls][-3:] == ["set_window", "reset", "set_limit"] and fake.limit == 0
 
 
+def test_get_graph_window_readback(fake):
+    assert l2.get_graph_window(1234) is None
+    l2.apply_window_to_graph(1234, 0xC000, MIB, 0.5)
+    w = l2.get_graph_window(types.SimpleNamespace(raw_cuda_graph=lambda: 1234))
+    assert w == {"base_ptr": 0xC000, "num_bytes": MIB, "hit_ratio": 0.5, "hit_prop": "persisting", "miss_prop": "streaming"}
+    assert fake.calls[-1] == ("get_graph", 1234)
+
+
 def test_apply_window_to_graph_args(fake):
     n = l2.apply_window_to_graph(1234, 0xC000, 100 * MIB, 0.9)
     assert n == 3
@@ -216,6 +235,13 @@ def _stub_rt(node_types):
     rt.cudaGraphGetNodes = get_nodes
     rt.cudaGraphNodeGetType = lambda n: (0, node_types[nodes.index(n)])
     rt.cudaGraphKernelNodeSetAttribute = lambda n, a, v: (rt.set_calls.append((n, a, v.accessPolicyWindow)) or (0,))
+    def get_attr(n, a):
+        w = types.SimpleNamespace(base_ptr=0xE000, num_bytes=123, hitRatio=0.25, hitProp=2, missProp=1)
+        rt.get_calls.append((n, a))
+        return (0, types.SimpleNamespace(accessPolicyWindow=w))
+
+    rt.get_calls = []
+    rt.cudaGraphKernelNodeGetAttribute = get_attr
     rt.cudaStreamSetAttribute = lambda s, a, v: (rt.set_calls.append((s, a, v.accessPolicyWindow)) or (0,))
     return rt
 
@@ -234,6 +260,14 @@ def test_cudapython_graph_only_kernel_nodes():
     w = rt.set_calls[0][2]
     assert (w.base_ptr, w.num_bytes, w.hitRatio, w.hitProp, w.missProp) == (0xD000, 4 * MIB, 0.5, 2, 1)
     assert rt.set_calls[0][1] == "attr_k"
+
+
+def test_cudapython_get_graph_window_first_kernel_node():
+    rt = _stub_rt(["memcpy", "K", "K"])
+    vals, ratio = _stub_backend(rt).get_graph_window(7)
+    assert vals == [0xE000, 123, 2, 1] and ratio == 0.25
+    assert rt.get_calls == [("n1", "attr_k")]
+    assert _stub_backend(_stub_rt(["memcpy"])).get_graph_window(7) is None
 
 
 def test_cudapython_graph_empty_and_stream_attr():
@@ -289,7 +323,7 @@ def test_inline_source_covers_api():
     text = open(os.path.join(EXP, "harness", "csrc", "l2persist_ext.cpp")).read()
     for sym in ["cudaDevAttrMaxPersistingL2CacheSize", "cudaDevAttrMaxAccessPolicyWindowSize", "cudaLimitPersistingL2CacheSize",
                 "cudaStreamAttributeAccessPolicyWindow", "cudaCtxResetPersistingL2Cache", "cudaGraphKernelNodeSetAttribute",
-                "cudaKernelNodeAttributeAccessPolicyWindow", "cudaGraphNodeTypeKernel"]:
+                "cudaKernelNodeAttributeAccessPolicyWindow", "cudaGraphNodeTypeKernel", "cudaGraphKernelNodeGetAttribute"]:
         assert sym in text, sym
 
 
@@ -338,6 +372,9 @@ def test_gpu_graph_nodes(be_name, monkeypatch):
     try:
         n = l2.apply_window_to_graph(g, x, hit_ratio=1.0)
         assert n >= 2
+        w = l2.get_graph_window(g)
+        assert w["num_bytes"] == x.numel() * 4 and w["base_ptr"] == x.data_ptr()
+        assert w["hit_prop"] == "persisting" and w["miss_prop"] == "streaming" and w["hit_ratio"] == pytest.approx(1.0)
         g.instantiate()
         g.replay()
         torch.cuda.synchronize()

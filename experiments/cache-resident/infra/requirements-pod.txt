@@ -7,6 +7,6 @@ numpy
 matplotlib
 requests
 pytest
-transformers
+transformers==5.19.0
 accelerate
 huggingface_hub[hf_transfer]

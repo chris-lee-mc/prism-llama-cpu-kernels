@@ -2,6 +2,7 @@ import json
 import os
 import subprocess
 import sys
+import time
 import types
 
 import pytest
@@ -138,14 +139,39 @@ def test_build_ncu_cmd_flags(tmp_path, monkeypatch):
     assert plain[-1] == "a"
 
 
-def _fake_run(monkeypatch, text, rc):
-    calls = []
+class _FakeProc:
+    """Popen stand-in: communicate() raises TimeoutExpired for the first `hang` calls."""
+
+    def __init__(self, text, rc, hang=0):
+        self.text, self.returncode, self.hang, self.pid, self.killed = text, rc, hang, 4242, False
+
+    def communicate(self, timeout=None):
+        if self.hang > 0:
+            self.hang -= 1
+            raise subprocess.TimeoutExpired("ncu", timeout, output=b"partial")
+        return self.text, None
+
+    def kill(self):
+        self.killed = True
+
+
+class _Calls(list):
+    procs = None
+
+    def __init__(self):
+        super().__init__()
+        self.procs = []
+
+
+def _fake_run(monkeypatch, text, rc, hang=0):
+    calls = _Calls()
 
     def fake(cmd, **kw):
         calls.append((cmd, kw))
-        return types.SimpleNamespace(stdout=text, returncode=rc)
+        calls.procs.append(_FakeProc(text, rc, hang))
+        return calls.procs[-1]
 
-    monkeypatch.setattr(counters.subprocess, "run", fake)
+    monkeypatch.setattr(counters.subprocess, "Popen", fake)
     return calls
 
 
@@ -159,6 +185,7 @@ def test_run_ncu_success(tmp_path, monkeypatch):
     assert r["summary"]["dram_bytes_per_token"] == pytest.approx((16.78e6 + 1.5e9) / 2)
     assert r["csv_path"] == str(out) and out.read_text() == SCALED
     assert calls[0][1]["env"]["X"] == "1" and calls[0][1]["cwd"] == str(tmp_path)
+    assert calls[0][1]["start_new_session"] is True and r["timed_out"] is False
 
 
 def test_run_ncu_perm_error(tmp_path, monkeypatch):
@@ -179,12 +206,53 @@ def test_run_ncu_other_failures(tmp_path, monkeypatch):
     r = counters.run_ncu(["true"], 1)
     assert not r["ok"] and "no kernels" in r["error"]
 
-    def boom(cmd, **kw):
-        raise subprocess.TimeoutExpired(cmd, 1, output=b"partial")
-
-    monkeypatch.setattr(counters.subprocess, "run", boom)
+def test_run_ncu_timeout_kills_group(tmp_path, monkeypatch):
+    _fake_ncu(tmp_path, monkeypatch)
+    killed = []
+    monkeypatch.setattr(counters.os, "killpg", lambda pid, sig: killed.append((pid, sig)))
+    calls = _fake_run(monkeypatch, "partial output\n", 0, hang=1)
     r = counters.run_ncu(["true"], 1, timeout=1)
-    assert not r["ok"] and "timeout" in r["error"]
+    assert not r["ok"] and "timeout" in r["error"] and r["timed_out"] is True
+    assert killed == [(4242, counters.signal.SIGKILL)] and calls.procs[0].killed
+
+
+def test_run_ncu_timeout_kills_profiled_child(tmp_path, monkeypatch):
+    # fake ncu starts a long-running child like the profiled target; the child must die with the timeout
+    f = tmp_path / "ncu"
+    pidfile = tmp_path / "child.pid"
+    f.write_text("#!/bin/sh\nsleep 300 &\necho $! > %s\nwait\n" % pidfile)
+    f.chmod(0o755)
+    monkeypatch.setenv("CR_NCU", str(f))
+    r = counters.run_ncu(["true"], 1, timeout=2)
+    assert r["timed_out"] is True and not r["ok"]
+    pid = int(pidfile.read_text())
+    for _ in range(50):
+        try:
+            os.kill(pid, 0)
+        except ProcessLookupError:
+            break
+        time.sleep(0.1)
+    else:
+        os.kill(pid, 9)
+        pytest.fail("profiled child survived the ncu timeout")
+
+
+def test_run_ncu_sigterm_becomes_exit(tmp_path, monkeypatch):
+    _fake_ncu(tmp_path, monkeypatch)
+    killed = []
+    monkeypatch.setattr(counters.os, "killpg", lambda pid, sig: killed.append(pid))
+
+    class Term(_FakeProc):
+        def communicate(self, timeout=None):
+            if not killed:
+                os.kill(os.getpid(), counters.signal.SIGTERM)
+            return "", None
+
+    monkeypatch.setattr(counters.subprocess, "Popen", lambda cmd, **kw: Term("", 0))
+    old = counters.signal.getsignal(counters.signal.SIGTERM)
+    with pytest.raises(SystemExit):
+        counters.run_ncu(["true"], 1)
+    assert killed == [4242] and counters.signal.getsignal(counters.signal.SIGTERM) == old
 
 
 def test_run_ncu_no_binary(monkeypatch):
