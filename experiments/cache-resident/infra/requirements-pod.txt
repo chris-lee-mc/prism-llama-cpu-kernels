@@ -1,0 +1,12 @@
+# Installed by bootstrap.sh after torch (torch comes from the cu128 index there).
+# Do not add the PyPI package "kernels"; the local kernels/ package must win.
+cuda-python>=12.8,<13
+cupy-cuda12x
+nvidia-ml-py
+numpy
+matplotlib
+requests
+pytest
+transformers
+accelerate
+huggingface_hub[hf_transfer]
