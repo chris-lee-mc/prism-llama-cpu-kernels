@@ -89,7 +89,8 @@ if [ -z "$NCU" ] && [ "$IS_ROOT" = "1" ] && command -v apt-get >/dev/null 2>&1; 
 fi
 if [ -n "$NCU" ]; then
   say "ncu: $NCU"
-  if [ "$IS_ROOT" = "1" ] && [ ! -e /usr/local/bin/ncu ]; then ln -sf "$NCU" /usr/local/bin/ncu; fi
+  NCU_LINK="${CR_NCU_LINK:-/usr/local/bin/ncu}"
+  if [ "$IS_ROOT" = "1" ] && [ ! -e "$NCU_LINK" ]; then ln -sf "$NCU" "$NCU_LINK"; fi
 else
   say "ncu not found"
   MISSING+=("ncu")

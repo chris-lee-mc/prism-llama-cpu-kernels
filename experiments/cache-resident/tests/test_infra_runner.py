@@ -147,7 +147,7 @@ def test_serve_done_json(results_dir):
             env.pop(k)
     env.update({"CR_RESULTS_DIR": str(results_dir), "CR_GPU_TAG": "testgpu"})
     p = subprocess.Popen([sys.executable, str(RUNNER), "--exp", "t6", "--cmd", "echo hi", "--serve",
-                          "--port", "0", "--linger-min", "0.25"], cwd=str(EXP_DIR), env=env,
+                          "--port", "0", "--linger-min", "0.1"], cwd=str(EXP_DIR), env=env,
                          stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
     try:
         body = None

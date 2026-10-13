@@ -8,7 +8,7 @@ without CUDA; importing this module never needs a GPU.
 
 Graph capture: a stream window set before capture is copied into captured kernel nodes. Or build the
 graph with keep_graph=True and call apply_window_to_graph() before graph.instantiate(). Which one the
-driver honors on sm_120 is decided on the GPU (p0_l2_check --graph-method / E1 --window-method).
+driver honors on sm_120 is decided on the GPU (p0_l2_check --method, E1 --window-method).
 """
 from __future__ import annotations
 
@@ -199,11 +199,15 @@ class _InlineBackend:
     name = "inline"
 
     def __init__(self):
-        from torch.utils.cpp_extension import load
+        from torch.utils.cpp_extension import CUDA_HOME, load
 
+        home = os.environ.get("CUDA_HOME") or os.environ.get("CUDA_PATH") or CUDA_HOME or "/usr/local/cuda"
         src = os.path.join(os.path.dirname(os.path.abspath(__file__)), "csrc", "l2persist_ext.cpp")
-        self.ext = load(name="cr_l2persist_ext", sources=[src], with_cuda=True,
-                        extra_cflags=["-O2"], verbose=bool(os.environ.get("CR_L2_VERBOSE")))
+        # plain C++ build: only cudart is needed, so no nvcc and no arch flags
+        self.ext = load(name="cr_l2persist_ext", sources=[src], extra_cflags=["-O2"],
+                        extra_include_paths=[os.path.join(home, "include")],
+                        extra_ldflags=["-L" + os.path.join(home, "lib64"), "-lcudart", "-Wl,-rpath," + os.path.join(home, "lib64")],
+                        verbose=bool(os.environ.get("CR_L2_VERBOSE")))
 
     def max_persisting_bytes(self, dev):
         return int(self.ext.max_persisting_bytes(dev))
