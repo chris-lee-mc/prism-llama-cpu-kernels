@@ -1,22 +1,29 @@
 """R1: the pre-E6 measurements in one pod session: (a) draft agreement, (b) full E5 matrix, (c) per-step overhead.
 
-  python -m exps.fetch_models --models pq2,draft_bf16,draft_q8_0 && python -m exps.r1 [--parts a,b,c] [--budget-min 37]
+  python -m exps.fetch_models --models pq2,draft_bf16,draft_q8_0 --timeout-min 6 && python -m exps.r1 [--parts a,b,c] [--budget-min 29]
 
 Parts run in the order b, a, c: a builds its text from the target-alone outputs of b.
 b  exps.e5_spec matrix: category-balanced fixed-seed prompts, one llama-server per config: target alone, draft-simple K=4
-   (control, as in E5), K=4 with target backend sampling (-bs), K=2/3, K=4 with the post-hoc PTQ1_0 draft, and ngram-mod /
-   ngram-map-k (fork defaults and short variants) on the code categories. The number of prompts N is fixed up front from a
-   per-prompt cost model so that all configs fit the part budget (e5_spec.plan_n); base runs exactly N prompts and every other
-   config a subset. Rows keep the output text. Per category: acceptance r (and alpha for draft-simple), tok/s, speedup with a
+   (control, as in E5), K=4 with target backend sampling (-bs), K=4 with the post-hoc PTQ1_0 draft, and ngram-mod /
+   ngram-map-k (fork defaults and short variants) on the code categories. K=2/3 exist (--configs) but are not default: they
+   cost about 20% of the part and wait for a follow-up pod. The number of prompts N is fixed up front from a per-prompt cost
+   model so that all configs fit the part budget (e5_spec.plan_n); base runs N prompts and every other config a subset. Base and
+   the n-gram configs also run extra code_fix / refactor prompts past the N-prefix (--code-floor per category, default 20), so
+   criterion 3 reaches n >= 15 whatever N is. Rows keep the output text. Per category: acceptance r (and alpha for draft-simple), tok/s, speedup with a
    bootstrap 95% interval against target alone, and greedy output equality, all on prompts both runs finished.
    ngram-mod keeps its token pool across requests on one server (cleared at 25% occupancy), so a prompt sees what earlier
    prompts of the same server left; the code-only configs build a different pool than a full run would. Recorded, not removed.
+   Rollback path: need_n_rs_seq() (common.h) gives the target context n_rs_seq = 0 for ngram-mod / ngram-map-k, so a hybrid
+   (GDN) target takes the KV-checkpoint path (save at every drafting step, restore and replay on partial acceptance), which
+   draft-simple (n_rs_seq = K) does not pay. Each server log's `n_rs_seq` INFO line is parsed into checks.rollback_path and
+   checks.checkpoint_replay; criterion 3 is then a lower bound on n-gram speedup (a go is provisional, see ngram_decision).
 a  exps.r1_agree: llama-perplexity KL against Bonsai 2 27B PQ2_0 for the Qwen3.5-0.8B draft in BF16, Q8_0 and a post-hoc
    PTQ1_0 (llama-quantize on the pod): top-1 agreement and mean KL on a fixed 8192-token text. Primary text: the chat-templated
    E5 prompts with the target's own greedy outputs from part b (the distribution alpha is measured on); second text: raw repo code.
 c  exps.r1_step: one nsys capture of ~20 K=4 steps (plain k4 config), split by stream role into verify, draft re-eval, draft
    steps, copies and idle, parsed to JSON, then compared with the unprofiled step time of part b (step_wall_check).
-Time: every part gets a share of --budget-min (weights 6 : 26 : 5, unused time rolls forward) and the pod deadline caps it
+Time: the pod failsafe is 55 min: bootstrap with the cold build ~14, downloads <= 6 (fetch_models --timeout-min 6), r1 29, end
+reserve 5. Every part gets a share of --budget-min (weights 6 : 26 : 5, unused time rolls forward) and the pod deadline caps it
 all. Partial results are written to raw/partial.json after every config and every ten prompts, and a run cut by SIGTERM
 still writes its result (the notes say which part was cut).
 Result: results/r1/<gpu>/<stamp>.json with data.agree, data.e5, data.step and data.verdict (inputs of the E6 go/no-go).
@@ -39,13 +46,17 @@ from exps import common, e4_bonsai, e4_pdl, e5_spec, make_prompts, r1_agree, r1_
 EXP = "r1"
 WEIGHTS = {"a": 6.0, "b": 26.0, "c": 5.0}
 PART_ORDER = "bac"
-DEFAULT_TOTAL_MIN = 37.0
+DEFAULT_TOTAL_MIN = 29.0   # 55 min failsafe - 5 reserve - ~14 bootstrap and build - <= 6 downloads
 END_RESERVE_S = 25.0
 NEEDS = {"a": ("llama-perplexity", "llama-quantize"), "b": ("llama-server",), "c": ("llama-server",)}
 SECRET_ENV_RE = e4_bonsai.SECRET_ENV_RE
 E6_THRESHOLDS = {"overhead_ms": 2.0, "agreement": 0.5, "ptq1_alpha_drop": 0.05, "ngram_speedup": 1.15,
                  "min_n_category": e5_spec.MIN_N_CATEGORY, "step_wall_tol": 0.10}
 NGRAM_CONFIGS = ("ngram_mod", "ngram_map_k", "ngram_mod_short", "ngram_map_k_short")
+NGRAM_ROLLBACK_NOTE = ("the n-gram types get n_rs_seq = 0 in need_n_rs_seq() (common.h), so a hybrid target runs the KV-checkpoint "
+                       "path with a replay of the target pass on every partial acceptance, which draft-simple does not pay; the "
+                       "n-gram speedup here is a lower bound, and a c3 go is provisional until n-gram is measured with rollback "
+                       "(need_n_rs_seq extended to the n-gram types in a test build)")
 NGRAM_STATE_NOTE = ("ngram-mod keeps its token pool across requests on one server (cleared at 25% occupancy, seeded by the "
                     "warm-up request), so results depend on prompt order and the code-only configs see a different pool than a "
                     "full-category run would")
@@ -112,6 +123,16 @@ def _ngram_cells(e5: dict) -> tuple[dict, list[str]]:
     return cells, [c for c in asked if c not in summ]
 
 
+def _ngram_rollback(e5: dict) -> dict:
+    """{config: rollback info} of the n-gram configs from the server log checks, and the overall checkpoint_replay flag."""
+    summ = e5.get("summary") or {}
+    per = {name: {k: (summ[name]["checks"] or {}).get(k) for k in ("n_rs_seq_target", "rollback_path", "checkpoint_replay")}
+           for name in NGRAM_CONFIGS if (summ.get(name) or {}).get("checks")}
+    flags = [v["checkpoint_replay"] for v in per.values()]
+    replay = True if any(f is True for f in flags) else (False if flags and all(f is False for f in flags) else None)
+    return {"by_config": per, "checkpoint_replay": replay}
+
+
 def ngram_decision(e5: dict) -> dict:
     """Criterion 3 from the n-gram cells. A cell decides only with n >= MIN_N_CATEGORY and a bootstrap interval; the decision
     uses the interval lower bound, never the largest of the noisy point estimates.
@@ -119,6 +140,8 @@ def ngram_decision(e5: dict) -> dict:
       go             every asked cell is decided, none has CI lower >= 1.15 and no point estimate reaches 1.15.
       straddles      a point estimate reaches 1.15 but its interval includes less.
       insufficient_n a cell has too few prompts (or its config did not run): no decision.
+    On the KV-checkpoint path (checkpoint_replay true, or unknown) every speedup is a lower bound: a no_go stands, a go is
+    provisional (out["provisional"]) until n-gram is measured with rollback.
     """
     thr, min_n = E6_THRESHOLDS["ngram_speedup"], E6_THRESHOLDS["min_n_category"]
     cells, missing = _ngram_cells(e5)
@@ -126,6 +149,10 @@ def ngram_decision(e5: dict) -> dict:
                  "best_speedup": max((c["speedup"] for c in cells.values()), default=None)}
     weak = [k for k, c in cells.items() if c["n"] < min_n or not c["ci95"]]
     strong = {k: c for k, c in cells.items() if k not in weak}
+    rb = _ngram_rollback(e5)
+    out["rollback"] = rb["by_config"]
+    out["checkpoint_replay"] = rb["checkpoint_replay"]
+    out["speedup_is"] = "lower bound on n-gram speedup" if rb["checkpoint_replay"] is not False else "n-gram speedup"
     out["weak_cells"] = weak
     out["best_ci_lower"] = max((c["ci95"][0] for c in strong.values()), default=None)
     if not cells:
@@ -138,6 +165,9 @@ def ngram_decision(e5: dict) -> dict:
         out.update(status="straddles", ngram_ge_1p15=None, go=None)
     else:
         out.update(status="go", ngram_ge_1p15=False, go=True)
+    out["provisional"] = out["status"] == "go" and rb["checkpoint_replay"] is not False
+    if out["provisional"]:
+        out["provisional_note"] = NGRAM_ROLLBACK_NOTE
     return out
 
 
@@ -149,7 +179,8 @@ def verdict(doc: dict) -> dict:
        backend sampling (k4_tbs against k4, same prompts) from part b.
     c2 0.8B top-1 agreement >= 0.5 and post-hoc PTQ1_0 within 0.05 of BF16 (measured alpha of the k4_ptq1 run when there is one,
        else the KL proxy). The teacher-forced value sits next to the K=4 alpha of part b as a calibration of the proxy.
-    c3 n-gram speculation gives < 1.15x on code_fix and refactor (go) or >= 1.15x (no-go), see ngram_decision.
+    c3 n-gram speculation gives < 1.15x on code_fix and refactor (go) or >= 1.15x (no-go), see ngram_decision. Measured on
+       the KV-checkpoint path, so a go is provisional (a lower bound on n-gram speedup).
     """
     out: dict = {"thresholds": E6_THRESHOLDS, "host": doc.get("host")}
     st = doc.get("step") or {}
@@ -240,15 +271,17 @@ def run_e5(*, args, bin_dir, target: str, drafts: dict, budget_s: float, notes: 
             notes.append(f"e5: {c['name']} skipped, no {c['draft']} draft GGUF")
             continue
         cfgs.append(c)
-    plan = e5_spec.plan_n(cfgs, prompts, budget_s)
+    plan = e5_spec.plan_n(cfgs, prompts, budget_s, code_floor=args.code_floor)
     main = prompts[:plan["n"]]
+    extra = e5_spec.code_extra(prompts, plan["n"], args.code_floor)
     if not plan["fits"]:
         notes.append(f"e5: the matrix does not fit {budget_s:.0f} s even at {plan['n']} prompts (expected {plan['est_s']:.0f} s)")
     if plan["min_code_category"] < e5_spec.MIN_N_CATEGORY:
         notes.append(f"e5: {plan['min_code_category']} prompts per code category (< {e5_spec.MIN_N_CATEGORY}): criterion 3 cannot be decided")
     runs: dict = {}
-    out: dict = {"seed": args.seed, "order": [p["id"] for p in prompts], "n_main": plan["n"], "plan": plan, "n_predict": args.n_predict,
-                 "configs": [c["name"] for c in cfgs], "runs": runs, "summary": {}, "pairs": {}, "state_note": NGRAM_STATE_NOTE}
+    out: dict = {"seed": args.seed, "order": [p["id"] for p in prompts], "n_main": plan["n"], "n_extra": len(extra), "plan": plan, "n_predict": args.n_predict,
+                 "configs": [c["name"] for c in cfgs], "runs": runs, "summary": {}, "pairs": {}, "state_note": NGRAM_STATE_NOTE,
+                 "rollback_note": NGRAM_ROLLBACK_NOTE}
     t_end = time.monotonic() + budget_s
     last_save = [0.0]
 
@@ -264,11 +297,11 @@ def run_e5(*, args, bin_dir, target: str, drafts: dict, budget_s: float, notes: 
             notes.append(f"e5: time budget used up; {[c['name'] for c in cfgs[i:]]} skipped")
             break
         base_ids = {r["id"] for r in (runs.get("base") or {}).get("rows", []) if "error" not in r}
-        ps = select_for(cfg, main, base_ids)
+        ps = select_for(cfg, main, base_ids, extra)
         if not ps:
             notes.append(f"e5: {cfg['name']} has no prompts")
             continue
-        costs = [e5_spec.cost_s(cfg, len(ps))] + [e5_spec.cost_s(c, len(e5_spec.select_prompts(c, main))) for c in cfgs[i + 1:]]
+        costs = [e5_spec.cost_s(cfg, len(ps))] + [e5_spec.cost_s(c, len(e5_spec.select_prompts(c, main, extra))) for c in cfgs[i + 1:]]
         share = e5_spec.time_shares(costs, left)[0]
         runs[cfg["name"]] = {"name": cfg["name"], "spec_type": cfg["spec_type"], "k": cfg["k"], "draft": cfg["draft"], "rows": [],
                              "planned": len(ps), "partial": True}
@@ -296,11 +329,11 @@ def run_e5(*, args, bin_dir, target: str, drafts: dict, budget_s: float, notes: 
     return out
 
 
-def select_for(cfg: dict, main: list[dict], base_ids: set) -> list[dict]:
-    """Prompts of one config: base takes all main prompts, the others only those that base finished."""
+def select_for(cfg: dict, main: list[dict], base_ids: set, extra: list[dict] = ()) -> list[dict]:
+    """Prompts of one config: base takes all main and extra prompts, the others only those that base finished."""
     if cfg["name"] == "base":
-        return main
-    ps = e5_spec.select_prompts(cfg, main)
+        return e5_spec.select_prompts(cfg, main, extra)
+    ps = e5_spec.select_prompts(cfg, main, extra)
     return [p for p in ps if p["id"] in base_ids] if base_ids else ps
 
 
@@ -321,6 +354,10 @@ def config_notes(name: str, res: dict) -> list[str]:
         out.append(f"e5 {name}: backend sampling lines in the server log: {ck['backend_sampling_problems']}")
     if ck.get("kv_checkpoint_fallback"):
         out.append(f"e5 {name}: server fell back to KV checkpoints (partial acceptance replays the target pass)")
+    if name in NGRAM_CONFIGS and ck.get("checkpoint_replay") is not False:
+        out.append(f"e5 {name}: rollback_path={ck.get('rollback_path')} (n_rs_seq={ck.get('n_rs_seq')}); {NGRAM_ROLLBACK_NOTE}")
+    elif ck.get("rollback_path") == "checkpoint":
+        out.append(f"e5 {name}: target n_rs_seq = 0, so partial acceptance replays the target pass")
     return out
 
 
@@ -415,7 +452,7 @@ def run(args) -> int:
     total = common.Budget(args.budget_min)
     secrets = secret_values()
     config = {"parts": parts, "part_order": PART_ORDER, "budget_min": args.budget_min, "weights": WEIGHTS, "seed": args.seed,
-              "limit": args.limit, "n_predict": args.n_predict, "configs": args.configs, "variants": args.variants, "quick": args.quick,
+              "limit": args.limit, "code_floor": args.code_floor, "n_predict": args.n_predict, "configs": args.configs, "variants": args.variants, "quick": args.quick,
               "thresholds": E6_THRESHOLDS, "prompts_file": str(args.prompts), "step_config": args.step_config, "models": {}}
     doc: dict = {"agree": None, "e5": None, "step": None, "host": None}
 
@@ -525,7 +562,10 @@ def parse_args(argv=None):
     ap.add_argument("--seed", type=int, default=e5_spec.SEED)
     ap.add_argument("--n-predict", type=int, default=192)
     ap.add_argument("--prompts", default=str(make_prompts.DEFAULT_OUT))
-    ap.add_argument("--configs", type=_names, default=[c["name"] for c in e5_spec.matrix_configs()])
+    ap.add_argument("--code-floor", type=int, default=e5_spec.CODE_FLOOR,
+                    help="code_fix / refactor prompts per category that base and the n-gram configs run whatever N is (0 = none)")
+    ap.add_argument("--configs", type=_names, default=[c["name"] for c in e5_spec.matrix_configs() if c["default"]],
+                    help="default leaves out k2 and k3 (follow-up pod)")
     ap.add_argument("--variants", type=_names, default=list(r1_agree.VARIANTS))
     ap.add_argument("--step-config", default="k4", help="draft-simple config of the nsys capture (k4 or k4_tbs)")
     ap.add_argument("--allow-power-cap", action="store_true", help="a power cap below default is a note, not a skip of parts b and c")
@@ -543,6 +583,7 @@ def parse_args(argv=None):
     a.budget_min = a.budget_min or (8.0 if a.quick else DEFAULT_TOTAL_MIN)
     if a.quick:
         a.limit, a.n_predict = min(a.limit, 8), min(a.n_predict, 32)
+    a.code_floor = max(a.code_floor, 0)
     return a
 
 
@@ -559,7 +600,8 @@ def plan_json(a) -> dict:
                       "base_cmd": r1_agree.perplexity_cmd(bin_dir, "<pq2.gguf>", "<text>", "<logprobs>", False),
                       "kl_cmd": r1_agree.perplexity_cmd(bin_dir, "<draft.gguf>", "<text>", "<logprobs>", True),
                       "quantize_cmd": r1_agree.quantize_cmd(bin_dir, "<draft-bf16.gguf>", "<out.gguf>", "PTQ1_0")},
-            "e5": {"seed": a.seed, "n_prompts": len(prompts), "n_predict": a.n_predict, "plan": e5_spec.plan_n(cfgs, prompts, b_s) if b_s else None,
+            "e5": {"seed": a.seed, "n_prompts": len(prompts), "n_predict": a.n_predict, "code_floor": a.code_floor,
+                   "plan": e5_spec.plan_n(cfgs, prompts, b_s, code_floor=a.code_floor) if b_s else None,
                    "configs": [{"name": c["name"], "desc": c["desc"], "prompt_s": c["prompt_s"], "frac": c["frac"], "categories": c["categories"],
                                 "draft": c["draft"], "cmd": e5_spec.config_cmd(bin_dir, "<pq2.gguf>", f"<{c['draft']}.gguf>", c)} for c in cfgs]},
             "step": {"config": a.step_config, "server_cmd": e5_spec.config_cmd(bin_dir, "<pq2.gguf>", "<draft.gguf>", step),

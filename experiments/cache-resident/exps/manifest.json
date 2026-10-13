@@ -175,14 +175,14 @@
   "desc": "E5 step cost: Bonsai 2 27B PQ2_0 verify batch cost for widths 1-9 (llama-bench -p W -n 0 -d 512), the Qwen3.5-0.8B draft decode cost and draft batch cost for widths 1-9 (BF16, Q8_0; the draft re-eval of each verify batch); break-even acceptance per K with and without the re-eval term"
  },
  "r1": {
-  "cmd": "python3 -m exps.fetch_models --models pq2,draft_bf16,draft_q8_0 --timeout-min 12 && python3 -m exps.r1",
+  "cmd": "python3 -m exps.fetch_models --models pq2,draft_bf16,draft_q8_0 --timeout-min 6 && python3 -m exps.r1 --budget-min 29",
   "gpus": [
    "pro6000"
   ],
-  "est_min": 43,
-  "failsafe_min": 65,
+  "est_min": 35,
+  "failsafe_min": 55,
   "build_llama": true,
   "disk_gb": 80,
-  "desc": "R1 pre-E6 measurements on one PRO 6000: (b) E5 matrix on N fixed-seed prompts sized from a cost model: target alone, draft-simple K=4 (control), K=4 with target backend sampling (-bs), K=2/3, K=4 with the post-hoc PTQ1_0 draft, ngram-mod / ngram-map-k on the code categories (per-category r, alpha, tok/s, speedup with bootstrap CI, output equality); (a) Qwen3.5-0.8B BF16/Q8_0/post-hoc PTQ1_0 top-1 agreement and KL vs Bonsai 2 27B PQ2_0 (llama-perplexity, 8192 tokens, E5 chat text built from part b outputs); (c) one nsys capture of ~20 K=4 steps split by stream role into verify, draft re-eval, draft steps, copies and idle; needs --allow-long (est 43 = downloads ~6 + r1 37; with clone and cold CUDA build ~14 the pod runs ~58 of the 65 failsafe)"
+  "desc": "R1 pre-E6 measurements on one PRO 6000: (b) E5 matrix on N fixed-seed prompts sized from a cost model, plus extra code_fix/refactor prompts (20 per category) for base and the n-gram configs: target alone, draft-simple K=4 (control), K=4 with target backend sampling (-bs), K=4 with the post-hoc PTQ1_0 draft, ngram-mod / ngram-map-k on the code categories (per-category r, alpha, tok/s, speedup with bootstrap CI, output equality, rollback path from the n_rs_seq log line; K=2/3 are opt-in via --configs); (a) Qwen3.5-0.8B BF16/Q8_0/post-hoc PTQ1_0 top-1 agreement and KL vs Bonsai 2 27B PQ2_0 (llama-perplexity, 8192 tokens, E5 chat text built from part b outputs); (c) one nsys capture of ~20 K=4 steps split by stream role into verify, draft re-eval, draft steps, copies and idle; needs --allow-long (failsafe 55 = clone, apt, torch and cold CUDA build ~14 (850 s measured) + downloads <= 6 (fetch_models --timeout-min 6) + r1 29 + end reserve 5; est 35 = downloads 6 + r1 29)"
  }
 }

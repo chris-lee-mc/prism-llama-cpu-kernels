@@ -6,6 +6,7 @@ import re
 import sqlite3
 import stat
 import sys
+import time
 
 import pytest
 
@@ -229,6 +230,43 @@ def test_plan_n_fits_the_budget_and_is_category_balanced():
     assert sel == prompts[:20]
 
 
+def test_code_floor_keeps_the_code_cells_above_the_minimum_at_any_n():
+    prompts = make_prompts.shuffled(make_prompts.load(), e5_spec.SEED, stratify=True)
+    cfgs = [c for c in e5_spec.matrix_configs() if c["default"]]
+    for budget in (700.0, 1079.0, 1205.0, 1540.0):
+        pl = e5_spec.plan_n(cfgs, prompts, budget, code_floor=e5_spec.CODE_FLOOR)
+        assert pl["fits"] and pl["est_s"] <= 0.9 * budget
+        assert all(v >= e5_spec.CODE_FLOOR for v in pl["per_code_category"].values())
+        assert pl["min_code_category"] >= e5_spec.MIN_N_CATEGORY
+        extra = e5_spec.code_extra(prompts, pl["n"], e5_spec.CODE_FLOOR)
+        assert len(extra) == pl["n_extra"] and all(p["category"] in e5_spec.CODE_CATS for p in extra)
+        assert not {p["id"] for p in extra} & {p["id"] for p in prompts[:pl["n"]]}
+        by = {c["name"]: c for c in cfgs}
+        assert pl["per_config"]["base"] == pl["n"] + pl["n_extra"] and pl["per_config"]["k4"] == pl["n"]       # k4 stays category balanced
+        assert pl["per_config"]["ngram_mod"] == sum(pl["per_code_category"].values()) and by["base"]["extra_code"] and not by["k4"]["extra_code"]
+    # without the floor the code cells shrink with the budget: the failure this guards against
+    assert e5_spec.plan_n(cfgs, prompts, 1079.0)["min_code_category"] < e5_spec.MIN_N_CATEGORY
+    assert e5_spec.code_extra(prompts, 200, 20) == [] and e5_spec.code_extra(prompts, 10, 0) == []
+
+
+def test_k2_k3_are_opt_in_and_the_pod_budget_decides_criterion_3(monkeypatch):
+    """Worst-case pod timeline of the manifest: bootstrap with build 850 s + clone 60 s + downloads at their timeout."""
+    names = {c["name"] for c in e5_spec.matrix_configs() if not c["default"]}
+    assert names == {"k2", "k3"} and not names & set(r1.parse_args([]).configs) and r1.parse_args(["--configs", "base,k2"]).configs == ["base", "k2"]
+    m = json.loads((EXP / "exps" / "manifest.json").read_text())["r1"]
+    fetch_s = float(re.search(r"--timeout-min (\d+)", m["cmd"]).group(1)) * 60
+    monkeypatch.setenv("CR_START_EPOCH", str(time.time() - (850 + 60 + fetch_s)))
+    monkeypatch.setenv("CR_FAILSAFE_MIN", str(m["failsafe_min"]))
+    a = r1.parse_args([])
+    total = common.Budget(a.budget_min)
+    assert 25 * 60 < total.left() <= a.budget_min * 60            # the failsafe caps r1 a little below its budget, no more
+    b_s = r1.part_budget_s(total.left(), "b", list("bac"))
+    cfgs = [c for c in e5_spec.matrix_configs() if c["name"] in a.configs]
+    prompts = make_prompts.shuffled(make_prompts.load(a.prompts), a.seed, stratify=True)
+    pl = e5_spec.plan_n(cfgs, prompts, b_s, code_floor=a.code_floor)
+    assert pl["fits"] and pl["min_code_category"] >= r1.E6_THRESHOLDS["min_n_category"] and pl["n"] >= 100
+
+
 def test_time_shares_follow_cost_and_part_weights():
     cfgs = e5_spec.matrix_configs()[:3]
     sh = e5_spec.time_shares([e5_spec.cost_s(c, 100) for c in cfgs], 500.0)
@@ -291,6 +329,27 @@ def test_log_flags_and_backend_sampling_report():
     assert e5_spec.log_flags("all fine") == {"backend_sampling_problems": [], "kv_checkpoint_fallback": False}
     r = e5_spec.parse_completion({"tokens_predicted": 3, "generation_settings": {"backend_sampling": True}, "timings": {}})
     assert r["bs_flag"] is True and e5_spec.parse_completion({"tokens_predicted": 3, "timings": {}})["bs_flag"] is None
+
+
+def test_rollback_flags_read_the_n_rs_seq_info_line():
+    pad = "llama_context: n_rs_seq              = "
+    ng = e5_spec.rollback_flags(f"x\n{pad}0\nllama_context: n_outputs_max         = 0\n", "ngram-mod")
+    assert ng == {"n_rs_seq": [0], "n_rs_seq_target": 0, "rollback_path": "checkpoint", "checkpoint_replay": True}
+    ds = e5_spec.rollback_flags(f"{pad}4\n{pad}0\n", "draft-simple")                # target first, draft context second
+    assert ds["rollback_path"] == "in_batch" and ds["checkpoint_replay"] is False and ds["n_rs_seq"] == [4, 0] and ds["n_rs_seq_target"] == 4
+    assert e5_spec.rollback_flags(f"{pad}0\n", "none")["rollback_path"] == "none"
+    assert e5_spec.rollback_flags(f"{pad}0\n", "none")["checkpoint_replay"] is False
+    unk = e5_spec.rollback_flags("llama_context: n_rs_seq=4 requested but model does not support rollback\n", "ngram-map-k")
+    assert unk["rollback_path"] == "unknown" and unk["checkpoint_replay"] is None and unk["n_rs_seq"] == []      # DEBUG line is not the INFO line
+
+
+def test_server_log_head_is_kept_after_a_long_run(tmp_path):
+    srv = e5_spec.Server([sys.executable, "-c", "pass"], str(tmp_path / "s.log"))
+    srv.proc.wait()
+    srv.log.write("llama_context: n_rs_seq              = 0\n" + "request line\n" * 100000)
+    text = srv.head_tail(head=1000, tail=1000)
+    srv.stop()
+    assert len(text) < 2100 and e5_spec.rollback_flags(text, "ngram-mod")["checkpoint_replay"] is True
 
 
 def test_step_residual_against_the_cost_model():
@@ -593,6 +652,29 @@ def test_ngram_decision_uses_the_ci_lower_bound_and_needs_n():
     assert both["status"] == "no_go"
 
 
+def _ng_rb(replay, ci=(0.9, 1.1), sp=1.0):
+    d = _ng(_cell(sp, ci[0], ci[1], 16), _cell(1.0, 0.9, 1.1, 16))
+    if replay is not None:
+        d["checks"] = {"n_rs_seq_target": 0 if replay else 4, "rollback_path": "checkpoint" if replay else "in_batch", "checkpoint_replay": replay}
+    return d
+
+
+def test_ngram_decision_marks_the_checkpoint_path():
+    """ngram-mod / ngram-map-k run on the KV-checkpoint replay path in this fork: their speedup is a lower bound."""
+    go = r1.ngram_decision({"configs": ["ngram_mod"], "summary": {"ngram_mod": _ng_rb(True)}})
+    assert go["status"] == "go" and go["go"] is True and go["checkpoint_replay"] is True and go["provisional"] is True
+    assert go["speedup_is"] == "lower bound on n-gram speedup" and "need_n_rs_seq" in go["provisional_note"]
+    assert go["rollback"]["ngram_mod"] == {"n_rs_seq_target": 0, "rollback_path": "checkpoint", "checkpoint_replay": True}
+    sure = r1.ngram_decision({"configs": ["ngram_mod"], "summary": {"ngram_mod": _ng_rb(True, (1.2, 1.6), 1.4)}})
+    assert sure["status"] == "no_go" and sure["provisional"] is False                # a lower bound that clears 1.15 stands
+    firm = r1.ngram_decision({"configs": ["ngram_mod"], "summary": {"ngram_mod": _ng_rb(False)}})
+    assert firm["status"] == "go" and firm["provisional"] is False and firm["speedup_is"] == "n-gram speedup" and "provisional_note" not in firm
+    unknown = r1.ngram_decision({"configs": ["ngram_mod"], "summary": {"ngram_mod": _ng_rb(None)}})
+    assert unknown["checkpoint_replay"] is None and unknown["provisional"] is True      # no n_rs_seq line: cannot rule the penalty out
+    mixed = r1.ngram_decision({"configs": ["ngram_mod", "ngram_map_k"], "summary": {"ngram_mod": _ng_rb(False), "ngram_map_k": _ng_rb(True)}})
+    assert mixed["checkpoint_replay"] is True and mixed["provisional"] is True
+
+
 def test_verdict_inputs():
     ok = _cell(1.0, 0.9, 1.1, 16)
     doc = {"step": {"analysis": {"ok": True, "split_mode": "stream", "median_ms": {"wall": 21.0, "non_compute": 4.0, "c1_removable": 3.0, "c1_floor": 2.5}},
@@ -651,6 +733,10 @@ class H(BaseHTTPRequestHandler):
         self._send({{"content": text, "tokens_predicted": 100, "timings": t, "stop_type": "limit",
                     "generation_settings": {{"backend_sampling": tbs}}}})
 print("srv: speculative decoding enabled: " + spec, flush=True)
+n_rs = 4 if spec == "draft-simple" else 0
+print("llama_context: n_rs_seq              = %d" % n_rs, flush=True)
+if spec == "draft-simple":
+    print("llama_context: n_rs_seq              = 0", flush=True)
 HTTPServer(("127.0.0.1", port), H).serve_forever()
 """
 
@@ -823,6 +909,12 @@ def test_r1_end_to_end_with_fakes(pod, monkeypatch):
     assert s["k4"]["all"]["speedup"] == pytest.approx(1.2) and s["k4_tbs"]["all"]["speedup"] == pytest.approx(1.5)
     assert s["k4"]["all"]["r"] == pytest.approx(0.2) and 0.3 < s["k4"]["all"]["alpha"] < 0.5 and s["k4"]["all"]["speedup_ci95"]
     assert s["ngram_mod"]["all"]["alpha"] is None and s["ngram_mod"]["n_paired"] == 2          # code categories only
+    ck = {n: s[n]["checks"] for n in ("base", "k4", "k4_tbs", "ngram_mod", "ngram_map_k")}
+    assert ck["ngram_mod"]["rollback_path"] == "checkpoint" and ck["ngram_mod"]["checkpoint_replay"] is True and ck["ngram_mod"]["n_rs_seq"] == [0]
+    assert ck["k4"]["rollback_path"] == "in_batch" and ck["k4"]["checkpoint_replay"] is False and ck["k4"]["n_rs_seq"] == [4, 0]
+    assert ck["base"]["rollback_path"] == "none" and s["ngram_map_k"]["steps_count_replays"] and not s["k4"]["steps_count_replays"]
+    assert any("ngram_mod: rollback_path=checkpoint" in n and "lower bound" in n for n in d["notes"])
+    assert not any("k4: rollback_path" in n for n in d["notes"])
     assert s["k4"]["all"]["text_equal_frac"] == 1.0
     cmds = {n: e5["runs"][n]["cmd"] for n in e5["runs"]}
     assert "-bs" in cmds["k4_tbs"] and "-bs" not in cmds["k4"] and not any("draft-backend-sampling" in a for c in cmds.values() for a in c)
@@ -842,6 +934,8 @@ def test_r1_end_to_end_with_fakes(pod, monkeypatch):
     assert v["c1_overhead"]["target_backend_sampling_reported"] is True
     assert v["c2_agreement"]["ptq1_within_0p05"] is False and v["c2_agreement"]["calibration"]["e5_k4_alpha"] == s["k4"]["all"]["alpha"]
     assert v["c3_ngram"]["status"] in ("insufficient_n", "go", "straddles", "no_go")
+    assert v["c3_ngram"]["checkpoint_replay"] is True and v["c3_ngram"]["rollback"]["ngram_mod"]["rollback_path"] == "checkpoint"
+    assert v["c3_ngram"]["speedup_is"] == "lower bound on n-gram speedup" and e5["rollback_note"]
     text = json.dumps(doc)
     assert "hf_secretsecret123" not in text and "rpa_secretsecret456" not in text
     assert not list(pod.rglob("*.nsys-rep")) and not list(pod.rglob("*.sqlite")) and not list((pod / "results").rglob("*.bin"))
@@ -908,7 +1002,9 @@ def test_r1_sigterm_still_writes_the_result_and_names_the_cut_part(pod, monkeypa
 def test_r1_dry_run_and_args(capsys):
     assert r1.main(["--dry-run"]) == 0
     plan = json.loads(capsys.readouterr().out)
-    assert plan["exp"] == "r1" and len(plan["e5"]["configs"]) == len(e5_spec.matrix_configs()) and plan["e5"]["n_prompts"] == 200
+    default = [c["name"] for c in e5_spec.matrix_configs() if c["default"]]
+    assert plan["exp"] == "r1" and [c["name"] for c in plan["e5"]["configs"]] == default and plan["e5"]["n_prompts"] == 200
+    assert "k2" not in default and "k3" not in default and plan["e5"]["code_floor"] == e5_spec.CODE_FLOOR
     assert plan["parts"] == ["b", "a", "c"] and plan["e5"]["plan"]["fits"] and plan["e5"]["plan"]["min_code_category"] >= 15
     assert plan["agree"]["quantize_cmd"][-1] == "PTQ1_0" and plan["step"]["nsys_profile"][:2] == ["nsys", "profile"] and plan["step"]["config"] == "k4"
     assert "-bs" in next(c["cmd"] for c in plan["e5"]["configs"] if c["name"] == "k4_tbs")

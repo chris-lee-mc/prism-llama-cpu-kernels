@@ -33,8 +33,8 @@ MAX_FAILSAFE_MIN = 90
 CAPACITY_HINTS = ("no longer any instances", "no instances", "not available", "unavailable", "out of stock",
                   "capacity", "no gpus", "required specifications", "does not have the resources")
 OUT_OF_STOCK = ("none", "out of stock", "outofstock", "out_of_stock", "unavailable")
-BOOTSTRAP_MIN = 5       # clone, apt, torch install
-LLAMA_BUILD_MIN = 12    # cold ggml-cuda build
+BOOTSTRAP_MIN = 4       # clone, apt, torch install
+LLAMA_BUILD_MIN = 11    # cold ggml-cuda build (bootstrap with build took 850 s on the last PRO 6000 pod)
 MAX_POD_FAILS = 10      # consecutive pod() errors before the poll gives up
 TERM_TRIES = 36         # x 5 s; terminate is resent every 3rd try
 

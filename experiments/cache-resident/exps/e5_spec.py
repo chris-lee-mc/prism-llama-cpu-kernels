@@ -9,7 +9,8 @@ mismatch; llama.cpp allows a small vocab size difference) the run is recorded as
 repeated with `--spec-type ngram-simple`, clearly labelled.
 R1 (exps.r1) reuses this module: matrix_configs() lists one server config per variant (K, target backend sampling -bs, PTQ1_0
 draft, ngram-mod, ngram-map-k), plan_n() sizes the prompt count up front from a per-prompt cost model, run_config() runs
-the shuffled prompts on one server, summarize_matrix() pairs each config with target alone per category.
+the shuffled prompts on one server, summarize_matrix() pairs each config with target alone per category. Target alone and
+the n-gram configs also run a few extra code prompts past the N-prefix (code_extra), so criterion 3 does not depend on N.
 Acceptance is reported as r (accepted / drafted) and, for draft-simple only, alpha (exps/spec_math.py).
 """
 from __future__ import annotations
@@ -145,6 +146,17 @@ class Server:
             return pathlib.Path(self.log_path).read_text(errors="replace")[-n:]
         except OSError:
             return ""
+
+    def head_tail(self, head: int = 200000, tail: int = 400000) -> str:
+        """Start and end of the log: the startup lines (context parameters) are far from the end after a long run."""
+        self.log.flush()
+        try:
+            data = pathlib.Path(self.log_path).read_bytes()
+        except OSError:
+            return ""
+        if len(data) > head + tail:
+            data = data[:head] + b"\n" + data[-tail:]
+        return data.decode("utf-8", errors="replace")
 
     def wait_ready(self, timeout_s: float) -> tuple[bool, str | None]:
         t0 = time.monotonic()
@@ -311,34 +323,40 @@ STARTUP_S = 25.0       # model load and warm-up per server
 PLAN_MARGIN = 0.9      # plan for this share of the part budget; the rest absorbs slow prompts
 N_FLOOR = 8            # prompts when even this many do not fit the budget
 MIN_N_CATEGORY = 15    # paired prompts per category below which a speedup is too noisy to decide a go / no-go
+CODE_FLOOR = MIN_N_CATEGORY + 5  # code_fix / refactor prompts that base and the n-gram configs run whatever N is (spare for failed prompts)
 
 
-def _cfg(name, spec_type, k=0, extra=(), prompt_s=1.2, categories=None, frac=1.0, draft="bf16", desc=""):
+def _cfg(name, spec_type, k=0, extra=(), prompt_s=1.2, categories=None, frac=1.0, draft="bf16", desc="", default=True,
+         extra_code=False):
     """prompt_s: expected seconds per prompt (E5 runs: target alone 1.2, K=4 1.9). frac: share of the main prompts (a
-    prefix of the category-balanced order). draft: which draft GGUF (bf16 or ptq1_0)."""
+    prefix of the category-balanced order). draft: which draft GGUF (bf16 or ptq1_0). default: in the R1 default --configs.
+    extra_code: also runs the extra code prompts (code_extra); base and the n-gram configs, the pairs of criterion 3."""
     return {"name": name, "spec_type": spec_type, "k": k, "extra": list(extra), "prompt_s": prompt_s, "frac": frac,
-            "categories": list(categories) if categories else None, "draft": draft, "desc": desc}
+            "categories": list(categories) if categories else None, "draft": draft, "desc": desc, "default": default,
+            "extra_code": extra_code}
 
 
 def matrix_configs() -> list[dict]:
     """R1b configs in run order; base is first and every other config runs a subset of its prompts. The n-gram types only
-    run on the code categories (the only ones criterion 3 needs): this keeps n per code category above MIN_N_CATEGORY.
+    run on the code categories (the only ones criterion 3 needs), and they and base also run the extra code prompts: this
+    keeps n per code category above MIN_N_CATEGORY whatever N is. K=2/3 are not in the R1 default --configs (default False):
+    they cost about 20% of part b, which a 30 min pod cannot spare; run them on a follow-up pod.
     The defaults (n_match 24 / size_n 12) need long repeats, which 150-token prompts rarely have, hence the short variants."""
     return [
-        _cfg("base", "none", desc="target alone"),
+        _cfg("base", "none", desc="target alone", extra_code=True),
         _cfg("k4", "draft-simple", 4, prompt_s=1.9, desc="draft-simple K=4, as in E5 (control)"),
         _cfg("k4_tbs", "draft-simple", 4, [TARGET_BS], 1.9, desc="draft-simple K=4 with target backend sampling (-bs)"),
-        _cfg("k2", "draft-simple", 2, prompt_s=1.6, frac=0.5, desc="draft-simple K=2"),
-        _cfg("k3", "draft-simple", 3, prompt_s=1.75, frac=0.5, desc="draft-simple K=3"),
+        _cfg("k2", "draft-simple", 2, prompt_s=1.6, frac=0.5, desc="draft-simple K=2", default=False),
+        _cfg("k3", "draft-simple", 3, prompt_s=1.75, frac=0.5, desc="draft-simple K=3", default=False),
         _cfg("k4_ptq1", "draft-simple", 4, prompt_s=2.0, frac=0.5, draft="ptq1_0",
              desc="draft-simple K=4 with the post-hoc PTQ1_0 draft (real alpha drop for criterion 2)"),
-        _cfg("ngram_mod", "ngram-mod", prompt_s=1.3, categories=CODE_CATS,
+        _cfg("ngram_mod", "ngram-mod", prompt_s=1.3, categories=CODE_CATS, extra_code=True,
              desc="ngram-mod, fork defaults (n_match 24, n_min 48, n_max 64); code_fix and refactor only"),
-        _cfg("ngram_map_k", "ngram-map-k", prompt_s=1.3, categories=CODE_CATS,
+        _cfg("ngram_map_k", "ngram-map-k", prompt_s=1.3, categories=CODE_CATS, extra_code=True,
              desc="ngram-map-k, fork defaults (size_n 12, size_m 48, min_hits 1); code_fix and refactor only"),
-        _cfg("ngram_mod_short", "ngram-mod", extra=NGRAM_MOD_SHORT, prompt_s=1.3, categories=CODE_CATS,
+        _cfg("ngram_mod_short", "ngram-mod", extra=NGRAM_MOD_SHORT, prompt_s=1.3, categories=CODE_CATS, extra_code=True,
              desc="ngram-mod n_match 4, n_min 2, n_max 16; code_fix and refactor only"),
-        _cfg("ngram_map_k_short", "ngram-map-k", extra=NGRAM_MAP_K_SHORT, prompt_s=1.3, categories=CODE_CATS,
+        _cfg("ngram_map_k_short", "ngram-map-k", extra=NGRAM_MAP_K_SHORT, prompt_s=1.3, categories=CODE_CATS, extra_code=True,
              desc="ngram-map-k size_n 4, size_m 16; code_fix and refactor only"),
     ]
 
@@ -352,9 +370,24 @@ def config_cmd(bin_dir, target: str, draft: str | None, cfg: dict, port: int | N
     return cmd + (["--spec-type", t] if t != "none" else []) + cfg["extra"]
 
 
-def select_prompts(cfg: dict, main: list[dict]) -> list[dict]:
-    """Prompts of one config: its share of the main prompts (a prefix, so still category balanced), then its categories."""
+def code_extra(prompts: list[dict], n: int, per_cat: int) -> list[dict]:
+    """Code prompts after the first n (in order) that bring each code category up to per_cat prompts in prompts[:n] + extra."""
+    have = {c: sum(1 for p in prompts[:n] if p["category"] == c) for c in CODE_CATS}
+    out = []
+    for p in prompts[n:]:
+        c = p["category"]
+        if c in have and have[c] < per_cat:
+            have[c] += 1
+            out.append(p)
+    return out
+
+
+def select_prompts(cfg: dict, main: list[dict], extra: list[dict] = ()) -> list[dict]:
+    """Prompts of one config: its share of the main prompts (a prefix, so still category balanced), plus the extra code prompts
+    for extra_code configs, then its categories."""
     ps = main[:max(1, math.ceil(cfg["frac"] * len(main)))] if main else []
+    if cfg.get("extra_code"):
+        ps = ps + list(extra)
     if cfg["categories"]:
         ps = [p for p in ps if p["category"] in cfg["categories"]]
     return ps
@@ -364,24 +397,30 @@ def cost_s(cfg: dict, n_prompts: int) -> float:
     return STARTUP_S + n_prompts * cfg["prompt_s"] if n_prompts else 0.0
 
 
-def plan_n(cfgs: list[dict], prompts: list[dict], budget_s: float, margin: float = PLAN_MARGIN, floor: int = N_FLOOR) -> dict:
+def plan_n(cfgs: list[dict], prompts: list[dict], budget_s: float, margin: float = PLAN_MARGIN, floor: int = N_FLOOR,
+           code_floor: int = 0) -> dict:
     """Largest number N of main prompts (a prefix of the category-balanced order) for which the summed expected cost of all
-    configs fits margin * budget_s. Base runs exactly these N prompts, every other config a subset of them."""
+    configs fits margin * budget_s. Base runs these N prompts, every other config a subset of them. code_floor > 0 adds
+    code_extra prompts (counted in the cost) so base and the n-gram configs see that many per code category at any N."""
     best = None
     for n in range(len(prompts), 0, -1):
-        est = sum(cost_s(c, len(select_prompts(c, prompts[:n]))) for c in cfgs)
+        extra = code_extra(prompts, n, code_floor)
+        est = sum(cost_s(c, len(select_prompts(c, prompts[:n], extra))) for c in cfgs)
         if est <= margin * budget_s:
             best = n
             break
     fits = best is not None
     n = best if fits else min(floor, len(prompts))
     main = prompts[:n]
+    extra = code_extra(prompts, n, code_floor)
     per_cat: dict = {}
     for p in main:
         per_cat[p["category"]] = per_cat.get(p["category"], 0) + 1
-    return {"n": n, "fits": fits, "est_s": sum(cost_s(c, len(select_prompts(c, main))) for c in cfgs), "budget_s": budget_s,
-            "per_config": {c["name"]: len(select_prompts(c, main)) for c in cfgs}, "per_category": per_cat,
-            "min_code_category": min((per_cat.get(c, 0) for c in CODE_CATS), default=0)}
+    code_cat = {c: per_cat.get(c, 0) + sum(1 for p in extra if p["category"] == c) for c in CODE_CATS}
+    return {"n": n, "fits": fits, "est_s": sum(cost_s(c, len(select_prompts(c, main, extra))) for c in cfgs), "budget_s": budget_s,
+            "per_config": {c["name"]: len(select_prompts(c, main, extra)) for c in cfgs}, "per_category": per_cat,
+            "code_floor": code_floor, "n_extra": len(extra), "per_code_category": code_cat,
+            "min_code_category": min(code_cat.values(), default=0)}
 
 
 def time_shares(costs: list[float], left_s: float) -> list[float]:
@@ -403,6 +442,29 @@ def log_flags(text: str) -> dict:
     lines = text.splitlines()
     return {"backend_sampling_problems": [ln.strip()[:240] for ln in lines if BS_PROBLEM_RE.search(ln)][:3],
             "kv_checkpoint_fallback": any("KV checkpoints instead" in ln for ln in lines)}
+
+
+N_RS_SEQ_RE = re.compile(r"(?:^|[\s:])n_rs_seq\s+=\s+(\d+)\s*$")
+
+
+def rollback_flags(text: str, spec_type: str) -> dict:
+    """Rollback path of the target context from the INFO line `n_rs_seq = N` of llama-context.cpp (printed once per context;
+    the target comes first, the draft context second). need_n_rs_seq() (common.h) gives N = draft n_max for draft-simple and
+    0 for ngram-mod / ngram-map-k: with N = 0 a hybrid (GDN) target takes the KV-checkpoint path, every drafting step saves a
+    checkpoint and every partial acceptance restores it and replays the target pass. The server logs that path at TRC level
+    only, so the INFO line is the only sign in a default log. rollback_path: none (no speculation), in_batch, checkpoint or
+    unknown (no line found). checkpoint_replay: True on the checkpoint path, None when unknown."""
+    vals = [int(m.group(1)) for ln in text.splitlines() for m in [N_RS_SEQ_RE.search(ln)] if m]
+    tgt = vals[0] if vals else None
+    if spec_type == "none":
+        path, replay = "none", False
+    elif tgt is None:
+        path, replay = "unknown", None
+    elif tgt == 0:
+        path, replay = "checkpoint", True
+    else:
+        path, replay = "in_batch", False
+    return {"n_rs_seq": vals[:2], "n_rs_seq_target": tgt, "rollback_path": path, "checkpoint_replay": replay}
 
 
 def warmup(n_predict: int = 16) -> None:
@@ -441,11 +503,11 @@ def run_config(cfg: dict, *, bin_dir, target: str, draft: str | None, prompts: l
     except Exception as e:  # keep the other configs going
         res["error"] = f"{type(e).__name__}: {e}"
     finally:
-        log = srv.tail(400000)
+        log = srv.head_tail()
         res["spec_log"] = spec_log_lines(log)
         res["checks"] = {"backend_sampling_expected": TARGET_BS in cfg["extra"],
                          "backend_sampling_reported": next((r["bs_flag"] for r in res["rows"] if r.get("bs_flag") is not None), None),
-                         **log_flags(log)}
+                         **log_flags(log), **rollback_flags(log, cfg["spec_type"])}
         srv.stop()
     res["wall_s"] = time.monotonic() - t0
     return res
@@ -498,7 +560,9 @@ def summarize_matrix(runs: dict, base: str = "base", ci: bool = False) -> dict:
         ids = [i for i in rows if i in base_rows]
         st = run.get("spec_type") or "none"
         entry = {"planned": run.get("planned"), "n_ok": len(rows), "n_paired": len(ids), "error": run.get("error"), "k": run.get("k"),
-                 "spec_type": run.get("spec_type"), "draft": run.get("draft"), "checks": run.get("checks"), "by_category": {}}
+                 "spec_type": run.get("spec_type"), "draft": run.get("draft"), "checks": run.get("checks"), "by_category": {},
+                 # on the checkpoint path a replay pass is one more step in tokens_per_step and ms_per_step
+                 "steps_count_replays": bool((run.get("checks") or {}).get("checkpoint_replay"))}
         if ids:
             entry["all"] = _pair_stats([rows[i] for i in ids], [base_rows[i] for i in ids], st, ci)
             for cat in sorted({rows[i]["category"] for i in ids}):

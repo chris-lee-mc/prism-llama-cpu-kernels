@@ -700,7 +700,8 @@ def test_launch_refuses_when_est_exceeds_failsafe(env, capsys):
     api = FakeAPI()
     assert runpod.launch("e4", None, manifest=man, client=api, ledger=led) == 2
     out = capsys.readouterr().out
-    assert "WARNING" in out and "--allow-long" in out and "--failsafe-min 60" in out
+    sug = -(-(35 + runpod.BOOTSTRAP_MIN + runpod.LLAMA_BUILD_MIN + 5) // 5) * 5
+    assert "WARNING" in out and "--allow-long" in out and f"--failsafe-min {sug}" in out
     assert api.calls == []
     # the warning is required in a dry run too
     assert runpod.launch("e4", None, dry_run=True, manifest=man, client=api, ledger=led) == 2
