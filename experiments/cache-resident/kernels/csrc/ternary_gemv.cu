@@ -36,14 +36,14 @@ __device__ __forceinline__ uint4 ld_stream(const uint4* p) {
   return v;
 }
 
-__device__ __forceinline__ void load_tile(Tile& t, const uint4* qrow, const unsigned short* srow, int g0, int ge) {
+__device__ __forceinline__ void load_tile(Tile& t, const uint4* qrow, const unsigned short* srow, int g0, int ge, int dbg) {
 #pragma unroll
   for (int u = 0; u < kTile; ++u) {
     const int g = g0 + u;
     t.q[u] = make_uint4(0u, 0u, 0u, 0u);
     t.s[u] = 0;
     if (g < ge) {
-      t.q[u] = ld_stream(qrow + 2 * g);
+      t.q[u] = (dbg & 2) ? __ldg(qrow + 2 * g) : ld_stream(qrow + 2 * g);
       t.s[u] = __ldg(srow + g);
     }
   }
@@ -200,7 +200,7 @@ __device__ __forceinline__ float fp4_dot(const float* xh, const char* tabb, uint
 
 template <int W, bool FP4>
 __device__ __forceinline__ void gemv_body(const uint32_t* __restrict__ q, const __half* __restrict__ s, const __half* __restrict__ x,
-                                          __half* __restrict__ y, int N, int K, int S) {
+                                          __half* __restrict__ y, int N, int K, int S, int dbg) {
   constexpr int NT = W * 32;
   constexpr int RB = 16 * W;
   constexpr int kSmem = FP4 ? kTile * kXGroup : kTile * kLutGroup;
@@ -225,7 +225,7 @@ __device__ __forceinline__ void gemv_body(const uint32_t* __restrict__ q, const 
 
   grid_dep_launch();
   Tile cur;
-  load_tile(cur, qrow, srow, gb, ge);
+  load_tile(cur, qrow, srow, gb, ge, dbg);
   grid_dep_wait();
   if (FP4 && tid < 16) tab[tid] = e2m1_value(tid);
 
@@ -240,17 +240,21 @@ __device__ __forceinline__ void gemv_body(const uint32_t* __restrict__ q, const 
     Tile nxt;
     XTile<NT, FP4> xn;
     if (more) {
-      load_tile(nxt, qrow, srow, g0 + kTile, ge);
+      load_tile(nxt, qrow, srow, g0 + kTile, ge, dbg);
       x_load(xn, x, g0 + kTile, min(kTile, ge - g0 - kTile));
     }
-    if (g0 != gb) __syncthreads();
-    x_store(tile_smem, xc, ng);
-    __syncthreads();
+    if (!(dbg & 8)) {
+      if (g0 != gb) __syncthreads();
+      x_store(tile_smem, xc, ng);
+      __syncthreads();
+    }
 #pragma unroll
     for (int u = 0; u < kTile; ++u) {
       if (u < ng) {
         float d;
-        if (FP4) {
+        if (dbg & 1) {
+          d = __uint_as_float((cur.q[u].x ^ cur.q[u].y ^ cur.q[u].z ^ cur.q[u].w) & 0x3fffffffu) * 1e-30f;
+        } else if (FP4) {
           d = fp4_dot(tile_smem + u * kXGroup + h * kXHalf, reinterpret_cast<const char*>(tab), stage + warp * 256, lane, cur.q[u]);
         } else {
           d = lut_dot(tile_smem + u * kLutGroup, cur.q[u], hb);
@@ -288,14 +292,14 @@ __device__ __forceinline__ void gemv_body(const uint32_t* __restrict__ q, const 
 // Kernel symbols start with the launcher name (ncu filters use it).
 template <int W>
 __global__ void __launch_bounds__(W * 32, 20 / W) cr_gemv_lut_kernel(const uint32_t* __restrict__ q, const __half* __restrict__ s, const __half* __restrict__ x,
-                                                             __half* __restrict__ y, int N, int K, int S) {
-  gemv_body<W, false>(q, s, x, y, N, K, S);
+                                                             __half* __restrict__ y, int N, int K, int S, int dbg) {
+  gemv_body<W, false>(q, s, x, y, N, K, S, dbg);
 }
 
 template <int W>
 __global__ void __launch_bounds__(W * 32, 20 / W) cr_gemv_fp4_kernel(const uint32_t* __restrict__ q, const __half* __restrict__ s, const __half* __restrict__ x,
-                                                             __half* __restrict__ y, int N, int K, int S) {
-  gemv_body<W, true>(q, s, x, y, N, K, S);
+                                                             __half* __restrict__ y, int N, int K, int S, int dbg) {
+  gemv_body<W, true>(q, s, x, y, N, K, S, dbg);
 }
 
 inline bool args_ok(const void* q, const void* s, const void* x, const void* y, int N, int K) {
@@ -335,6 +339,12 @@ bool pdl_on() {
   return v != 0;
 }
 
+// debug only: 1 skip dot, 2 plain __ldg for q, 8 skip table build
+int dbg_bits() {
+  static const int v = env_int("CR_GEMV_DBG", 0);
+  return v;
+}
+
 int blocks_per_sm() {
   static const int v = env_int("CR_GEMV_BPS", 2);
   return v;
@@ -372,9 +382,9 @@ cudaError_t launch_w(const uint32_t* q, const __half* s, const __half* x, __half
   cfg.attrs = at;
   cfg.numAttrs = (unsigned)na;
   if (FP4) {
-    cudaLaunchKernelEx(&cfg, cr_gemv_fp4_kernel<W>, q, s, x, y, N, K, S);
+    cudaLaunchKernelEx(&cfg, cr_gemv_fp4_kernel<W>, q, s, x, y, N, K, S, dbg_bits());
   } else {
-    cudaLaunchKernelEx(&cfg, cr_gemv_lut_kernel<W>, q, s, x, y, N, K, S);
+    cudaLaunchKernelEx(&cfg, cr_gemv_lut_kernel<W>, q, s, x, y, N, K, S, dbg_bits());
   }
   return cudaGetLastError();
 }
