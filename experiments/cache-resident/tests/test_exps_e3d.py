@@ -411,6 +411,31 @@ def test_both_pdl_runs_children_and_merges(fake_cuda, monkeypatch):
     assert all("delta_step_us" in r for r in d["rows"] if r["scenario"] == "S2" and r["mode"] == "on")
 
 
+def test_calib_problem():
+    ok = {"peak_gbps": 1792.0, "copy_gbps": 1472.0, "bench": [{"pct_peak_cold": p} for p in (0.71, 0.49, 0.57)]}
+    slow = dict(ok, copy_gbps=1280.0, bench=[{"pct_peak_cold": p} for p in (0.08, 0.07, 0.11)])  # power-capped PRO 6000 host
+    assert e3d.calib_problem(ok) is None and e3d.calib_problem({"copy_gbps": 1.0}) is None
+    assert "bench" in e3d.calib_problem(slow) and "copy" in e3d.calib_problem(dict(ok, copy_gbps=500.0))
+
+
+def test_unhealthy_host_stops_before_timing(fake_cuda, monkeypatch):
+    _patch_gpu(monkeypatch)
+    monkeypatch.setattr(e3d, "calibrate", lambda *a: {"peak_gbps": 1792.0, "copy_gbps": 1280.0, "bench": [{"pct_peak_cold": 0.08}]})
+    with pytest.raises(SystemExit) as ex:
+        e3d.main(["--quick", "--pdl", "0", "--D", "16", "--rounds", "3"])
+    assert ex.value.code == e3d.EXIT_UNHEALTHY
+    calls = []
+
+    def fake_run(argv, cwd=None, timeout=None):
+        calls.append(argv)
+        e3d.dump_json(argv[argv.index("--emit") + 1], {"config": {"pdl": 0}, "rows": [], "notes": ["ABORT: unhealthy host"]})
+        return types.SimpleNamespace(returncode=e3d.EXIT_UNHEALTHY)
+
+    monkeypatch.setattr(e3d.subprocess, "run", fake_run)
+    assert e3d.main(["--quick", "--D", "16"]) == 1
+    assert len(calls) == 1
+
+
 def test_no_pdl_run_on_old_gpu(fake_cuda, monkeypatch):
     _patch_gpu(monkeypatch)
     monkeypatch.setattr(e3d, "device_cc_major", lambda: 8)

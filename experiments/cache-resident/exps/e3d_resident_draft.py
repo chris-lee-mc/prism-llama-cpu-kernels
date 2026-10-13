@@ -51,6 +51,9 @@ METRICS = ["step_us", "first_us", "later_us", "refill_us", "cycle_us", "verify_u
 ACCS = (0.6, 0.7, 0.8)
 MAX_VERIFY_NODES = 4000
 VRAM_RESERVE = 2 * GIB
+HEALTH_MIN_BENCH = 0.25  # healthy hosts reach 0.4-0.7 of peak on the bench shapes
+HEALTH_MIN_COPY = 0.4
+EXIT_UNHEALTHY = 4
 OUTSIDE_ARENA = ("attention split scratch (__device__ g_attn_* in toy_ops.cu)", "x.copy_(x0) memcpy node",
                  "int8 head logits (allocated by int8_gemv)")
 
@@ -604,6 +607,17 @@ def calibrate(variant: str, shapes, tag: str, l2: int) -> dict:
     return e1.calibrate(variant, shapes, tag, l2)
 
 
+def calib_problem(cal: dict) -> str | None:
+    """Reason the host looks degraded (throttled or shared GPU), else None. Skips checks with missing fields."""
+    bench = [b["pct_peak_cold"] for b in cal.get("bench") or [] if b.get("pct_peak_cold") is not None]
+    if bench and max(bench) < HEALTH_MIN_BENCH:
+        return "GEMV bench at %.0f%% of peak (< %.0f%%)" % (100 * max(bench), 100 * HEALTH_MIN_BENCH)
+    peak, copy = cal.get("peak_gbps"), cal.get("copy_gbps")
+    if peak and copy and copy < HEALTH_MIN_COPY * peak:
+        return "copy %.0f GB/s < %.0f%% of peak" % (copy, 100 * HEALTH_MIN_COPY)
+    return None
+
+
 def time_steady(dg, k: int, bursts: int) -> float:
     """Median over bursts of (time of k back-to-back replays) / k, us."""
     import torch
@@ -698,6 +712,11 @@ def run_matrix(args, pdl: int) -> dict:
         except Exception as e:
             notes.append(f"calibration failed: {type(e).__name__}: {e}")
         torch.cuda.empty_cache()
+        bad = calib_problem(config.get("calibration") or {})
+        if bad:  # degraded host: stop early so the pod is not paid for bad timings
+            notes.append(f"ABORT: unhealthy host: {bad}; nvml {config['calibration'].get('nvml_idle')}")
+            snapshot()
+            raise SystemExit(EXIT_UNHEALTHY)
 
     v_mib, scaled = choose_verify_mib(args.V, free_vram(), max(args.D))
     shapes = plan_verify(int(v_mib * MIB))
@@ -851,6 +870,8 @@ def run_both(a, pdls: list[int]) -> dict:
                 docs[pdl] = json.load(f)
         except (OSError, ValueError):
             notes.append(f"pdl={pdl} child left no rows")
+        if rc == EXIT_UNHEALTHY:
+            break
     if not docs:
         return {"config": {"child_exit": rcs}, "rows": [], "notes": notes}
     first = docs[min(docs)]
