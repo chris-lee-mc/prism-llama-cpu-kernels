@@ -39,7 +39,8 @@ UB = 2048
 N_GEN = 128
 NCU_TOKENS = 4
 NSYS_TOKENS = 16
-SECRET_ENV_RE = re.compile(r"KEY|TOKEN|SECRET|PASSWORD|CREDENTIAL|RUNPOD_", re.IGNORECASE)
+# names that look like secrets: KEY, TOKEN, SECRET, PASSWORD / PASSWD, CREDENTIAL / CREDS, COOKIE, AUTH, a PAT word, RUNPOD_*
+SECRET_ENV_RE = re.compile(r"KEY|TOKEN|SECRET|PASSWORD|PASSWD|CREDENTIAL|CREDS|COOKIE|AUTH|(^|_)PAT($|_)|RUNPOD_", re.IGNORECASE)
 NSYS_GLOBS = ("/usr/local/cuda*/bin/nsys", "/opt/nvidia/nsight-systems/*/bin/nsys", "/opt/nvidia/nsight-systems/*/target-linux-x64/nsys")
 REPO_ROOT = common.EXP_DIR.parent.parent
 PROF_SRC = common.EXP_DIR / "exps" / "csrc" / "cr_decode_prof.cpp"

@@ -6,11 +6,16 @@
 Target (Bonsai 2 27B PQ2_0): llama-bench -p W -n 0 -d DEPTH for each width W; one batch of W tokens at depth DEPTH
 is what a K = W - 1 verify step costs. The plain decode baseline is the target's own tg run (-p 0 -n 128 -d DEPTH);
 the width-1 prompt path is a different code path and is NOT the baseline (it was 8.64 ms against 7.2 ms for tg).
-Drafts (Qwen3.5-0.8B BF16 and Q8_0): llama-bench -p 0 -n 128 -d DEPTH, the cost of one draft token. Same flags as E4
+Drafts (Qwen3.5-0.8B BF16 and Q8_0): llama-bench -p 0 -n 128 -d DEPTH, the cost of one draft token, and -p W -n 0 -d DEPTH
+for each width, the cost of the draft re-eval of the verify batch. Same flags as E4
 (-fa on, f16 KV, -ub 2048). Row: {model, kind, width, depth, tok_s, ms_per_batch, samples_ts}; tok_s is the median of
 the per-rep samples (samples_ts, from llama-bench), tok_s_mean the mean.
-The summary gives the step model t_step(K) = K * t_draft + t_verify(K + 1) and, per K, the break-even acceptance at
-which (1 + A) / t_step equals 1 / t_plain. Acceptance is reported both as alpha (per-token, independence model) and r
+The summary gives the step model t_step(K) = K * t_draft + t_draft_batch(K + 1) + t_verify(K + 1) and, per K, the break-even
+acceptance at which (1 + A) / t_step equals 1 / t_plain. The t_draft_batch term is there because draft-simple (common/speculative.cpp,
+process()) decodes the whole K + 1 verify batch on the draft context every step and then drafts K single tokens: K + 1 draft
+passes per step, one of them K + 1 wide. break_even_no_reeval keeps the old model without that term; results from before
+the draft width rows existed have no t_draft_batch and fall back to it (reeval_included false).
+Acceptance is reported both as alpha (per-token, independence model) and r
 (llama.cpp draft_n_accepted / draft_n); see exps/spec_math.py for the conversion r = A(alpha, K) / K.
 --resummarize rebuilds the summary from a saved result without a GPU. Old results have no tg row for the target, so the
 baseline comes from --plain-from (tok_s_weighted of an E5 target-alone result) or --plain-ms, and the output says so.
@@ -60,10 +65,13 @@ def rows_from(entries: list[dict], model: str, depth: int) -> list[dict]:
     return out
 
 
-def break_even(t_draft_ms: float, t_verify_ms: dict, t_plain_ms: float, k: int) -> float | None:
-    """Break-even per-token acceptance alpha for K = k (0..1, step 0.001); None if never or no verify row for k + 1."""
+def break_even(t_draft_ms: float, t_verify_ms: dict, t_plain_ms: float, k: int, t_draft_batch_ms: dict | None = None) -> float | None:
+    """Break-even per-token acceptance alpha for K = k (0..1, step 0.001); None if never or no verify row for k + 1.
+    t_draft_batch_ms: draft re-eval cost per batch width; the width k + 1 entry joins the step (missing counts as 0)."""
     tv = t_verify_ms.get(k + 1)
-    return None if tv is None else spec_math.break_even_alpha(k, t_draft_ms, tv, t_plain_ms)
+    if tv is None:
+        return None
+    return spec_math.break_even_alpha(k, t_draft_ms, tv, t_plain_ms, (t_draft_batch_ms or {}).get(k + 1, 0.0))
 
 
 def _be(alpha: float | None, k: int) -> dict:
@@ -89,9 +97,13 @@ def summarize(rows: list[dict], ks=KS, plain_ms: float | None = None, plain_sour
         td = next((r["ms_per_batch"] for r in rows if r["model"] == d and r["kind"] == "decode"), None)
         if td is None:
             continue
-        out["drafts"][d] = {"t_draft_ms": td, "break_even": {k: _be(break_even(td, tv, plain, k), k) for k in ks},
-                            "t_step_ms": {k: k * td + tv[k + 1] for k in ks if k + 1 in tv}}
-    # a free draft (t_draft = 0) bounds what any draft can reach: verify cost alone
+        db = {r["width"]: r["ms_per_batch"] for r in rows if r["model"] == d and r["kind"] == "verify"}
+        out["drafts"][d] = {"t_draft_ms": td, "t_draft_batch_ms": db, "reeval_included": bool(db),
+                            "break_even": {k: _be(break_even(td, tv, plain, k, db), k) for k in ks},
+                            "break_even_no_reeval": {k: _be(break_even(td, tv, plain, k), k) for k in ks},
+                            "t_step_ms": {k: k * td + db.get(k + 1, 0.0) + tv[k + 1] for k in ks if k + 1 in tv},
+                            "t_step_ms_no_reeval": {k: k * td + tv[k + 1] for k in ks if k + 1 in tv}}
+    # a free draft (t_draft = 0, no re-eval) bounds what any draft can reach: verify cost alone
     out["free_draft_break_even"] = {k: _be(break_even(0.0, tv, plain, k), k) for k in ks}
     return out
 
@@ -135,7 +147,8 @@ def run(args) -> int:
     config = {"widths": args.widths, "depth": args.depth, "reps": args.reps, "models_info": {},
               "target_cmd": target_cmd(bin_dir, "<pq2.gguf>", args.widths, args.depth, args.reps),
               "plain_cmd": plain_cmd(bin_dir, "<pq2.gguf>", args.depth, args.reps),
-              "draft_cmd": draft_cmd(bin_dir, "<draft.gguf>", args.depth, args.reps)}
+              "draft_cmd": draft_cmd(bin_dir, "<draft.gguf>", args.depth, args.reps),
+              "draft_batch_cmd": target_cmd(bin_dir, "<draft.gguf>", args.widths, args.depth, args.reps)}
     rows: list[dict] = []
     for m in ("pq2",) + DRAFTS:
         if budget.expired(60):
@@ -146,7 +159,8 @@ def run(args) -> int:
         except Exception as e:
             notes.append(f"{m}: model download failed: {type(e).__name__}: {e}")
             continue
-        cmds = [draft_cmd(bin_dir, path, args.depth, args.reps)]
+        # draft: one-token decode, then the batch widths (the draft re-eval of each verify batch)
+        cmds = [draft_cmd(bin_dir, path, args.depth, args.reps), target_cmd(bin_dir, path, args.widths, args.depth, args.reps)]
         if m == "pq2":  # plain tg first: it is the baseline of every break-even
             cmds = [plain_cmd(bin_dir, path, args.depth, args.reps), target_cmd(bin_dir, path, args.widths, args.depth, args.reps)]
         for cmd in cmds:
@@ -201,7 +215,8 @@ def main(argv=None) -> int:
         bin_dir = e4_bonsai.llama_bin()
         common.print_plan({"exp": EXP, "target_cmd": target_cmd(bin_dir, "<pq2.gguf>", a.widths, a.depth, a.reps),
                            "plain_cmd": plain_cmd(bin_dir, "<pq2.gguf>", a.depth, a.reps),
-                           "draft_cmd": draft_cmd(bin_dir, "<draft.gguf>", a.depth, a.reps)})
+                           "draft_cmd": draft_cmd(bin_dir, "<draft.gguf>", a.depth, a.reps),
+                           "draft_batch_cmd": target_cmd(bin_dir, "<draft.gguf>", a.widths, a.depth, a.reps)})
         return 0
     with common.term_exits():
         return run(a)

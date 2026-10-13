@@ -101,9 +101,8 @@ def test_r1_entry_fits_one_session():
     from infra import runpod
     e = MAN["r1"]
     assert e["gpus"] == ["pro6000"] and e["build_llama"] is True
-    # command + bootstrap + cold llama build must fit the failsafe, and the whole session stays near 55 min
+    # est_min counts the downloads and the r1 budget; with bootstrap and the cold llama build it must fit the failsafe (65, --allow-long)
     assert e["est_min"] + runpod.BOOTSTRAP_MIN + runpod.LLAMA_BUILD_MIN <= e["failsafe_min"] - 5
-    assert e["est_min"] + runpod.BOOTSTRAP_MIN + runpod.LLAMA_BUILD_MIN <= 56
-    assert e["cmd"].startswith("python3 -m exps.fetch_models --models pq2,draft_bf16,draft_q8_0 && python3 -m exps.r1")
+    assert e["cmd"].startswith("python3 -m exps.fetch_models --models pq2,draft_bf16,draft_q8_0 --timeout-min 12 && python3 -m exps.r1")
     from exps import r1
-    assert r1.DEFAULT_TOTAL_MIN <= e["est_min"]
+    assert r1.DEFAULT_TOTAL_MIN + 5 <= e["est_min"]

@@ -1,18 +1,23 @@
 """R1a: teacher-forced agreement of Qwen3.5-0.8B draft variants with the Bonsai 2 27B PQ2_0 target.
 
 Not a stand-alone experiment: exps.r1 calls run_agree(). For a quick run on a pod host:
-  python -m exps.r1_agree [--variants bf16,q8_0,ptq1_0] [--budget-min 7]   (writes nothing but prints the JSON)
+  python -m exps.r1_agree [--variants bf16,q8_0,ptq1_0] [--budget-min 7]   (repo text only; writes nothing but prints the JSON)
 
-Steps: build a fixed text (build_text) -> llama-perplexity --kl-divergence-base on the target (saves its log-probs for
-4 x 2048 tokens) -> llama-perplexity --kl-divergence for each draft variant against that file. "Same top p" is the share of
-scored positions where the draft's top-1 token equals the target's top-1 token with both fed the same text, which is
-the per-token acceptance alpha of greedy speculation when the draft prefix is right. Only the second half of every
-2048 window is scored (4 x 1023 positions). The text is the model's input, not the target's own output, so the numbers
-are a proxy for E5 alpha, not a replacement. Variants: bf16 and q8_0 are the ggml-org GGUFs; ptq1_0 (or any other
+Steps: read n_vocab from the GGUFs (a mismatch voids the KL pass) -> build a fixed text -> llama-perplexity
+--kl-divergence-base on the target (saves its log-probs for 4 x 2048 tokens) -> llama-perplexity --kl-divergence for each draft
+variant against that file. "Same top p" is the share of scored positions where the draft's top-1 token equals the target's
+top-1 token with both fed the same text, which is the per-token acceptance alpha of greedy speculation when the draft prefix is
+right. Only the second half of every 2048 window is scored (4 x 1023 positions).
+Two texts: "e5_chat" (the primary one, built by r1.py after part b) is the chat-templated E5 prompts followed by the greedy
+outputs that the target-alone run produced, i.e. the distribution E5 measures alpha on; "repo" (build_text) is raw upstream
+code with canned narration and no chat template, kept as a second reading. llama-perplexity tokenizes special tokens as plain
+text, so the chat markers are ordinary tokens, and it scores prompt tokens too, not only output tokens (out_char_frac in the
+text meta). r1.verdict puts the BF16 value next to the part b K=4 alpha as a calibration; the K=4 run with the post-hoc PTQ1_0
+draft (config k4_ptq1) measures the real alpha drop. Variants: bf16 and q8_0 are the ggml-org GGUFs; ptq1_0 (or any other
 type) is made from the BF16 file with llama-quantize on the host. In this fork quantize_ptq1_0 ignores the imatrix and
 scales each 128 group by its absolute maximum (ggml-quants.c), so post-hoc output is coarse; the log is recorded.
-Vocabulary: llama-perplexity only logs "inconsistent vocabulary" and carries on, so the driver reads n_vocab from each log
-and marks a variant invalid on a mismatch.
+Vocabulary: llama-perplexity only logs "inconsistent vocabulary" and carries on, so the driver reads the token count of every
+GGUF (gguf-py) before the 27B pass, skips mismatching variants, and still checks n_vocab in each log.
 """
 from __future__ import annotations
 
@@ -91,6 +96,44 @@ def _git_sha(root) -> str | None:
         r = subprocess.run(["git", "-C", str(root), "rev-parse", "HEAD"], capture_output=True, text=True, timeout=10)
         return r.stdout.strip() or None if r.returncode == 0 else None
     except (OSError, subprocess.SubprocessError):
+        return None
+
+
+def build_chat_text(rows: list[dict], chars: int | None = None) -> tuple[str | None, dict]:
+    """Text from the base config rows (E5 order): chat-templated prompt + the target's greedy output, in turn. rows need
+    prompt_text and text. Returns (None, meta) when the rows give less than half of `chars` (default TEXT_CHARS)."""
+    chars = TEXT_CHARS if chars is None else chars
+    parts, n_out, n_all, used = [], 0, 0, 0
+    for r in rows:
+        pt, out = r.get("prompt_text"), r.get("text")
+        if not pt or not out or "error" in r:
+            continue
+        end = "<|im_end|>\n" if "<|im_start|>" in pt else "\n\n"
+        parts.append(pt + out + end)
+        n_out += len(out)
+        n_all += len(parts[-1])
+        used += 1
+        if n_all >= chars:
+            break
+    text = "".join(parts)
+    meta = {"kind": "e5_chat", "n_samples": used, "n_chars": len(text), "sha256_16": hashlib.sha256(text.encode()).hexdigest()[:16],
+            "out_char_frac": n_out / n_all if n_all else None,
+            "source": "E5 prompts through /apply-template + greedy outputs of the target-alone run (special tokens are plain text "
+                      "for llama-perplexity)"}
+    return (text if len(text) >= chars // 2 else None), meta
+
+
+def gguf_n_vocab(path) -> int | None:
+    """Token count of a GGUF (tokenizer.ggml.tokens), via gguf-py of this repo; None when it cannot be read."""
+    try:
+        try:
+            import gguf
+        except ImportError:
+            sys.path.append(str(REPO_ROOT / "gguf-py"))
+            import gguf
+        f = gguf.GGUFReader(str(path), "r").fields.get("tokenizer.ggml.tokens")
+        return len(f.data) if f is not None else None
+    except Exception:
         return None
 
 
@@ -176,12 +219,27 @@ def summarize(variants: dict) -> dict:
             "note": "agreement is teacher-forced top-1 on the fixed text; it stands in for per-token alpha"}
 
 
+def quantize_variant(bin_dir, src: str, dst: str, variant: str, budget: common.Budget, log_path: str | None = None) -> dict:
+    """llama-quantize the BF16 GGUF to `variant` (a QUANT_TYPES key). Returns the record: quantize info, size_bytes or error."""
+    code, qlog, qsecs = run_logged(quantize_cmd(bin_dir, src, dst, QUANT_TYPES[variant]), budget.timeout(300, reserve_s=45), log_path)
+    rec: dict = {"quantize": dict(parse_quantize(qlog), exit=code, seconds=qsecs, tail=qlog[-300:].strip() if code != 0 else None)}
+    if code != 0 or not os.path.exists(dst):
+        rec["error"] = f"llama-quantize {QUANT_TYPES[variant]} failed (exit {code}): {qlog[-200:].strip()}"
+    else:
+        rec["size_bytes"] = os.path.getsize(dst)
+    return rec
+
+
 def run_agree(*, bin_dir, target: str, drafts: dict, workdir, budget: common.Budget, notes: list, variants=VARIANTS,
-              root=REPO_ROOT, log_dir=None, on_update=None) -> dict:
-    """drafts: {"bf16": path, "q8_0": path}. workdir holds the text, the ~2 GB log-prob file and quantized GGUFs (deleted by the
-    caller). Returns {"text", "base", "variants", "summary", "errors"}; never raises, partial results stay in the dict."""
+              root=REPO_ROOT, log_dir=None, on_update=None, text: str | None = None, text_meta: dict | None = None,
+              vocab_fn=gguf_n_vocab, quant_info: dict | None = None) -> dict:
+    """drafts: {"bf16": path, "q8_0": path} and optionally a ready ptq1_0 path (then it is not quantized here and not deleted;
+    quant_info is its quantize record). workdir holds the text, the ~2 GB log-prob file and quantized GGUFs (deleted by the
+    caller). text: the text to score (default: build_text(root)). Returns {"text", "base", "variants", "summary", "errors"};
+    never raises, partial results stay in the dict."""
     wd = pathlib.Path(workdir)
-    out: dict = {"text": None, "base": None, "variants": {}, "summary": {}, "errors": [], "chunks": CHUNKS, "n_ctx": N_CTX}
+    out: dict = {"text": None, "base": None, "variants": {}, "summary": {}, "errors": [], "chunks": CHUNKS, "n_ctx": N_CTX,
+                 "vocab_gguf": {}}
 
     def update() -> None:
         out["summary"] = summarize(out["variants"])
@@ -191,7 +249,28 @@ def run_agree(*, bin_dir, target: str, drafts: dict, workdir, budget: common.Bud
     def logp(name: str) -> str | None:
         return str(pathlib.Path(log_dir) / f"r1a-{name}.log") if log_dir else None
 
-    text, out["text"] = build_text(root)
+    if text is None:
+        text, out["text"] = build_text(root)
+    else:
+        out["text"] = text_meta or {"n_chars": len(text), "sha256_16": hashlib.sha256(text.encode()).hexdigest()[:16]}
+    # the KL pass needs equal n_vocab: find out before the 27B pass, not after it
+    vt = vocab_fn(target)
+    vb = vocab_fn(drafts["bf16"]) if drafts.get("bf16") else None
+    out["vocab_gguf"] = {"target": vt, "bf16": vb}
+    skip: dict[str, str] = {}
+    for v in variants:
+        nv = vb if (v in QUANT_TYPES or v == "bf16") else (vocab_fn(drafts[v]) if drafts.get(v) else None)  # quantized from bf16
+        out["vocab_gguf"][v] = nv
+        if vt and nv and vt != nv:
+            skip[v] = f"vocabulary mismatch (target {vt} tokens, draft {nv}): KL numbers would be invalid, variant skipped"
+    for v, why in skip.items():
+        out["variants"][v] = {"name": v, "error": why}
+        notes.append(f"{v}: {why}")
+    todo = [v for v in variants if v not in skip]
+    if not todo:
+        out["errors"].append("every variant has a vocabulary different from the target: target pass skipped")
+        update()
+        return out
     text_file = wd / "agree_text.txt"
     text_file.write_text(text)
     logits = str(wd / "target_logprobs.bin")
@@ -207,27 +286,28 @@ def run_agree(*, bin_dir, target: str, drafts: dict, workdir, budget: common.Bud
         update()
         return out
     update()
-    for v in variants:
+    for v in todo:
         if budget.expired(45):
             out["errors"].append(f"time budget used up; {v} and later skipped")
             break
         rec: dict = {"name": v}
         out["variants"][v] = rec
         path = drafts.get(v)
-        if v in QUANT_TYPES:
+        made = False
+        if v in QUANT_TYPES and path and quant_info:
+            rec["quantize"] = quant_info.get(v)
+        elif v in QUANT_TYPES:
             src = drafts.get("bf16")
             if not src:
                 rec["error"] = "needs the bf16 GGUF as the quantize source"
                 continue
             path = str(wd / f"draft-{v}.gguf")
-            code, qlog, qsecs = run_logged(quantize_cmd(bin_dir, src, path, QUANT_TYPES[v]), budget.timeout(300, reserve_s=45), logp(f"quantize-{v}"))
-            rec["quantize"] = dict(parse_quantize(qlog), exit=code, seconds=qsecs, tail=qlog[-300:].strip() if code != 0 else None)
-            if code != 0 or not os.path.exists(path):
-                rec["error"] = f"llama-quantize {QUANT_TYPES[v]} failed (exit {code})"
-                notes.append(f"{v}: {rec['error']}: {qlog[-200:].strip()}")
+            rec.update(quantize_variant(bin_dir, src, path, v, budget, logp(f"quantize-{v}")))
+            made = True
+            if rec.get("error"):
+                notes.append(f"{v}: {rec['error']}")
                 update()
                 continue
-            rec["size_bytes"] = os.path.getsize(path)
         if not path:
             rec["error"] = "no GGUF path for this variant"
             continue
@@ -241,7 +321,7 @@ def run_agree(*, bin_dir, target: str, drafts: dict, workdir, budget: common.Bud
                 rec[k] = None
         if rec.get("error"):
             notes.append(f"{v}: {rec['error']}")
-        if v in QUANT_TYPES:
+        if made:
             try:
                 os.remove(path)
             except OSError:

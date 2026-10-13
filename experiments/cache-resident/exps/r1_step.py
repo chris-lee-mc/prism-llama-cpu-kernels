@@ -1,30 +1,40 @@
 """R1c: where does a speculative step spend its time? One nsys capture of ~20 K=4 llama-server steps.
 
-Not a stand-alone experiment: exps.r1 calls run_step(). The server (draft-simple K=4, draft backend sampling) runs under
+Not a stand-alone experiment: exps.r1 calls run_step(). The server (draft-simple K=4, plain k4 config) runs under
 `nsys profile --start-later`; after a warm-up request the capture covers one request, then the report is exported to sqlite,
-parsed to JSON and the .nsys-rep / .sqlite are deleted. Secret safety: nsys and the server get an environment without
-KEY / TOKEN / SECRET / PASSWORD / CREDENTIAL / RUNPOD_ variables (a report stores the environment), the files live in a
-private temp dir outside the results dir, they are removed in a finally block, and *.nsys-rep / *.sqlite are in .gitignore
-and on the results server deny list.
+parsed to JSON and the .nsys-rep / .sqlite are deleted. Secret safety: nsys and the server get an allowlisted environment
+(PATH, LD_LIBRARY_PATH, HOME, TMPDIR, LANG, CUDA_*, ...; names that look like secrets are dropped even then), because a report
+stores the environment. TMPDIR is the private 0700 work dir, so nsys temp files (.qdstrm, session data) land there and go with it.
+The files live outside the results dir, are removed in a finally block, and *.nsys-rep / *.sqlite* / *.qdrep / *.qdstrm are in
+.gitignore and on the results server deny list.
 
 Timeline model (GPU activity only, from the CUDA trace; --cuda-graph-trace=node so graph nodes show as kernels):
-  burst   = activity on any stream with gaps <= GAP_US between neighbours. Bursts shorter than TINY_US are noise.
-  verify  = the long bursts (target forward over K + 1 tokens); drafts = the short ones. A step runs from one verify start
-            to the next. Inside a step the first short burst is the draft re-eval of the accepted tokens, the others are draft
-            token steps. Splitting by duration needs the draft pass to be well below the verify pass (about 1.6 ms vs 10 ms).
+  roles   = streams are told apart by role. The target context and the draft context each own CUDA streams (a context may use
+            several: ggml-cuda forks branch streams that run beside the main one). The target main stream is the one with the
+            longest burst (a verify pass is ~10 ms, a draft pass ~2 ms); a stream whose kernels mostly overlap the target's
+            active spans is a target branch stream, the rest are the draft's. Without two roles (one stream) the split falls
+            back to burst duration only, which breaks when the draft re-eval abuts the verify pass: split_mode says which.
+  burst   = activity of one role with gaps <= GAP_US between neighbours. Bursts shorter than TINY_US are noise.
+  verify  = the target bursts (target forward over K + 1 tokens); drafts = the draft bursts. A step runs from one verify start
+            to the next. Inside a step the first draft burst is the draft re-eval of the verify batch (server calls
+            common_speculative_process right after the verify decode), the others are the K draft token steps.
   memory ops are classed by direction and size: DtoD >= COPY_MIN is a recurrent-state snapshot copy, HtoD >= COPY_MIN a
             state / checkpoint restore, DtoH readback (logits, ids), the rest small copies.
   idle    = step time with no GPU activity, split by position: intra-burst gaps, after verify (CPU sampling, accept, draft
             bookkeeping), between draft bursts (draft sampling and launch), before verify (batch build and launch).
 c1_removable = re-eval + readback + after-verify idle + between-draft idle (what backend sampling and no re-eval could take);
 c1_floor = everything else that is not target verify or draft token steps. Heuristic, see the checks block of the result.
+nsys with node-level graph tracing adds launch overhead, so r1.step_wall_check compares the median step wall with the unprofiled
+part b k4 ms per step (and with the request timings) and flags a gap above 10%.
 """
 from __future__ import annotations
 
 import bisect
 import json
+import math
 import os
 import pathlib
+import re
 import shutil
 import signal
 import sqlite3
@@ -43,6 +53,9 @@ COPY_MIN = 64 * 1024
 SKIP_STEPS = 2       # prefill and the first step (draft state build) are not steady state
 MAX_STEPS = 20
 N_PREDICT = 56
+ROLE_OVERLAP_MIN = 0.25  # share of a stream's kernel time inside the target's active spans for a target branch stream
+ROLE_SPAN_GAP_US = 200.0  # gaps inside a target pass that still count as one active span
+ENV_ALLOW = re.compile(r"^(PATH|LD_LIBRARY_PATH|HOME|TMPDIR|LANG|LC_\w+|USER|LOGNAME|CUDA_\w+|NVIDIA_\w+|GGML_\w+|LLAMA_\w+)$")
 COPY_KINDS = {1: "HtoD", 2: "DtoH", 3: "HtoA", 4: "AtoH", 5: "AtoA", 6: "AtoD", 7: "DtoA", 8: "DtoD", 9: "HtoH", 10: "PtoP"}
 MS_KEYS = ("wall", "target_verify", "draft_gen", "draft_reeval", "snapshot_copy", "restore_copy", "readback", "small_copy",
            "other_kernel", "idle_intra_burst", "idle_after_verify", "idle_between_draft", "idle_before_verify", "idle_total",
@@ -61,10 +74,10 @@ def classify_copy(kind: str | None, nbytes: int) -> str:
     return "small_copy"
 
 
-def merge(intervals: list[tuple[int, int]]) -> list[tuple[int, int]]:
+def merge(intervals: list[tuple[int, int]], gap: float = 0) -> list[tuple[int, int]]:
     out: list[list[int]] = []
     for a, b in sorted(intervals):
-        if out and a <= out[-1][1]:
+        if out and a <= out[-1][1] + gap:
             out[-1][1] = max(out[-1][1], b)
         else:
             out.append([a, b])
@@ -131,40 +144,85 @@ def split_long_short(bursts: list[dict], tiny_ns: float, min_ratio: float = 2.0)
     return math.exp(0.5 * (durs[i] + durs[i + 1]))
 
 
-def _cat_of(x: dict, long_i: int, short_idx: dict, burst_of) -> str:
+def assign_roles(acts: list[dict], gap_us: float = GAP_US) -> dict:
+    """{stream: "target" | "draft"} from kernel activity, or {} when the streams do not split into two roles.
+    The target main stream has the longest burst; streams whose kernels mostly run inside its active spans are its branch
+    streams (ggml-cuda forks them inside one pass); the rest belong to the draft context."""
+    per: dict = {}
+    for x in acts:
+        if x["kind"] == "kernel":
+            per.setdefault(x["stream"], []).append(x)
+    if len(per) < 2:
+        return {}
+
+    def longest(v: list[dict]) -> int:
+        return max((b["t1"] - b["t0"] for b in make_bursts(v, gap_us * 1e3)), default=0)
+    main = max(per, key=lambda st: longest(per[st]))
+    spans = merge([(x["t0"], x["t1"]) for x in per[main]], ROLE_SPAN_GAP_US * 1e3)
+    roles = {main: "target"}
+    for st, v in per.items():
+        if st == main:
+            continue
+        tot = sum(x["t1"] - x["t0"] for x in v)
+        inside = sum(overlap_len(spans, x["t0"], x["t1"]) for x in v)
+        roles[st] = "target" if tot and inside / tot >= ROLE_OVERLAP_MIN else "draft"
+    return roles if set(roles.values()) == {"target", "draft"} else {}
+
+
+def _cat_of(x: dict, li: int, short_idx: dict, burst_of, roles: dict) -> str:
     if x["kind"] in ("memcpy", "memset"):
         return classify_copy(x.get("copy_kind"), x.get("bytes") or 0)
-    bi = burst_of(x["t0"])
-    if bi == long_i:
+    role = roles.get(x["stream"])
+    bi = burst_of(x["t0"], role)
+    if role in (None, "target") and bi == li:
         return "target_verify"
-    if bi in short_idx:
+    if role in (None, "draft") and bi in short_idx:
         return "draft_reeval" if short_idx[bi] == 0 else "draft_gen"
     return "other_kernel"
 
 
 def analyze(acts: list[dict], k: int, gap_us: float = GAP_US, tiny_us: float = TINY_US, skip: int = SKIP_STEPS,
             max_steps: int = MAX_STEPS) -> dict:
-    """Per-step time split from GPU activity. acts: [{t0, t1 (ns), kind: kernel|memcpy|memset, stream, name, bytes, copy_kind}]."""
+    """Per-step time split from GPU activity. acts: [{t0, t1 (ns), kind: kernel|memcpy|memset, stream, name, bytes, copy_kind}].
+    Bursts are built per stream role when the streams split into target and draft (split_mode "stream"); otherwise by
+    duration alone (split_mode "duration")."""
     out: dict = {"ok": False, "error": None, "k": k, "n_acts": len(acts)}
     if not acts:
         out["error"] = "no GPU activity in the capture"
         return out
     acts = sorted(acts, key=lambda x: x["t0"])
-    bursts = make_bursts(acts, gap_us * 1e3)
-    thr = split_long_short(bursts, tiny_us * 1e3)
-    out["n_bursts"] = len(bursts)
+    roles = assign_roles(acts, gap_us)
     out["streams"] = stream_summary(acts)
-    if thr is None:
-        out["error"] = "bursts do not split into verify and draft clusters (need verify >= 2x draft duration)"
-        out["burst_ms_top"] = [round((b["t1"] - b["t0"]) / 1e6, 3) for b in sorted(bursts, key=lambda b: b["t0"] - b["t1"])[:12]]
-        return out
-    kind_of = ["tiny" if is_tiny(b, tiny_us * 1e3) else ("long" if b["t1"] - b["t0"] >= thr else "short") for b in bursts]
+    thr = None
+    if roles:
+        bursts = []
+        for role in ("target", "draft"):
+            for b in make_bursts([x for x in acts if roles.get(x["stream"]) == role], gap_us * 1e3):
+                bursts.append(dict(b, role=role))
+        bursts.sort(key=lambda b: (b["t0"], b["t1"]))
+        kind_of = ["tiny" if is_tiny(b, tiny_us * 1e3) else ("long" if b["role"] == "target" else "short") for b in bursts]
+        out["split_mode"], out["roles"] = "stream", {str(st): r for st, r in roles.items()}
+    else:
+        bursts = make_bursts(acts, gap_us * 1e3)
+        thr = split_long_short(bursts, tiny_us * 1e3)
+        out["split_mode"] = "duration"
+        if thr is None:
+            out["n_bursts"] = len(bursts)
+            out["error"] = "bursts do not split into verify and draft clusters (need verify >= 2x draft duration)"
+            out["burst_ms_top"] = [round((b["t1"] - b["t0"]) / 1e6, 3) for b in sorted(bursts, key=lambda b: b["t0"] - b["t1"])[:12]]
+            return out
+        kind_of = ["tiny" if is_tiny(b, tiny_us * 1e3) else ("long" if b["t1"] - b["t0"] >= thr else "short") for b in bursts]
     longs = [i for i, kd in enumerate(kind_of) if kd == "long"]
-    out.update(threshold_ms=thr / 1e6, n_long=len(longs), n_short=kind_of.count("short"), n_tiny=kind_of.count("tiny"))
+    out.update(n_bursts=len(bursts), threshold_ms=None if thr is None else thr / 1e6, n_long=len(longs),
+               n_short=kind_of.count("short"), n_tiny=kind_of.count("tiny"))
     starts = [b["t0"] for b in bursts]
+    by_role = {r: [i for i, b in enumerate(bursts) if b.get("role") == r] for r in ("target", "draft")} if roles else {}
+    role_starts = {r: [starts[i] for i in ids] for r, ids in by_role.items()}
     merged_all = merge([(x["t0"], x["t1"]) for x in acts])
 
-    def burst_of(t: int) -> int:
+    def burst_of(t: int, role=None) -> int:
+        if role in by_role:
+            return by_role[role][max(bisect.bisect_right(role_starts[role], t) - 1, 0)]
         return max(bisect.bisect_right(starts, t) - 1, 0)
 
     steps, shorts_per_step = [], []
@@ -180,7 +238,7 @@ def analyze(acts: list[dict], k: int, gap_us: float = GAP_US, tiny_us: float = T
         for x in acts:
             if x["t0"] < t_a or x["t0"] >= t_b:
                 continue
-            by_cat.setdefault(_cat_of(x, li, short_idx, burst_of), []).append((x["t0"], min(x["t1"], t_b)))
+            by_cat.setdefault(_cat_of(x, li, short_idx, burst_of, roles), []).append((x["t0"], min(x["t1"], t_b)))
         wall = t_b - t_a
         busy_all = union_len([iv for v in by_cat.values() for iv in v])
         idle_total = wall - busy_all
@@ -210,7 +268,9 @@ def analyze(acts: list[dict], k: int, gap_us: float = GAP_US, tiny_us: float = T
     out["mean_ms"] = {key: statistics.fmean(s[key] for s in steps) for key in MS_KEYS}
     out["median_ms"] = {key: statistics.median(s[key] for s in steps) for key in MS_KEYS}
     out["shorts_per_step_median"] = statistics.median(shorts_per_step)
-    out["checks"] = {"shorts_per_step_close_to_k": abs(out["shorts_per_step_median"] - k) <= 1,
+    out["checks"] = {"split_mode": out["split_mode"],
+                     "shorts_per_step_close_to_k": abs(out["shorts_per_step_median"] - k) <= 1,
+                     "merged_draft_bursts_suspected": out["shorts_per_step_median"] < k,
                      "c1_floor_le_2ms": out["median_ms"]["c1_floor"] <= 2.0,
                      "note": "c1 is a heuristic: removable = re-eval + readback + idle after verify + idle between drafts"}
     out["steps_ms"] = [{key: round(s[key], 3) for key in MS_KEYS} for s in steps]
@@ -270,9 +330,14 @@ def read_sqlite(path) -> list[dict]:
 
 # ---------------------------------------------------------------- capture
 
-def secret_env() -> dict:
+def nsys_env(workdir: str, environ=None) -> dict:
+    """Allowlisted environment for nsys and the server under it (a report stores the environment), TMPDIR in workdir.
+    A name must match ENV_ALLOW and must not look like a secret (LLAMA_API_KEY matches the allowlist but not the second test)."""
     from exps import e4_bonsai
-    return e4_bonsai.scrubbed_env()
+    src = os.environ if environ is None else environ
+    env = {k: v for k, v in src.items() if ENV_ALLOW.match(k) and not e4_bonsai.SECRET_ENV_RE.search(k)}
+    env["TMPDIR"] = workdir
+    return env
 
 
 def private_workdir() -> str:
@@ -328,12 +393,13 @@ def cleanup(workdir: str) -> None:
 
 
 def capture(*, nsys: str, server_argv: list[str], port: int, prompt: str, budget: common.Budget, workdir: str, log_path: str,
-            k: int = 4, n_predict: int = N_PREDICT, notes: list | None = None) -> dict:
-    """Run the nsys flow. Never raises; the report files are removed from workdir before return."""
+            k: int = 4, n_predict: int = N_PREDICT, notes: list | None = None, on_stage=None) -> dict:
+    """Run the nsys flow. Never raises; the report files are removed from workdir before return.
+    on_stage(res) is called once the request is captured (before the export and parse), so a run cut short keeps it."""
     from exps import e5_spec
     notes = notes if notes is not None else []
     res: dict = {"ok": False, "error": None, "nsys": nsys, "server_cmd": server_argv, "log": log_path, "analysis": None}
-    env = secret_env()
+    env = nsys_env(workdir)
     prefix = os.path.join(workdir, "r1step")
     rep, sql = prefix + ".nsys-rep", prefix + ".sqlite"
     proc = None
@@ -366,6 +432,11 @@ def capture(*, nsys: str, server_argv: list[str], port: int, prompt: str, budget
         time.sleep(0.5)
         resp = e5_spec.post_json(base + "/completion", e5_spec.completion_body(text, n_predict), budget.timeout(120.0, reserve_s=10))
         res["request"] = e5_spec.parse_completion(resp)
+        if on_stage:
+            try:
+                on_stage(res)
+            except Exception as e:
+                notes.append(f"step partial save failed: {type(e).__name__}: {e}")
         code, out = _run(control_cmd(nsys, "stop"), env, budget.timeout(180.0, reserve_s=10) or 60)
         if code != 0:
             res["error"] = f"nsys stop failed ({code}): {out[-300:].strip()}"
@@ -397,6 +468,7 @@ def capture(*, nsys: str, server_argv: list[str], port: int, prompt: str, budget
         return res
     finally:
         if proc is not None and proc.poll() is None:
+            _run(control_cmd(nsys, "cancel"), env, 20)  # nsys runs in its own session: the runner's group kill does not reach it
             try:
                 os.killpg(proc.pid, signal.SIGTERM)
                 proc.wait(timeout=20)
@@ -406,7 +478,7 @@ def capture(*, nsys: str, server_argv: list[str], port: int, prompt: str, budget
                 except Exception:
                     pass
         logf.close()
-        for path in (rep, sql, sql + "-wal", sql + "-shm"):
+        for path in (rep, sql, sql + "-wal", sql + "-shm", prefix + ".qdstrm", prefix + ".qdrep"):
             try:
                 os.remove(path)
             except OSError:

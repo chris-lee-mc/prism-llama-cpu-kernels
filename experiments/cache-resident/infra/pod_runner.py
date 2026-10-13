@@ -33,7 +33,7 @@ from infra.gpus import tag_from_name  # noqa: E402
 
 GRAPHQL_URL = "https://api.runpod.io/graphql"
 _NAME_RE = re.compile(r"^[a-z0-9_.-]+$")
-DENY_GLOBS = ("*.nsys-rep", "*.sqlite", "*.qdrep")
+DENY_GLOBS = ("*.nsys-rep", "*.sqlite", "*.sqlite-wal", "*.sqlite-shm", "*.qdrep", "*.qdstrm")
 SECRET_ENVS = ("RUNPOD_API_KEY", "HF_TOKEN")
 SCAN_MAX = 10 << 20
 
