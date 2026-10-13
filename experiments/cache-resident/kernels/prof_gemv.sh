@@ -1,4 +1,5 @@
 # temporary: knob sweep for the gemv kernels
+python3 -c "import torch; assert torch.cuda.is_available()" || { echo NO_CUDA; exit 1; }
 SH=4096x4096,8192x8192,28672x8192
 b() { python3 -m kernels.bench_gemv --shapes $SH --result-exp '' "$@" 2>&1 | grep -E "^ +[0-9]|gap"; }
 echo NEW; b
