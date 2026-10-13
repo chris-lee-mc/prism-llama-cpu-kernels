@@ -5,7 +5,10 @@ token come from an ncu pass (separate process, --inner); the split into weights 
 diffing contexts. The fit us/token = a + bytes/bw feeds exps.proj_hybrid.
 
   python -m exps.e2_hybrid_bf16 --model 0.8B|2B [--ctx 0,4096,16384,32768,65536] [--decode 512]
-                                [--compile-mode auto|reduce-overhead|default|cuda_graph_manual|eager]
+                                [--compile-mode auto|reduce-overhead|default|cuda_graph_manual|eager] [--attn sdpa|grouped]
+
+--attn grouped swaps the decode (q_len 1) attention for two grouped matmuls + softmax over the KV heads (no repeat_kv);
+stock sdpa with a static-cache mask runs the memory-efficient kernel, which does not split the KV length at q_len 1.
 
 The static cache is sized ctx + decode + margin and attention reads all of it every step, so KV bytes
 scale with the cache length. Hybrid caches may not compile cleanly: the driver falls back
@@ -182,15 +185,42 @@ class LMWrap(torch.nn.Module):
         return SimpleNamespace(logits=self.lm_head(h), past_key_values=getattr(o, "past_key_values", past_key_values))
 
 
-def load_text_model(repo: str, info: dict):
+def grouped_attention(module, query, key, value, attention_mask, dropout: float = 0.0, scaling=None, **kw):
+    """Decode attention as grouped matmuls: q [b, h, 1, d] against k/v [b, hk, L, d] without repeating kv. Prefill -> sdpa."""
+    b, h, q, d = query.shape
+    hk = key.shape[1]
+    if q != 1 or h % hk:
+        from transformers.integrations.sdpa_attention import sdpa_attention_forward
+        return sdpa_attention_forward(module, query, key, value, attention_mask, dropout=dropout, scaling=scaling, **kw)
+    sc = scaling if scaling is not None else d ** -0.5
+    s = torch.matmul(query.reshape(b, hk, h // hk, d), key.transpose(-1, -2)).float() * sc   # [b, hk, g, L]
+    if attention_mask is not None:
+        m = attention_mask[..., -1:, : s.shape[-1]]
+        s = s.masked_fill(~m, float("-inf")) if m.dtype == torch.bool else s + m.float()
+    o = torch.matmul(torch.softmax(s, dim=-1).to(value.dtype), value)                       # [b, hk, g, d]
+    return o.reshape(b, h, 1, d).transpose(1, 2).contiguous(), None
+
+
+def register_grouped_attention() -> str:
+    """Register grouped_attention as 'cr_grouped' (mask built like sdpa). Returns the name."""
+    from transformers import AttentionInterface
+    from transformers.masking_utils import ALL_MASK_ATTENTION_FUNCTIONS
+    AttentionInterface.register("cr_grouped", grouped_attention)
+    ALL_MASK_ATTENTION_FUNCTIONS.register("cr_grouped", ALL_MASK_ATTENTION_FUNCTIONS["sdpa"])
+    return "cr_grouped"
+
+
+def load_text_model(repo: str, info: dict, attn: str = "sdpa"):
     """Load text-only BF16 model on cuda. Records the class used and every failed attempt in info."""
     import transformers
     info["transformers"] = transformers.__version__
+    impl = register_grouped_attention() if attn == "grouped" else "sdpa"
+    info["attn_implementation"] = impl
     errs = info.setdefault("load_errors", [])
     model = None
     for kw in ({"dtype": torch.bfloat16}, {"torch_dtype": torch.bfloat16}):
         try:
-            model = transformers.AutoModelForCausalLM.from_pretrained(repo, attn_implementation="sdpa", **kw)
+            model = transformers.AutoModelForCausalLM.from_pretrained(repo, attn_implementation=impl, **kw)
             info["load_path"] = "AutoModelForCausalLM"
             break
         except TypeError as e:
@@ -205,7 +235,7 @@ def load_text_model(repo: str, info: dict):
             if cls is None:
                 continue
             try:
-                full = cls.from_pretrained(repo, dtype=torch.bfloat16, attn_implementation="sdpa")
+                full = cls.from_pretrained(repo, dtype=torch.bfloat16, attn_implementation=impl)
                 info["load_path"] = f"{name}.model.language_model"
                 break
             except Exception as e:
@@ -561,7 +591,7 @@ def setup(args, info):
         repo = rid["alternatives"][0]
         info["hf_note"] = f"{rid['repo']} missing; using {repo} (alternatives {rid['alternatives']})"
     info["repo_used"] = repo
-    model = load_text_model(repo, info)
+    model = load_text_model(repo, info, getattr(args, "attn", "sdpa"))
     record_gdn_impl(model, info)
     if DEVICE == "cuda":
         fla_check(model, info)
@@ -817,6 +847,7 @@ def finish(args, rows, notes, info, dev, counters_all, nl, budget_note) -> None:
         fit["gdn_impl"] = info.get("gdn_impl")
     notes.append("ncu counts kernel nodes only; any cudaMemcpy node (e.g. a same-dtype copy_ into the cache) is excluded from dram_bytes_per_token")
     config = {"model": args.model, "ctx": args.ctx, "decode": args.decode, "compile_mode_requested": args.compile_mode,
+              "attn": getattr(args, "attn", "sdpa"),
               "torch": torch.__version__, "quick": args.quick, "device": dev, "load": info}
     common.write_result(EXP_NAMES[args.model], args, config, rows, notes, counters_all, extra={"fit": fit})
 
@@ -890,7 +921,7 @@ def run(args) -> int:
             share = budget.left() / (len(jobs) - i) if budget.limit is not None else NCU_TIMEOUT_S
             res = common.ncu_run(common.py_module_argv("exps.e2_hybrid_bf16", "--inner", "--model", args.model, "--ctx", str(row["ctx"]),
                                                        "--decode", str(args.decode), "--compile-mode", row["compile_mode_used"],
-                                                       "--cache-kind", row["cache_kind"]),
+                                                       "--cache-kind", row["cache_kind"], "--attn", args.attn),
                                  NCU_STEPS, profile_from_start_off=True, app_replay=False,
                                  timeout=budget.timeout(min(NCU_TIMEOUT_S, share), reserve_s=30), env=common.inner_env())
             st = common.ncu_stats(res)
@@ -918,6 +949,7 @@ def parse_args(argv=None):
     ap.add_argument("--ctx", type=parse_ctx, default=None)
     ap.add_argument("--decode", type=int, default=512)
     ap.add_argument("--compile-mode", default="reduce-overhead", choices=["auto"] + MODES)
+    ap.add_argument("--attn", choices=["sdpa", "grouped"], default="sdpa", help="decode attention (see module doc)")
     ap.add_argument("--cache-kind", choices=["static", "dynamic"], default="static", help="ncu target cache kind (internal)")
     ap.add_argument("--inner", action="store_true", help="ncu target (internal)")
     a = ap.parse_args(argv)

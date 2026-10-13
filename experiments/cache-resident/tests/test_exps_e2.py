@@ -235,3 +235,18 @@ def test_impl_and_ref_reads_wrapper_closure():
         return wrapped
     assert e2._impl_and_ref(make()) == (impl, ref)
     assert e2._impl_and_ref(ref) == (ref, ref)
+
+
+def test_grouped_attention_matches_sdpa():
+    import torch
+    torch.manual_seed(0)
+    b, h, hk, d, L = 1, 8, 2, 16, 37
+    q = torch.randn(b, h, 1, d)
+    k, v = torch.randn(b, hk, L, d), torch.randn(b, hk, L, d)
+    mask = torch.ones(b, 1, 1, L, dtype=torch.bool)
+    mask[..., 30:] = False
+    out, _ = e2.grouped_attention(None, q, k, v, mask, scaling=0.25)
+    ref = torch.nn.functional.scaled_dot_product_attention(q, k.repeat_interleave(h // hk, 1), v.repeat_interleave(h // hk, 1),
+                                                           attn_mask=mask, scale=0.25)
+    assert out.shape == (b, 1, h, d)
+    assert torch.allclose(out, ref.transpose(1, 2), atol=1e-5)
