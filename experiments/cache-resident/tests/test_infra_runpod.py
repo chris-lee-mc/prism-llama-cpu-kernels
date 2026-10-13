@@ -436,6 +436,7 @@ def test_low_balance_only_warns(env, monkeypatch, capsys):
 
 def test_gate_refuses_session_cap(env, monkeypatch):
     res, led = env
+    monkeypatch.setenv("CR_SESSION_CAP_USD", "25")
     led.record_launch("old", "e", "g", "t", "SECURE", 1.0)
     led.record_end("old", 24.9)
     api = FakeAPI()
