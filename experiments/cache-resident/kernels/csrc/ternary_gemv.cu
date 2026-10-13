@@ -26,13 +26,6 @@ constexpr int kPair = 12;        // LUT floats per pair: entries c0 | c1 << 2 wi
 constexpr int kLutGroup = 64 * kPair;
 __host__ __device__ constexpr int table_floats(bool fp4) { return fp4 ? kTile * 128 : kTile * kLutGroup; }
 
-// Weights are read once: skip L1, keep the default L2 policy (L2 persistence experiments rely on it).
-__device__ __forceinline__ uint4 ld_stream(const uint4* p) {
-  uint4 v;
-  asm volatile("ld.global.nc.L1::no_allocate.v4.u32 {%0, %1, %2, %3}, [%4];" : "=r"(v.x), "=r"(v.y), "=r"(v.z), "=r"(v.w) : "l"(p));
-  return v;
-}
-
 __device__ __forceinline__ void cp_async16(void* smem, const void* g) {
   const unsigned sa = (unsigned)__cvta_generic_to_shared(smem);
   asm volatile("cp.async.cg.shared.global [%0], [%1], 16;" ::"r"(sa), "l"(g) : "memory");
@@ -225,7 +218,7 @@ __host__ __device__ __forceinline__ int smem_bytes(int W, bool fp4, int K, int S
 
 template <int W, bool FP4>
 __device__ __forceinline__ void gemv_body(const uint32_t* __restrict__ q, const __half* __restrict__ s, const __half* __restrict__ x,
-                                          __half* __restrict__ y, int N, int K, int S, int D, int dbg) {
+                                          __half* __restrict__ y, int N, int K, int S, int D) {
   constexpr int NT = W * 32;
   constexpr int RB = 32 * W;
   constexpr int kQStage = RB * kTileBytes;  // bytes
@@ -248,21 +241,9 @@ __device__ __forceinline__ void gemv_body(const uint32_t* __restrict__ q, const 
   const int nt = (n_tiles(K) - split + S - 1) / S;  // tiles of this block: split, split + S, ...
   const size_t qpitch = (size_t)(K >> 2);           // bytes per row
 
-  if (dbg & 16) {  // debug: coalesced streaming read of all q, the bandwidth floor of this launch shape
-    const size_t n4 = (size_t)N * (size_t)(K >> 6);
-    const size_t st = (size_t)gridDim.x * NT;
-    uint32_t v = 0;
-    for (size_t i = (size_t)blockIdx.x * NT + tid; i < n4; i += st) {
-      const uint4 a = ld_stream(reinterpret_cast<const uint4*>(q) + i);
-      v ^= a.x ^ a.y ^ a.z ^ a.w;
-    }
-    if (v == 0x12345678u) y[0] = __float2half(1.f);
-    return;
-  }
-
   const unsigned char* qb = reinterpret_cast<const unsigned char*>(q);
   // scales ride in the ring when 8 B copies are legal, else they are loaded one tile ahead into registers
-  const bool s8 = !(dbg & 256) && ((reinterpret_cast<uintptr_t>(s) & 7u) == 0) && ((G & 3) == 0);
+  const bool s8 = ((reinterpret_cast<uintptr_t>(s) & 7u) == 0) && ((G & 3) == 0);
   // copy tile tt of the row block into ring slot sl
   auto issue = [&](int tt, int sl) {
     const int nc = min(kTile, G - tt * kTile) * 2;  // valid 16 B chunks per row
@@ -324,7 +305,7 @@ __device__ __forceinline__ void gemv_body(const uint32_t* __restrict__ q, const 
       x_load(xn, x, (tt + S) * kTile, min(kTile, G - (tt + S) * kTile));
     }
     const int ng = min(kTile, G - tt * kTile);
-    if (!(dbg & 8)) x_store(table, xc, ng);
+    x_store(table, xc, ng);
     __syncthreads();
     const uint4* qt = reinterpret_cast<const uint4*>(qs + sl * kQStage);
 #pragma unroll
@@ -334,9 +315,7 @@ __device__ __forceinline__ void gemv_body(const uint32_t* __restrict__ q, const 
 #pragma unroll
         for (int hh = 0; hh < 2; ++hh) {
           const uint4 w = qt[q_chunk(rl, 2 * u + hh)];
-          if (dbg & 1) {
-            d += __uint_as_float((w.x ^ w.y ^ w.z ^ w.w) & 0x3fffffffu) * 1e-30f;
-          } else if (FP4) {
+          if (FP4) {
             d += fp4_dot(table + u * 128 + 64 * hh, reinterpret_cast<const char*>(tab), stage + warp * 256, lane, w);
           } else {
             d += lut_dot(table + u * kLutGroup + 32 * hh * kPair, w);
@@ -372,15 +351,15 @@ __device__ __forceinline__ void gemv_body(const uint32_t* __restrict__ q, const 
 
 // Kernel symbols start with the launcher name (ncu filters use it).
 template <int W>
-__global__ void __launch_bounds__(W * 32, 16 / W) cr_gemv_lut_kernel(const uint32_t* __restrict__ q, const __half* __restrict__ s, const __half* __restrict__ x,
-                                                             __half* __restrict__ y, int N, int K, int S, int D, int dbg) {
-  gemv_body<W, false>(q, s, x, y, N, K, S, D, dbg);
+__global__ void __launch_bounds__(W * 32, W == 2 ? 6 : 16 / W) cr_gemv_lut_kernel(const uint32_t* __restrict__ q, const __half* __restrict__ s, const __half* __restrict__ x,
+                                                             __half* __restrict__ y, int N, int K, int S, int D) {
+  gemv_body<W, false>(q, s, x, y, N, K, S, D);
 }
 
 template <int W>
-__global__ void __launch_bounds__(W * 32, 16 / W) cr_gemv_fp4_kernel(const uint32_t* __restrict__ q, const __half* __restrict__ s, const __half* __restrict__ x,
-                                                             __half* __restrict__ y, int N, int K, int S, int D, int dbg) {
-  gemv_body<W, true>(q, s, x, y, N, K, S, D, dbg);
+__global__ void __launch_bounds__(W * 32, W == 2 ? 6 : 16 / W) cr_gemv_fp4_kernel(const uint32_t* __restrict__ q, const __half* __restrict__ s, const __half* __restrict__ x,
+                                                             __half* __restrict__ y, int N, int K, int S, int D) {
+  gemv_body<W, true>(q, s, x, y, N, K, S, D);
 }
 
 inline bool args_ok(const void* q, const void* s, const void* x, const void* y, int N, int K) {
@@ -394,14 +373,12 @@ int env_int(const char* name, int def) {
   return e && *e ? atoi(e) : def;
 }
 
-// Knobs, read once. CR_GEMV_PDL=1 enables PDL. CR_GEMV_W / _S / _D force the config (tuning). CR_GEMV_DBG: debug only
-// (1 skip dot, 8 skip table, 16 coalesced read floor, 256 scales via registers).
+// Knobs, read once. CR_GEMV_PDL=1 enables PDL. CR_GEMV_W / _S / _D force the config, CR_GEMV_VERBOSE=1 prints it (tuning).
 struct Knobs {
   int pdl = env_int("CR_GEMV_PDL", 0);
   int w = env_int("CR_GEMV_W", 0);
   int s = env_int("CR_GEMV_S", 0);
   int d = env_int("CR_GEMV_D", 0);
-  int dbg = env_int("CR_GEMV_DBG", 0);
   int verbose = env_int("CR_GEMV_VERBOSE", 0);
 };
 
@@ -539,13 +516,12 @@ cudaError_t launch(const uint32_t* q, const __half* s, const __half* x, __half* 
   }
   cfg.attrs = at;
   cfg.numAttrs = (unsigned)na;
-  const int dbg = knobs().dbg;
   if (c.W == 2) {
-    cudaLaunchKernelEx(&cfg, FP4 ? cr_gemv_fp4_kernel<2> : cr_gemv_lut_kernel<2>, q, s, x, y, N, K, c.S, c.D, dbg);
+    cudaLaunchKernelEx(&cfg, FP4 ? cr_gemv_fp4_kernel<2> : cr_gemv_lut_kernel<2>, q, s, x, y, N, K, c.S, c.D);
   } else if (c.W == 8) {
-    cudaLaunchKernelEx(&cfg, FP4 ? cr_gemv_fp4_kernel<8> : cr_gemv_lut_kernel<8>, q, s, x, y, N, K, c.S, c.D, dbg);
+    cudaLaunchKernelEx(&cfg, FP4 ? cr_gemv_fp4_kernel<8> : cr_gemv_lut_kernel<8>, q, s, x, y, N, K, c.S, c.D);
   } else {
-    cudaLaunchKernelEx(&cfg, FP4 ? cr_gemv_fp4_kernel<4> : cr_gemv_lut_kernel<4>, q, s, x, y, N, K, c.S, c.D, dbg);
+    cudaLaunchKernelEx(&cfg, FP4 ? cr_gemv_fp4_kernel<4> : cr_gemv_lut_kernel<4>, q, s, x, y, N, K, c.S, c.D);
   }
   return cudaGetLastError();
 }
