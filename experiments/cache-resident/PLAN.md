@@ -107,3 +107,15 @@ def reset(dev=0):
 - Day 11: E11 chart, write-up.
 
 No purchase decision. RunPod is the primary platform for all runs, PRO 6000 included (cheaper than GCP). A PRO 6000 on GCP at work is the fallback only when RunPod has no PRO 6000 capacity.
+
+## 10. PR track (end goal)
+
+Target: a PR to PrismML-Eng/llama.cpp `prism` with an L2-residency optimization for speculative decoding on large-L2 Blackwell cards, plus a matching draft model released as GGUF on Hugging Face (referenced from the PR, not included in it).
+
+- Scope of the PR: a small, opt-in ggml-cuda change that pins the draft model's weights and LM head in persisting L2 (access policy window on CUDA Graph kernel nodes) during speculative decoding. Enabled only when the device reports a large persisting-L2 max; zero behavior change otherwise.
+- Not in the PR: everything under `experiments/cache-resident/` (PyTorch harness, prototype kernels, RunPod scripts). These produce the evidence only.
+- Draft model constraint: must run in llama.cpp with an existing architecture and the fork's existing quant types (`PQ2_0` / `PTQ1_0`). E9 dense ternary + 48K head is the default PR candidate; E7 looped core goes forward only if it wins by a wide margin, since it needs new arch support.
+- Evidence the PR needs: E10 measured inside llama.cpp (not a PyTorch loop); L2 hit % of the draft before/after each target verification (eviction risk); no regression on 3090 (small L2), Ada, and with the feature off; `test-backend-ops` passes.
+- Authorship: PrismML inherits llama.cpp AGENTS.md / CONTRIBUTING. The upstream patch must be authored or closely owned by the human contributor; no AI-written PR description or commit messages. Prototypes and measurements here are supporting material.
+- Rebase onto the latest upstream `prism` immediately before submitting, not earlier.
+- Every judge stage from Phase 2 on applies an upstreamability check: is the change small, opt-in, consistent with ggml-cuda patterns, free of new subsystems, and reviewable by a human who must defend it?

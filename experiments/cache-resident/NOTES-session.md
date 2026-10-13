@@ -9,3 +9,4 @@
 - AGENTS.md: ASCII only in code/comments (no em dash, arrows, x-sign), concise comments, commits use `Assisted-by: Claude` (never Co-authored-by).
 - Schedule is in days, not weeks. No card purchase decision. RunPod is primary for every GPU incl. PRO 6000 (cheaper than GCP); a GCP PRO 6000 is fallback only, so the pod-side runner should also work as a plain local run on any CUDA host.
 - RunPod account auto-tops-up when balance < $25: the budget gate must NOT refuse launches just because clientBalance is low; gate on a per-session spend cap (ledger) and per-run estimated cost instead.
+- End goal: PR to PrismML llama.cpp fork (see PLAN.md section 10). All judge stages must include the upstreamability check defined there.
