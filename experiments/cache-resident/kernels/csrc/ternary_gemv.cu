@@ -223,6 +223,23 @@ __device__ __forceinline__ void gemv_body(const uint32_t* __restrict__ q, const 
   const uint4* qrow = reinterpret_cast<const uint4*>(q) + (size_t)rowc * (size_t)(K >> 6) + h;
   const unsigned short* srow = reinterpret_cast<const unsigned short*>(s) + (size_t)rowc * (size_t)G;
 
+  if (dbg & 16) {  // debug: coalesced streaming read of all q, the bandwidth floor of this launch shape
+    const size_t n4 = (size_t)N * (size_t)(K >> 6);
+    const size_t st = (size_t)gridDim.x * NT;
+    uint32_t v = 0;
+    size_t i = (size_t)blockIdx.x * NT + tid;
+    for (; i + 3 * st < n4; i += 4 * st) {
+      const uint4 a = ld_stream(reinterpret_cast<const uint4*>(q) + i), b = ld_stream(reinterpret_cast<const uint4*>(q) + i + st);
+      const uint4 c = ld_stream(reinterpret_cast<const uint4*>(q) + i + 2 * st), d = ld_stream(reinterpret_cast<const uint4*>(q) + i + 3 * st);
+      v ^= a.x ^ a.y ^ a.z ^ a.w ^ b.x ^ b.y ^ b.z ^ b.w ^ c.x ^ c.y ^ c.z ^ c.w ^ d.x ^ d.y ^ d.z ^ d.w;
+    }
+    for (; i < n4; i += st) {
+      const uint4 a = ld_stream(reinterpret_cast<const uint4*>(q) + i);
+      v ^= a.x ^ a.y ^ a.z ^ a.w;
+    }
+    if (v == 0x12345678u) y[0] = __float2half(1.f);
+    return;
+  }
   grid_dep_launch();
   Tile cur;
   load_tile(cur, qrow, srow, gb, ge, dbg);
@@ -339,7 +356,7 @@ bool pdl_on() {
   return v != 0;
 }
 
-// debug only: 1 skip dot, 2 plain __ldg for q, 8 skip table build
+// debug only: 1 skip dot, 2 plain __ldg for q, 8 skip table build, 16 coalesced read floor
 int dbg_bits() {
   static const int v = env_int("CR_GEMV_DBG", 0);
   return v;
