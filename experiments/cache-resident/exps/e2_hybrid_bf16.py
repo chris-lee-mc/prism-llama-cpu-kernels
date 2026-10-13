@@ -667,6 +667,13 @@ def host_and_replay_us(d, n: int) -> dict:
 def breakdown(model, cache, kk, d, eff: int, n: int, ana: dict, peak_gbps: float | None) -> dict:
     """us/token split: kernel time by category, GPU idle (launch gaps), host issue time, bandwidth floor."""
     out = host_and_replay_us(d, n)
+    try:
+        from exps.e1_sweep import busy_state
+        d.reset()
+        out["nvml_decode_busy"] = busy_state(lambda: [d.once() for _ in range(min(n, 48))], wait_s=0.05)
+        d.reset()
+    except Exception as e:
+        out["nvml_decode_busy"] = {"error": f"{type(e).__name__}: {e}"}
     ev = profile_kernels(d)
     src = "decoder"
     if not ev:  # profiler saw no kernels (e.g. inside a graph): profile an eager step on the same cache
@@ -679,6 +686,38 @@ def breakdown(model, cache, kk, d, eff: int, n: int, ana: dict, peak_gbps: float
     nbytes = ana["weight_bytes"] + 2 * ana["gdn_state_bytes"] + ana["kv_bytes"]
     out["analytic_bytes_per_token"] = nbytes
     out["bw_floor_us"] = nbytes / (peak_gbps * 1e3) if peak_gbps else None
+    return out
+
+
+def calibrate_gpu(model) -> dict:
+    """Is the card itself slow? Copy GB/s, F.linear GB/s on the LM head and an MLP-sized weight, NVML clocks idle and busy."""
+    from exps.e1_sweep import busy_state, nvml_state
+    from harness import timing
+    out: dict = {"nvml_idle": nvml_state()}
+    n = 512 * 1024 * 1024
+    a = torch.empty(n, dtype=torch.uint8, device=DEVICE)
+    b = torch.empty_like(a)
+    us = timing.cuda_time_us(lambda: b.copy_(a), iters=20, warmup=3)
+    out["copy_gbps"] = 2 * n / us / 1e3
+    out["nvml_copy_busy"] = busy_state(lambda: [b.copy_(a) for _ in range(int(0.6e6 / us) + 1)])
+    del a, b
+    head = getattr(getattr(model, "lm_head", None), "weight", None)
+    ws = {"lm_head": head} if head is not None else {}
+    ws["mlp_3584x1024"] = torch.randn(3584, 1024, device=DEVICE, dtype=torch.bfloat16)
+    ws["mlp_x8_rotating"] = [torch.randn(3584, 1024, device=DEVICE, dtype=torch.bfloat16) for _ in range(64)]
+    for name, w in ws.items():
+        lst = w if isinstance(w, list) else [w]
+        x = torch.randn(1, 1, lst[0].shape[1], device=DEVICE, dtype=torch.bfloat16)
+        i = [0]
+
+        def f():
+            torch.nn.functional.linear(x, lst[i[0] % len(lst)])
+            i[0] += 1
+        us = timing.cuda_time_us(f, iters=50 if len(lst) == 1 else 256, warmup=5)
+        nb = lst[0].numel() * lst[0].element_size()
+        out[f"linear_{name}"] = {"us": us, "gbps": nb / us / 1e3, "bytes": nb}
+    del ws
+    torch.cuda.empty_cache()
     return out
 
 
@@ -809,6 +848,11 @@ def run(args) -> int:
         print(f"error: {notes[-1]}", file=sys.stderr)
         return 3
     weight_bytes = sum(p.numel() * p.element_size() for p in model.parameters())
+    try:
+        info["calibration"] = calibrate_gpu(model)
+        print("[e2] calibration %s" % {k: v for k, v in info["calibration"].items() if not k.startswith("nvml")}, flush=True)
+    except Exception as e:
+        info["calibration"] = {"error": f"{type(e).__name__}: {str(e)[:300]}"}
     nl = modelspec.facts(modelspec.TEXT_CFG[args.model])["n_layers"]
     rows: list[dict] = []
     counters_all = ncu_ok
