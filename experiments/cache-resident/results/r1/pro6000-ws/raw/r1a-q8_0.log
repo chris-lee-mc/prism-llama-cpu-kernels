@@ -1,0 +1,68 @@
+0.02 minutes
+
+chunk             PPL               ln(PPL(Q)/PPL(base))          KL Divergence              ?p RMS            Same top p
+   1      13.7710 ?    1.3421      -0.74930 ?    0.08195       3.83938 ?    0.10175    32.599 ?  1.044 %    38.807 ?  1.524 %
+   2       7.8210 ?    0.4925      -0.16145 ?    0.04682       2.20174 ?    0.06402    28.006 ?  0.702 %    57.478 ?  1.093 %
+   3       8.0404 ?    0.4150       0.05282 ?    0.03466       1.68966 ?    0.04549    25.643 ?  0.558 %    62.072 ?  0.876 %
+   4       9.2934 ?    0.4295       0.19030 ?    0.02889       1.44992 ?    0.03526    24.666 ?  0.474 %    63.074 ?  0.755 %
+
+====== Perplexity statistics ======
+Mean PPL(Q)                   :   9.293359 ?   0.429472
+Mean PPL(base)                :   7.682908 ?   0.342167
+Cor(ln(PPL(Q)), ln(PPL(base))):  79.79%
+Mean ln(PPL(Q)/PPL(base))     :   0.190302 ?   0.028891
+Mean PPL(Q)/PPL(base)         :   1.209615 ?   0.034946
+Mean PPL(Q)-PPL(base)         :   1.610451 ?   0.258876
+
+====== KL divergence statistics ======
+Mean    KLD:   1.449922 ?   0.035262
+Maximum KLD:  20.910772
+99.9%   KLD:  15.749105
+99.0%   KLD:  11.302933
+95.0%   KLD:   6.091436
+90.0%   KLD:   3.894598
+Median  KLD:   0.621944
+10.0%   KLD:   0.037716
+ 5.0%   KLD:   0.016966
+ 1.0%   KLD:   0.004059
+ 0.1%   KLD:   0.001284
+Minimum KLD:   0.000376
+
+====== Token probability statistics ======
+Mean    ?p: -2.617 ? 0.383 %
+Maximum ?p: 99.961%
+99.9%   ?p: 99.794%
+99.0%   ?p: 89.254%
+95.0%   ?p: 34.864%
+90.0%   ?p: 18.138%
+75.0%   ?p:  2.547%
+Median  ?p: -0.122%
+25.0%   ?p: -8.502%
+10.0%   ?p: -30.068%
+ 5.0%   ?p: -46.828%
+ 1.0%   ?p: -76.237%
+ 0.1%   ?p: -91.835%
+Minimum ?p: -95.764%
+RMS ?p    : 24.666 ? 0.474 %
+Same top p: 63.074 ? 0.755 %
+
+0.00.744.940 W model has unused tensor blk.24.attn_norm.weight (size = 4096 bytes) -- ignoring
+0.00.744.952 W model has unused tensor blk.24.post_attention_norm.weight (size = 4096 bytes) -- ignoring
+0.00.744.956 W model has unused tensor blk.24.attn_q.weight (size = 4456448 bytes) -- ignoring
+0.00.744.958 W model has unused tensor blk.24.attn_k.weight (size = 557056 bytes) -- ignoring
+0.00.744.960 W model has unused tensor blk.24.attn_v.weight (size = 557056 bytes) -- ignoring
+0.00.744.964 W model has unused tensor blk.24.attn_output.weight (size = 2228224 bytes) -- ignoring
+0.00.744.966 W model has unused tensor blk.24.attn_q_norm.weight (size = 1024 bytes) -- ignoring
+0.00.744.967 W model has unused tensor blk.24.attn_k_norm.weight (size = 1024 bytes) -- ignoring
+0.00.744.969 W model has unused tensor blk.24.ffn_gate.weight (size = 3899392 bytes) -- ignoring
+0.00.744.970 W model has unused tensor blk.24.ffn_down.weight (size = 3899392 bytes) -- ignoring
+0.00.744.972 W model has unused tensor blk.24.ffn_up.weight (size = 3899392 bytes) -- ignoring
+0.00.744.976 W model has unused tensor blk.24.nextn.eh_proj.weight (size = 2228224 bytes) -- ignoring
+0.00.744.978 W model has unused tensor blk.24.nextn.enorm.weight (size = 4096 bytes) -- ignoring
+0.00.744.980 W model has unused tensor blk.24.nextn.hnorm.weight (size = 4096 bytes) -- ignoring
+0.00.744.985 W model has unused tensor blk.24.nextn.shared_head_norm.weight (size = 4096 bytes) -- ignoring
+0.00.805.614 I cmn          init: llama threadpool init, n_threads = 128
+0.00.840.874 I 
+0.00.841.053 I system_info: n_threads = 128 (n_threads_batch = 128) / 256 | CUDA : ARCHS = 1200 | USE_GRAPHS = 1 | FA_QUANTS = q4_0-q4_0,q8_0-q8_0,f16-f16,bf16-bf16 | BLACKWELL_NATIVE_FP4 = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | LLAMAFILE = 1 | OPENMP = 1 | REPACK = 1 | 
+0.00.921.464 I kl_divergence: computing over 4 chunks, n_ctx=2048, batch_size=2048, n_seq=1
+0.01.195.368 I kl_divergence: 0.27 seconds per pass - ETA 

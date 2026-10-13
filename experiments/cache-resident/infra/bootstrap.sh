@@ -121,6 +121,23 @@ else
   MISSING+=("ncu")
 fi
 
+# 4b) Nsight Systems (r1 part c, e4 kernel split); optional, so not in MISSING
+find_nsys() {
+  command -v nsys 2>/dev/null && return 0
+  local c
+  for c in /usr/local/cuda*/bin/nsys /opt/nvidia/nsight-systems/*/bin/nsys; do
+    [ -x "$c" ] && { echo "$c"; return 0; }
+  done
+  return 1
+}
+NSYS="$(find_nsys || true)"
+if [ -z "$NSYS" ] && [ "$IS_ROOT" = "1" ] && command -v apt-get >/dev/null 2>&1; then
+  say "apt install cuda-nsight-systems-12-8"
+  apt-get install -y -qq --no-install-recommends cuda-nsight-systems-12-8 || say "nsys apt install failed"
+  NSYS="$(find_nsys || true)"
+fi
+say "nsys: ${NSYS:-not found}"
+
 # 5) optional llama.cpp build
 if [ "${CR_BUILD_LLAMA:-0}" = "1" ]; then
   CC="$(nvidia-smi --query-gpu=compute_cap --format=csv,noheader 2>/dev/null | head -1 | tr -d . | tr -d ' ')"
