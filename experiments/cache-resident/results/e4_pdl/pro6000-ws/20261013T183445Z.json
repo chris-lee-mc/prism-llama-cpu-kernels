@@ -1,0 +1,2136 @@
+{
+ "schema": 1,
+ "exp": "e4_pdl",
+ "gpu": "pro6000-ws",
+ "utc": "2026-10-13T18:34:45.430398+00:00",
+ "env": {
+  "gpu_name": "NVIDIA RTX PRO 6000 Blackwell Workstation Edition",
+  "gpu_tag": "pro6000-ws",
+  "cc": "12.0",
+  "sm": "sm_120",
+  "driver": "580.142",
+  "cuda_runtime": "12.8",
+  "cuda_driver": "13.0",
+  "torch": "2.11.0+cu128",
+  "vram_bytes": 101971591168,
+  "sm_count": 188,
+  "l2_bytes": 134217728,
+  "persisting_l2_max_bytes": 83886080,
+  "access_policy_window_max_bytes": 134217728,
+  "persisting_l2_limit_bytes": 25165824,
+  "git_sha": "4b7d846664e42b0795776a989440cf2a1985b95d",
+  "git_branch": "exp/cache-resident",
+  "hostname": "6d0a9ee7996c",
+  "pod_id": "epxgli68jtcaq3",
+  "python": "3.10.12",
+  "counters_ok": null,
+  "transformers": "5.19.0"
+ },
+ "data": {
+  "config": {
+   "models": [
+    "pq2",
+    "draft_q8_0",
+    "ptq1",
+    "draft_bf16"
+   ],
+   "depths": [
+    0
+   ],
+   "reps": 5,
+   "rounds": 2,
+   "configs": {
+    "pdl0": {
+     "GGML_CUDA_PDL": "0"
+    },
+    "pdl1": {
+     "GGML_CUDA_PDL": "1"
+    },
+    "pf1": {
+     "GGML_CUDA_PDL": "1",
+     "GGML_CUDA_PDL_PREFETCH": "1"
+    },
+    "pf4": {
+     "GGML_CUDA_PDL": "1",
+     "GGML_CUDA_PDL_PREFETCH": "4"
+    },
+    "pdl0_pf4": {
+     "GGML_CUDA_PDL": "0",
+     "GGML_CUDA_PDL_PREFETCH": "4"
+    }
+   },
+   "n_gen": 128,
+   "bench_cmd_example": [
+    "/workspace/repo/build-cuda/bin/llama-bench",
+    "-m",
+    "<model.gguf>",
+    "-ngl",
+    "99",
+    "-fa",
+    "on",
+    "-p",
+    "0",
+    "-n",
+    "128",
+    "-d",
+    "0",
+    "-ctk",
+    "f16",
+    "-ctv",
+    "f16",
+    "-ub",
+    "2048",
+    "-r",
+    "5",
+    "-o",
+    "json"
+   ],
+   "tbo_cmd": [
+    "/workspace/repo/build-cuda/bin/test-backend-ops",
+    "test",
+    "-o",
+    "MUL_MAT,MUL_MAT_ID,MUL_MAT_VEC_FUSION",
+    "-b",
+    "CUDA0",
+    "-p",
+    "type(_a)?=(pq2_0|ptq1_0|q8_0),"
+   ],
+   "quick": false,
+   "models_info": {
+    "pq2": {
+     "kind": "bonsai2",
+     "key": "PQ2_0",
+     "repo": "prism-ml/Ternary-Bonsai-2-27B-gguf",
+     "file": "Ternary-Bonsai-2-27B-PQ2_0.gguf",
+     "exists": true,
+     "source": "api",
+     "checked_utc": "2026-10-13T18:32:06.661634+00:00",
+     "alternatives": [],
+     "note": null
+    },
+    "draft_q8_0": {
+     "kind": "draft",
+     "key": null,
+     "repo": "ggml-org/Qwen3.5-0.8B-GGUF",
+     "file": "Qwen3.5-0.8B-Q8_0.gguf",
+     "exists": true,
+     "source": "api",
+     "checked_utc": "2026-10-13T18:32:07.079701+00:00",
+     "alternatives": [],
+     "note": null
+    },
+    "ptq1": {
+     "kind": "bonsai2",
+     "key": "PTQ1_0",
+     "repo": "prism-ml/Ternary-Bonsai-2-27B-gguf",
+     "file": "Ternary-Bonsai-2-27B-PTQ1_0.gguf",
+     "exists": true,
+     "source": "api",
+     "checked_utc": "2026-10-13T18:32:07.362747+00:00",
+     "alternatives": [],
+     "note": null
+    },
+    "draft_bf16": {
+     "kind": "draft",
+     "key": null,
+     "repo": "ggml-org/Qwen3.5-0.8B-GGUF",
+     "file": "Qwen3.5-0.8B-BF16.gguf",
+     "exists": true,
+     "source": "api",
+     "checked_utc": "2026-10-13T18:32:07.642423+00:00",
+     "alternatives": [],
+     "note": null
+    }
+   },
+   "health_gate": {
+    "sm": 0.4,
+    "mem": 0.5,
+    "power_cap": 0.75
+   }
+  },
+  "rows": [
+   {
+    "model": "pq2",
+    "depth": 0,
+    "config": "pdl0",
+    "env": {
+     "GGML_CUDA_PDL": "0"
+    },
+    "round": 0,
+    "tok_s": 134.851048,
+    "stddev": 0.798833,
+    "us_per_token": 7415.589384221917,
+    "error": null,
+    "smi": {
+     "n": 3,
+     "sm_mhz_med": 2790.0,
+     "sm_mhz_min": 2790.0,
+     "sm_mhz_max": 3090.0,
+     "mem_mhz_med": 13365.0,
+     "mem_mhz_max": 14001.0,
+     "power_w_med": 458.29,
+     "power_w_max": 460.1,
+     "power_cap_w": 600.0,
+     "power_default_w": 600.0,
+     "temp_c_max": 40.0,
+     "before": {
+      "clocks.sm": 180.0,
+      "clocks.max.sm": 3090.0,
+      "clocks.mem": 405.0,
+      "clocks.max.mem": 14001.0,
+      "power.draw": 8.8,
+      "power.limit": 600.0,
+      "power.default_limit": 600.0,
+      "temperature.gpu": 25.0
+     },
+     "after": {
+      "clocks.sm": 2790.0,
+      "clocks.max.sm": 3090.0,
+      "clocks.mem": 13365.0,
+      "clocks.max.mem": 14001.0,
+      "power.draw": 460.74,
+      "power.limit": 600.0,
+      "power.default_limit": 600.0,
+      "temperature.gpu": 40.0
+     }
+    }
+   },
+   {
+    "model": "pq2",
+    "depth": 0,
+    "config": "pdl1",
+    "env": {
+     "GGML_CUDA_PDL": "1"
+    },
+    "round": 0,
+    "tok_s": 140.936952,
+    "stddev": 1.009294,
+    "us_per_token": 7095.371269275073,
+    "error": null,
+    "smi": {
+     "n": 3,
+     "sm_mhz_med": 2797.0,
+     "sm_mhz_min": 2797.0,
+     "sm_mhz_max": 3090.0,
+     "mem_mhz_med": 13365.0,
+     "mem_mhz_max": 14001.0,
+     "power_w_med": 486.4,
+     "power_w_max": 487.33,
+     "power_cap_w": 600.0,
+     "power_default_w": 600.0,
+     "temp_c_max": 43.0,
+     "before": {
+      "clocks.sm": 2790.0,
+      "clocks.max.sm": 3090.0,
+      "clocks.mem": 13365.0,
+      "clocks.max.mem": 14001.0,
+      "power.draw": 460.74,
+      "power.limit": 600.0,
+      "power.default_limit": 600.0,
+      "temperature.gpu": 40.0
+     },
+     "after": {
+      "clocks.sm": 2797.0,
+      "clocks.max.sm": 3090.0,
+      "clocks.mem": 13365.0,
+      "clocks.max.mem": 14001.0,
+      "power.draw": 487.33,
+      "power.limit": 600.0,
+      "power.default_limit": 600.0,
+      "temperature.gpu": 43.0
+     }
+    }
+   },
+   {
+    "model": "pq2",
+    "depth": 0,
+    "config": "pf1",
+    "env": {
+     "GGML_CUDA_PDL": "1",
+     "GGML_CUDA_PDL_PREFETCH": "1"
+    },
+    "round": 0,
+    "tok_s": 142.19742,
+    "stddev": 0.956276,
+    "us_per_token": 7032.476397954338,
+    "error": null,
+    "smi": {
+     "n": 2,
+     "sm_mhz_med": 2812.5,
+     "sm_mhz_min": 2775.0,
+     "sm_mhz_max": 3090.0,
+     "mem_mhz_med": 13365.0,
+     "mem_mhz_max": 14001.0,
+     "power_w_med": 337.645,
+     "power_w_max": 511.51,
+     "power_cap_w": 600.0,
+     "power_default_w": 600.0,
+     "temp_c_max": 45.0,
+     "before": {
+      "clocks.sm": 2797.0,
+      "clocks.max.sm": 3090.0,
+      "clocks.mem": 13365.0,
+      "clocks.max.mem": 14001.0,
+      "power.draw": 487.33,
+      "power.limit": 600.0,
+      "power.default_limit": 600.0,
+      "temperature.gpu": 43.0
+     },
+     "after": {
+      "clocks.sm": 2775.0,
+      "clocks.max.sm": 3090.0,
+      "clocks.mem": 13365.0,
+      "clocks.max.mem": 14001.0,
+      "power.draw": 515.01,
+      "power.limit": 600.0,
+      "power.default_limit": 600.0,
+      "temperature.gpu": 47.0
+     }
+    }
+   },
+   {
+    "model": "pq2",
+    "depth": 0,
+    "config": "pf4",
+    "env": {
+     "GGML_CUDA_PDL": "1",
+     "GGML_CUDA_PDL_PREFETCH": "4"
+    },
+    "round": 0,
+    "tok_s": 143.400667,
+    "stddev": 1.063896,
+    "us_per_token": 6973.468261483052,
+    "error": null,
+    "smi": {
+     "n": 2,
+     "sm_mhz_med": 2775.0,
+     "sm_mhz_min": 2775.0,
+     "sm_mhz_max": 3090.0,
+     "mem_mhz_med": 13365.0,
+     "mem_mhz_max": 14001.0,
+     "power_w_med": 435.40500000000003,
+     "power_w_max": 523.59,
+     "power_cap_w": 600.0,
+     "power_default_w": 600.0,
+     "temp_c_max": 48.0,
+     "before": {
+      "clocks.sm": 2790.0,
+      "clocks.max.sm": 3090.0,
+      "clocks.mem": 14001.0,
+      "clocks.max.mem": 14001.0,
+      "power.draw": 448.89,
+      "power.limit": 600.0,
+      "power.default_limit": 600.0,
+      "temperature.gpu": 39.0
+     },
+     "after": {
+      "clocks.sm": 2782.0,
+      "clocks.max.sm": 3090.0,
+      "clocks.mem": 14001.0,
+      "clocks.max.mem": 14001.0,
+      "power.draw": 476.18,
+      "power.limit": 600.0,
+      "power.default_limit": 600.0,
+      "temperature.gpu": 41.0
+     }
+    }
+   },
+   {
+    "model": "pq2",
+    "depth": 0,
+    "config": "pdl0_pf4",
+    "env": {
+     "GGML_CUDA_PDL": "0",
+     "GGML_CUDA_PDL_PREFETCH": "4"
+    },
+    "round": 0,
+    "tok_s": 135.90663,
+    "stddev": 0.848477,
+    "us_per_token": 7357.992763119797,
+    "error": null,
+    "smi": {
+     "n": 3,
+     "sm_mhz_med": 2767.0,
+     "sm_mhz_min": 2760.0,
+     "sm_mhz_max": 3090.0,
+     "mem_mhz_med": 13365.0,
+     "mem_mhz_max": 14001.0,
+     "power_w_med": 500.19,
+     "power_w_max": 502.25,
+     "power_cap_w": 600.0,
+     "power_default_w": 600.0,
+     "temp_c_max": 50.0,
+     "before": {
+      "clocks.sm": 2782.0,
+      "clocks.max.sm": 3090.0,
+      "clocks.mem": 14001.0,
+      "clocks.max.mem": 14001.0,
+      "power.draw": 476.18,
+      "power.limit": 600.0,
+      "power.default_limit": 600.0,
+      "temperature.gpu": 41.0
+     },
+     "after": {
+      "clocks.sm": 2767.0,
+      "clocks.max.sm": 3090.0,
+      "clocks.mem": 13365.0,
+      "clocks.max.mem": 14001.0,
+      "power.draw": 502.25,
+      "power.limit": 600.0,
+      "power.default_limit": 600.0,
+      "temperature.gpu": 50.0
+     }
+    }
+   },
+   {
+    "model": "pq2",
+    "depth": 0,
+    "config": "pdl0_pf4",
+    "env": {
+     "GGML_CUDA_PDL": "0",
+     "GGML_CUDA_PDL_PREFETCH": "4"
+    },
+    "round": 1,
+    "tok_s": 135.833845,
+    "stddev": 0.778568,
+    "us_per_token": 7361.935458721647,
+    "error": null,
+    "smi": {
+     "n": 3,
+     "sm_mhz_med": 2767.0,
+     "sm_mhz_min": 2760.0,
+     "sm_mhz_max": 3090.0,
+     "mem_mhz_med": 13365.0,
+     "mem_mhz_max": 14001.0,
+     "power_w_med": 502.61,
+     "power_w_max": 503.88,
+     "power_cap_w": 600.0,
+     "power_default_w": 600.0,
+     "temp_c_max": 51.0,
+     "before": {
+      "clocks.sm": 2767.0,
+      "clocks.max.sm": 3090.0,
+      "clocks.mem": 13365.0,
+      "clocks.max.mem": 14001.0,
+      "power.draw": 502.25,
+      "power.limit": 600.0,
+      "power.default_limit": 600.0,
+      "temperature.gpu": 50.0
+     },
+     "after": {
+      "clocks.sm": 2760.0,
+      "clocks.max.sm": 3090.0,
+      "clocks.mem": 13365.0,
+      "clocks.max.mem": 14001.0,
+      "power.draw": 490.26,
+      "power.limit": 600.0,
+      "power.default_limit": 600.0,
+      "temperature.gpu": 46.0
+     }
+    }
+   },
+   {
+    "model": "pq2",
+    "depth": 0,
+    "config": "pf4",
+    "env": {
+     "GGML_CUDA_PDL": "1",
+     "GGML_CUDA_PDL_PREFETCH": "4"
+    },
+    "round": 1,
+    "tok_s": 143.2174,
+    "stddev": 1.085999,
+    "us_per_token": 6982.391804347796,
+    "error": null,
+    "smi": {
+     "n": 2,
+     "sm_mhz_med": 2775.0,
+     "sm_mhz_min": 2775.0,
+     "sm_mhz_max": 3090.0,
+     "mem_mhz_med": 13365.0,
+     "mem_mhz_max": 14001.0,
+     "power_w_med": 390.99,
+     "power_w_max": 531.88,
+     "power_cap_w": 600.0,
+     "power_default_w": 600.0,
+     "temp_c_max": 53.0,
+     "before": {
+      "clocks.sm": 2760.0,
+      "clocks.max.sm": 3090.0,
+      "clocks.mem": 13365.0,
+      "clocks.max.mem": 14001.0,
+      "power.draw": 490.26,
+      "power.limit": 600.0,
+      "power.default_limit": 600.0,
+      "temperature.gpu": 46.0
+     },
+     "after": {
+      "clocks.sm": 2775.0,
+      "clocks.max.sm": 3090.0,
+      "clocks.mem": 13365.0,
+      "clocks.max.mem": 14001.0,
+      "power.draw": 533.75,
+      "power.limit": 600.0,
+      "power.default_limit": 600.0,
+      "temperature.gpu": 54.0
+     }
+    }
+   },
+   {
+    "model": "pq2",
+    "depth": 0,
+    "config": "pf1",
+    "env": {
+     "GGML_CUDA_PDL": "1",
+     "GGML_CUDA_PDL_PREFETCH": "1"
+    },
+    "round": 1,
+    "tok_s": 141.767174,
+    "stddev": 1.194612,
+    "us_per_token": 7053.819102015816,
+    "error": null,
+    "smi": {
+     "n": 3,
+     "sm_mhz_med": 2775.0,
+     "sm_mhz_min": 2767.0,
+     "sm_mhz_max": 3090.0,
+     "mem_mhz_med": 13365.0,
+     "mem_mhz_max": 14001.0,
+     "power_w_med": 524.84,
+     "power_w_max": 526.17,
+     "power_cap_w": 600.0,
+     "power_default_w": 600.0,
+     "temp_c_max": 55.0,
+     "before": {
+      "clocks.sm": 2775.0,
+      "clocks.max.sm": 3090.0,
+      "clocks.mem": 13365.0,
+      "clocks.max.mem": 14001.0,
+      "power.draw": 533.75,
+      "power.limit": 600.0,
+      "power.default_limit": 600.0,
+      "temperature.gpu": 54.0
+     },
+     "after": {
+      "clocks.sm": 2767.0,
+      "clocks.max.sm": 3090.0,
+      "clocks.mem": 13365.0,
+      "clocks.max.mem": 14001.0,
+      "power.draw": 526.17,
+      "power.limit": 600.0,
+      "power.default_limit": 600.0,
+      "temperature.gpu": 55.0
+     }
+    }
+   },
+   {
+    "model": "pq2",
+    "depth": 0,
+    "config": "pdl1",
+    "env": {
+     "GGML_CUDA_PDL": "1"
+    },
+    "round": 1,
+    "tok_s": 140.623251,
+    "stddev": 1.060681,
+    "us_per_token": 7111.199555470382,
+    "error": null,
+    "smi": {
+     "n": 3,
+     "sm_mhz_med": 2782.0,
+     "sm_mhz_min": 2782.0,
+     "sm_mhz_max": 3090.0,
+     "mem_mhz_med": 13365.0,
+     "mem_mhz_max": 14001.0,
+     "power_w_med": 464.34,
+     "power_w_max": 503.83,
+     "power_cap_w": 600.0,
+     "power_default_w": 600.0,
+     "temp_c_max": 54.0,
+     "before": {
+      "clocks.sm": 2767.0,
+      "clocks.max.sm": 3090.0,
+      "clocks.mem": 13365.0,
+      "clocks.max.mem": 14001.0,
+      "power.draw": 526.17,
+      "power.limit": 600.0,
+      "power.default_limit": 600.0,
+      "temperature.gpu": 55.0
+     },
+     "after": {
+      "clocks.sm": 2782.0,
+      "clocks.max.sm": 3090.0,
+      "clocks.mem": 13365.0,
+      "clocks.max.mem": 14001.0,
+      "power.draw": 464.34,
+      "power.limit": 600.0,
+      "power.default_limit": 600.0,
+      "temperature.gpu": 48.0
+     }
+    }
+   },
+   {
+    "model": "pq2",
+    "depth": 0,
+    "config": "pdl0",
+    "env": {
+     "GGML_CUDA_PDL": "0"
+    },
+    "round": 1,
+    "tok_s": 134.709923,
+    "stddev": 0.82131,
+    "us_per_token": 7423.358114457536,
+    "error": null,
+    "smi": {
+     "n": 3,
+     "sm_mhz_med": 2775.0,
+     "sm_mhz_min": 2775.0,
+     "sm_mhz_max": 3090.0,
+     "mem_mhz_med": 13365.0,
+     "mem_mhz_max": 14001.0,
+     "power_w_med": 482.4,
+     "power_w_max": 483.92,
+     "power_cap_w": 600.0,
+     "power_default_w": 600.0,
+     "temp_c_max": 55.0,
+     "before": {
+      "clocks.sm": 2782.0,
+      "clocks.max.sm": 3090.0,
+      "clocks.mem": 13365.0,
+      "clocks.max.mem": 14001.0,
+      "power.draw": 464.34,
+      "power.limit": 600.0,
+      "power.default_limit": 600.0,
+      "temperature.gpu": 48.0
+     },
+     "after": {
+      "clocks.sm": 2775.0,
+      "clocks.max.sm": 3090.0,
+      "clocks.mem": 13365.0,
+      "clocks.max.mem": 14001.0,
+      "power.draw": 483.92,
+      "power.limit": 600.0,
+      "power.default_limit": 600.0,
+      "temperature.gpu": 55.0
+     }
+    }
+   },
+   {
+    "model": "draft_q8_0",
+    "depth": 0,
+    "config": "pdl0",
+    "env": {
+     "GGML_CUDA_PDL": "0"
+    },
+    "round": 0,
+    "tok_s": 712.148987,
+    "stddev": 6.351806,
+    "us_per_token": 1404.2005510849656,
+    "error": null,
+    "smi": {
+     "n": 0,
+     "sm_mhz_med": 2793.5,
+     "sm_mhz_min": 2775.0,
+     "sm_mhz_max": 3090.0,
+     "mem_mhz_med": 13365.0,
+     "mem_mhz_max": 14001.0,
+     "power_w_med": 368.115,
+     "power_w_max": 483.92,
+     "power_cap_w": 600.0,
+     "power_default_w": 600.0,
+     "temp_c_max": 55.0,
+     "before": {
+      "clocks.sm": 2775.0,
+      "clocks.max.sm": 3090.0,
+      "clocks.mem": 13365.0,
+      "clocks.max.mem": 14001.0,
+      "power.draw": 483.92,
+      "power.limit": 600.0,
+      "power.default_limit": 600.0,
+      "temperature.gpu": 55.0
+     },
+     "after": {
+      "clocks.sm": 2812.0,
+      "clocks.max.sm": 3090.0,
+      "clocks.mem": 13365.0,
+      "clocks.max.mem": 14001.0,
+      "power.draw": 252.31,
+      "power.limit": 600.0,
+      "power.default_limit": 600.0,
+      "temperature.gpu": 50.0
+     }
+    }
+   },
+   {
+    "model": "draft_q8_0",
+    "depth": 0,
+    "config": "pdl1",
+    "env": {
+     "GGML_CUDA_PDL": "1"
+    },
+    "round": 0,
+    "tok_s": 770.232733,
+    "stddev": 9.673056,
+    "us_per_token": 1298.3088839980526,
+    "error": null,
+    "smi": {
+     "n": 0,
+     "sm_mhz_med": 2808.5,
+     "sm_mhz_min": 2805.0,
+     "sm_mhz_max": 3090.0,
+     "mem_mhz_med": 13365.0,
+     "mem_mhz_max": 14001.0,
+     "power_w_med": 269.375,
+     "power_w_max": 286.44,
+     "power_cap_w": 600.0,
+     "power_default_w": 600.0,
+     "temp_c_max": 50.0,
+     "before": {
+      "clocks.sm": 2812.0,
+      "clocks.max.sm": 3090.0,
+      "clocks.mem": 13365.0,
+      "clocks.max.mem": 14001.0,
+      "power.draw": 252.31,
+      "power.limit": 600.0,
+      "power.default_limit": 600.0,
+      "temperature.gpu": 50.0
+     },
+     "after": {
+      "clocks.sm": 2805.0,
+      "clocks.max.sm": 3090.0,
+      "clocks.mem": 13365.0,
+      "clocks.max.mem": 14001.0,
+      "power.draw": 286.44,
+      "power.limit": 600.0,
+      "power.default_limit": 600.0,
+      "temperature.gpu": 47.0
+     }
+    }
+   },
+   {
+    "model": "draft_q8_0",
+    "depth": 0,
+    "config": "pf1",
+    "env": {
+     "GGML_CUDA_PDL": "1",
+     "GGML_CUDA_PDL_PREFETCH": "1"
+    },
+    "round": 0,
+    "tok_s": 798.225432,
+    "stddev": 10.007937,
+    "us_per_token": 1252.7789267430908,
+    "error": null,
+    "smi": {
+     "n": 0,
+     "sm_mhz_med": 2805.0,
+     "sm_mhz_min": 2805.0,
+     "sm_mhz_max": 3090.0,
+     "mem_mhz_med": 13365.0,
+     "mem_mhz_max": 14001.0,
+     "power_w_med": 258.88,
+     "power_w_max": 286.44,
+     "power_cap_w": 600.0,
+     "power_default_w": 600.0,
+     "temp_c_max": 51.0,
+     "before": {
+      "clocks.sm": 2805.0,
+      "clocks.max.sm": 3090.0,
+      "clocks.mem": 13365.0,
+      "clocks.max.mem": 14001.0,
+      "power.draw": 286.44,
+      "power.limit": 600.0,
+      "power.default_limit": 600.0,
+      "temperature.gpu": 47.0
+     },
+     "after": {
+      "clocks.sm": 2805.0,
+      "clocks.max.sm": 3090.0,
+      "clocks.mem": 13365.0,
+      "clocks.max.mem": 14001.0,
+      "power.draw": 231.32,
+      "power.limit": 600.0,
+      "power.default_limit": 600.0,
+      "temperature.gpu": 51.0
+     }
+    }
+   },
+   {
+    "model": "draft_q8_0",
+    "depth": 0,
+    "config": "pf4",
+    "env": {
+     "GGML_CUDA_PDL": "1",
+     "GGML_CUDA_PDL_PREFETCH": "4"
+    },
+    "round": 0,
+    "tok_s": 795.096575,
+    "stddev": 10.57493,
+    "us_per_token": 1257.7088512801101,
+    "error": null,
+    "smi": {
+     "n": 0,
+     "sm_mhz_med": 2805.0,
+     "sm_mhz_min": 2805.0,
+     "sm_mhz_max": 3090.0,
+     "mem_mhz_med": 13365.0,
+     "mem_mhz_max": 14001.0,
+     "power_w_med": 256.395,
+     "power_w_max": 281.47,
+     "power_cap_w": 600.0,
+     "power_default_w": 600.0,
+     "temp_c_max": 51.0,
+     "before": {
+      "clocks.sm": 2805.0,
+      "clocks.max.sm": 3090.0,
+      "clocks.mem": 13365.0,
+      "clocks.max.mem": 14001.0,
+      "power.draw": 231.32,
+      "power.limit": 600.0,
+      "power.default_limit": 600.0,
+      "temperature.gpu": 51.0
+     },
+     "after": {
+      "clocks.sm": 2805.0,
+      "clocks.max.sm": 3090.0,
+      "clocks.mem": 13365.0,
+      "clocks.max.mem": 14001.0,
+      "power.draw": 281.47,
+      "power.limit": 600.0,
+      "power.default_limit": 600.0,
+      "temperature.gpu": 51.0
+     }
+    }
+   },
+   {
+    "model": "draft_q8_0",
+    "depth": 0,
+    "config": "pdl0_pf4",
+    "env": {
+     "GGML_CUDA_PDL": "0",
+     "GGML_CUDA_PDL_PREFETCH": "4"
+    },
+    "round": 0,
+    "tok_s": 719.580866,
+    "stddev": 7.001848,
+    "us_per_token": 1389.697874484617,
+    "error": null,
+    "smi": {
+     "n": 0,
+     "sm_mhz_med": 2805.0,
+     "sm_mhz_min": 2805.0,
+     "sm_mhz_max": 3090.0,
+     "mem_mhz_med": 13365.0,
+     "mem_mhz_max": 14001.0,
+     "power_w_med": 300.06,
+     "power_w_max": 318.65,
+     "power_cap_w": 600.0,
+     "power_default_w": 600.0,
+     "temp_c_max": 51.0,
+     "before": {
+      "clocks.sm": 2805.0,
+      "clocks.max.sm": 3090.0,
+      "clocks.mem": 13365.0,
+      "clocks.max.mem": 14001.0,
+      "power.draw": 281.47,
+      "power.limit": 600.0,
+      "power.default_limit": 600.0,
+      "temperature.gpu": 51.0
+     },
+     "after": {
+      "clocks.sm": 2805.0,
+      "clocks.max.sm": 3090.0,
+      "clocks.mem": 13365.0,
+      "clocks.max.mem": 14001.0,
+      "power.draw": 318.65,
+      "power.limit": 600.0,
+      "power.default_limit": 600.0,
+      "temperature.gpu": 46.0
+     }
+    }
+   },
+   {
+    "model": "draft_q8_0",
+    "depth": 0,
+    "config": "pdl0_pf4",
+    "env": {
+     "GGML_CUDA_PDL": "0",
+     "GGML_CUDA_PDL_PREFETCH": "4"
+    },
+    "round": 1,
+    "tok_s": 720.464911,
+    "stddev": 7.093978,
+    "us_per_token": 1387.9926485413528,
+    "error": null,
+    "smi": {
+     "n": 0,
+     "sm_mhz_med": 2808.5,
+     "sm_mhz_min": 2805.0,
+     "sm_mhz_max": 3090.0,
+     "mem_mhz_med": 13365.0,
+     "mem_mhz_max": 14001.0,
+     "power_w_med": 275.03999999999996,
+     "power_w_max": 318.65,
+     "power_cap_w": 600.0,
+     "power_default_w": 600.0,
+     "temp_c_max": 50.0,
+     "before": {
+      "clocks.sm": 2805.0,
+      "clocks.max.sm": 3090.0,
+      "clocks.mem": 13365.0,
+      "clocks.max.mem": 14001.0,
+      "power.draw": 318.65,
+      "power.limit": 600.0,
+      "power.default_limit": 600.0,
+      "temperature.gpu": 46.0
+     },
+     "after": {
+      "clocks.sm": 2812.0,
+      "clocks.max.sm": 3090.0,
+      "clocks.mem": 13365.0,
+      "clocks.max.mem": 14001.0,
+      "power.draw": 231.43,
+      "power.limit": 600.0,
+      "power.default_limit": 600.0,
+      "temperature.gpu": 50.0
+     }
+    }
+   },
+   {
+    "model": "draft_q8_0",
+    "depth": 0,
+    "config": "pf4",
+    "env": {
+     "GGML_CUDA_PDL": "1",
+     "GGML_CUDA_PDL_PREFETCH": "4"
+    },
+    "round": 1,
+    "tok_s": 797.49974,
+    "stddev": 10.247978,
+    "us_per_token": 1253.9189040989531,
+    "error": null,
+    "smi": {
+     "n": 0,
+     "sm_mhz_med": 2808.5,
+     "sm_mhz_min": 2805.0,
+     "sm_mhz_max": 3090.0,
+     "mem_mhz_med": 13365.0,
+     "mem_mhz_max": 14001.0,
+     "power_w_med": 249.01500000000001,
+     "power_w_max": 266.6,
+     "power_cap_w": 600.0,
+     "power_default_w": 600.0,
+     "temp_c_max": 50.0,
+     "before": {
+      "clocks.sm": 2812.0,
+      "clocks.max.sm": 3090.0,
+      "clocks.mem": 13365.0,
+      "clocks.max.mem": 14001.0,
+      "power.draw": 231.43,
+      "power.limit": 600.0,
+      "power.default_limit": 600.0,
+      "temperature.gpu": 50.0
+     },
+     "after": {
+      "clocks.sm": 2805.0,
+      "clocks.max.sm": 3090.0,
+      "clocks.mem": 13365.0,
+      "clocks.max.mem": 14001.0,
+      "power.draw": 266.6,
+      "power.limit": 600.0,
+      "power.default_limit": 600.0,
+      "temperature.gpu": 50.0
+     }
+    }
+   },
+   {
+    "model": "draft_q8_0",
+    "depth": 0,
+    "config": "pf1",
+    "env": {
+     "GGML_CUDA_PDL": "1",
+     "GGML_CUDA_PDL_PREFETCH": "1"
+    },
+    "round": 1,
+    "tok_s": 790.701205,
+    "stddev": 9.570651,
+    "us_per_token": 1264.7002352804054,
+    "error": null,
+    "smi": {
+     "n": 0,
+     "sm_mhz_med": 2805.0,
+     "sm_mhz_min": 2805.0,
+     "sm_mhz_max": 3090.0,
+     "mem_mhz_med": 13365.0,
+     "mem_mhz_max": 14001.0,
+     "power_w_med": 287.645,
+     "power_w_max": 308.69,
+     "power_cap_w": 600.0,
+     "power_default_w": 600.0,
+     "temp_c_max": 50.0,
+     "before": {
+      "clocks.sm": 2805.0,
+      "clocks.max.sm": 3090.0,
+      "clocks.mem": 13365.0,
+      "clocks.max.mem": 14001.0,
+      "power.draw": 266.6,
+      "power.limit": 600.0,
+      "power.default_limit": 600.0,
+      "temperature.gpu": 50.0
+     },
+     "after": {
+      "clocks.sm": 2805.0,
+      "clocks.max.sm": 3090.0,
+      "clocks.mem": 13365.0,
+      "clocks.max.mem": 14001.0,
+      "power.draw": 308.69,
+      "power.limit": 600.0,
+      "power.default_limit": 600.0,
+      "temperature.gpu": 46.0
+     }
+    }
+   },
+   {
+    "model": "draft_q8_0",
+    "depth": 0,
+    "config": "pdl1",
+    "env": {
+     "GGML_CUDA_PDL": "1"
+    },
+    "round": 1,
+    "tok_s": 770.529292,
+    "stddev": 9.084586,
+    "us_per_token": 1297.8091947736102,
+    "error": null,
+    "smi": {
+     "n": 0,
+     "sm_mhz_med": 2805.0,
+     "sm_mhz_min": 2805.0,
+     "sm_mhz_max": 3090.0,
+     "mem_mhz_med": 13365.0,
+     "mem_mhz_max": 14001.0,
+     "power_w_med": 265.15999999999997,
+     "power_w_max": 308.69,
+     "power_cap_w": 600.0,
+     "power_default_w": 600.0,
+     "temp_c_max": 49.0,
+     "before": {
+      "clocks.sm": 2805.0,
+      "clocks.max.sm": 3090.0,
+      "clocks.mem": 13365.0,
+      "clocks.max.mem": 14001.0,
+      "power.draw": 308.69,
+      "power.limit": 600.0,
+      "power.default_limit": 600.0,
+      "temperature.gpu": 46.0
+     },
+     "after": {
+      "clocks.sm": 2805.0,
+      "clocks.max.sm": 3090.0,
+      "clocks.mem": 13365.0,
+      "clocks.max.mem": 14001.0,
+      "power.draw": 221.63,
+      "power.limit": 600.0,
+      "power.default_limit": 600.0,
+      "temperature.gpu": 49.0
+     }
+    }
+   },
+   {
+    "model": "draft_q8_0",
+    "depth": 0,
+    "config": "pdl0",
+    "env": {
+     "GGML_CUDA_PDL": "0"
+    },
+    "round": 1,
+    "tok_s": 713.023805,
+    "stddev": 7.102769,
+    "us_per_token": 1402.4777195201777,
+    "error": null,
+    "smi": {
+     "n": 0,
+     "sm_mhz_med": 2805.0,
+     "sm_mhz_min": 2805.0,
+     "sm_mhz_max": 3090.0,
+     "mem_mhz_med": 13365.0,
+     "mem_mhz_max": 14001.0,
+     "power_w_med": 240.64,
+     "power_w_max": 259.65,
+     "power_cap_w": 600.0,
+     "power_default_w": 600.0,
+     "temp_c_max": 49.0,
+     "before": {
+      "clocks.sm": 2805.0,
+      "clocks.max.sm": 3090.0,
+      "clocks.mem": 13365.0,
+      "clocks.max.mem": 14001.0,
+      "power.draw": 221.63,
+      "power.limit": 600.0,
+      "power.default_limit": 600.0,
+      "temperature.gpu": 49.0
+     },
+     "after": {
+      "clocks.sm": 2805.0,
+      "clocks.max.sm": 3090.0,
+      "clocks.mem": 13365.0,
+      "clocks.max.mem": 14001.0,
+      "power.draw": 259.65,
+      "power.limit": 600.0,
+      "power.default_limit": 600.0,
+      "temperature.gpu": 48.0
+     }
+    }
+   },
+   {
+    "model": "ptq1",
+    "depth": 0,
+    "config": "pdl0",
+    "env": {
+     "GGML_CUDA_PDL": "0"
+    },
+    "round": 0,
+    "tok_s": 150.435136,
+    "stddev": 1.035928,
+    "us_per_token": 6647.383228343676,
+    "error": null,
+    "smi": {
+     "n": 2,
+     "sm_mhz_med": 2790.0,
+     "sm_mhz_min": 2790.0,
+     "sm_mhz_max": 3090.0,
+     "mem_mhz_med": 13365.0,
+     "mem_mhz_max": 14001.0,
+     "power_w_med": 354.17,
+     "power_w_max": 465.01,
+     "power_cap_w": 600.0,
+     "power_default_w": 600.0,
+     "temp_c_max": 53.0,
+     "before": {
+      "clocks.sm": 2805.0,
+      "clocks.max.sm": 3090.0,
+      "clocks.mem": 13365.0,
+      "clocks.max.mem": 14001.0,
+      "power.draw": 259.65,
+      "power.limit": 600.0,
+      "power.default_limit": 600.0,
+      "temperature.gpu": 48.0
+     },
+     "after": {
+      "clocks.sm": 2790.0,
+      "clocks.max.sm": 3090.0,
+      "clocks.mem": 13365.0,
+      "clocks.max.mem": 14001.0,
+      "power.draw": 466.15,
+      "power.limit": 600.0,
+      "power.default_limit": 600.0,
+      "temperature.gpu": 54.0
+     }
+    }
+   },
+   {
+    "model": "ptq1",
+    "depth": 0,
+    "config": "pdl1",
+    "env": {
+     "GGML_CUDA_PDL": "1"
+    },
+    "round": 0,
+    "tok_s": 157.476473,
+    "stddev": 1.30976,
+    "us_per_token": 6350.154921237028,
+    "error": null,
+    "smi": {
+     "n": 2,
+     "sm_mhz_med": 2797.0,
+     "sm_mhz_min": 2797.0,
+     "sm_mhz_max": 3090.0,
+     "mem_mhz_med": 13365.0,
+     "mem_mhz_max": 14001.0,
+     "power_w_med": 413.475,
+     "power_w_max": 489.76,
+     "power_cap_w": 600.0,
+     "power_default_w": 600.0,
+     "temp_c_max": 55.0,
+     "before": {
+      "clocks.sm": 2805.0,
+      "clocks.max.sm": 3090.0,
+      "clocks.mem": 14001.0,
+      "clocks.max.mem": 14001.0,
+      "power.draw": 411.35,
+      "power.limit": 600.0,
+      "power.default_limit": 600.0,
+      "temperature.gpu": 47.0
+     },
+     "after": {
+      "clocks.sm": 2797.0,
+      "clocks.max.sm": 3090.0,
+      "clocks.mem": 14001.0,
+      "clocks.max.mem": 14001.0,
+      "power.draw": 446.96,
+      "power.limit": 600.0,
+      "power.default_limit": 600.0,
+      "temperature.gpu": 48.0
+     }
+    }
+   },
+   {
+    "model": "ptq1",
+    "depth": 0,
+    "config": "pf1",
+    "env": {
+     "GGML_CUDA_PDL": "1",
+     "GGML_CUDA_PDL_PREFETCH": "1"
+    },
+    "round": 0,
+    "tok_s": 159.696294,
+    "stddev": 1.155657,
+    "us_per_token": 6261.886077331263,
+    "error": null,
+    "smi": {
+     "n": 2,
+     "sm_mhz_med": 2782.0,
+     "sm_mhz_min": 2782.0,
+     "sm_mhz_max": 3090.0,
+     "mem_mhz_med": 13365.0,
+     "mem_mhz_max": 14001.0,
+     "power_w_med": 414.3,
+     "power_w_max": 496.12,
+     "power_cap_w": 600.0,
+     "power_default_w": 600.0,
+     "temp_c_max": 56.0,
+     "before": {
+      "clocks.sm": 2797.0,
+      "clocks.max.sm": 3090.0,
+      "clocks.mem": 14001.0,
+      "clocks.max.mem": 14001.0,
+      "power.draw": 446.96,
+      "power.limit": 600.0,
+      "power.default_limit": 600.0,
+      "temperature.gpu": 48.0
+     },
+     "after": {
+      "clocks.sm": 2775.0,
+      "clocks.max.sm": 3090.0,
+      "clocks.mem": 14001.0,
+      "clocks.max.mem": 14001.0,
+      "power.draw": 449.8,
+      "power.limit": 600.0,
+      "power.default_limit": 600.0,
+      "temperature.gpu": 49.0
+     }
+    }
+   },
+   {
+    "model": "ptq1",
+    "depth": 0,
+    "config": "pf4",
+    "env": {
+     "GGML_CUDA_PDL": "1",
+     "GGML_CUDA_PDL_PREFETCH": "4"
+    },
+    "round": 0,
+    "tok_s": 160.094313,
+    "stddev": 1.299711,
+    "us_per_token": 6246.318068774873,
+    "error": null,
+    "smi": {
+     "n": 2,
+     "sm_mhz_med": 2782.0,
+     "sm_mhz_min": 2782.0,
+     "sm_mhz_max": 3090.0,
+     "mem_mhz_med": 13365.0,
+     "mem_mhz_max": 14001.0,
+     "power_w_med": 427.32,
+     "power_w_max": 499.25,
+     "power_cap_w": 600.0,
+     "power_default_w": 600.0,
+     "temp_c_max": 57.0,
+     "before": {
+      "clocks.sm": 2782.0,
+      "clocks.max.sm": 3090.0,
+      "clocks.mem": 14001.0,
+      "clocks.max.mem": 14001.0,
+      "power.draw": 449.8,
+      "power.limit": 600.0,
+      "power.default_limit": 600.0,
+      "temperature.gpu": 49.0
+     },
+     "after": {
+      "clocks.sm": 2782.0,
+      "clocks.max.sm": 3090.0,
+      "clocks.mem": 13365.0,
+      "clocks.max.mem": 14001.0,
+      "power.draw": 507.79,
+      "power.limit": 600.0,
+      "power.default_limit": 600.0,
+      "temperature.gpu": 57.0
+     }
+    }
+   },
+   {
+    "model": "ptq1",
+    "depth": 0,
+    "config": "pdl0_pf4",
+    "env": {
+     "GGML_CUDA_PDL": "0",
+     "GGML_CUDA_PDL_PREFETCH": "4"
+    },
+    "round": 0,
+    "tok_s": 150.494396,
+    "stddev": 0.906366,
+    "us_per_token": 6644.765696125987,
+    "error": null,
+    "smi": {
+     "n": 2,
+     "sm_mhz_med": 2775.0,
+     "sm_mhz_min": 2775.0,
+     "sm_mhz_max": 3090.0,
+     "mem_mhz_med": 13365.0,
+     "mem_mhz_max": 14001.0,
+     "power_w_med": 412.695,
+     "power_w_max": 477.02,
+     "power_cap_w": 600.0,
+     "power_default_w": 600.0,
+     "temp_c_max": 56.0,
+     "before": {
+      "clocks.sm": 2782.0,
+      "clocks.max.sm": 3090.0,
+      "clocks.mem": 14001.0,
+      "clocks.max.mem": 14001.0,
+      "power.draw": 450.49,
+      "power.limit": 600.0,
+      "power.default_limit": 600.0,
+      "temperature.gpu": 50.0
+     },
+     "after": {
+      "clocks.sm": 2775.0,
+      "clocks.max.sm": 3090.0,
+      "clocks.mem": 13365.0,
+      "clocks.max.mem": 14001.0,
+      "power.draw": 485.73,
+      "power.limit": 600.0,
+      "power.default_limit": 600.0,
+      "temperature.gpu": 57.0
+     }
+    }
+   },
+   {
+    "model": "ptq1",
+    "depth": 0,
+    "config": "pdl0_pf4",
+    "env": {
+     "GGML_CUDA_PDL": "0",
+     "GGML_CUDA_PDL_PREFETCH": "4"
+    },
+    "round": 1,
+    "tok_s": 150.035362,
+    "stddev": 1.056021,
+    "us_per_token": 6665.095392644836,
+    "error": null,
+    "smi": {
+     "n": 2,
+     "sm_mhz_med": 2775.0,
+     "sm_mhz_min": 2775.0,
+     "sm_mhz_max": 3090.0,
+     "mem_mhz_med": 13365.0,
+     "mem_mhz_max": 14001.0,
+     "power_w_med": 362.73,
+     "power_w_max": 484.83,
+     "power_cap_w": 600.0,
+     "power_default_w": 600.0,
+     "temp_c_max": 57.0,
+     "before": {
+      "clocks.sm": 2775.0,
+      "clocks.max.sm": 3090.0,
+      "clocks.mem": 13365.0,
+      "clocks.max.mem": 14001.0,
+      "power.draw": 485.73,
+      "power.limit": 600.0,
+      "power.default_limit": 600.0,
+      "temperature.gpu": 57.0
+     },
+     "after": {
+      "clocks.sm": 2775.0,
+      "clocks.max.sm": 3090.0,
+      "clocks.mem": 13365.0,
+      "clocks.max.mem": 14001.0,
+      "power.draw": 485.23,
+      "power.limit": 600.0,
+      "power.default_limit": 600.0,
+      "temperature.gpu": 58.0
+     }
+    }
+   },
+   {
+    "model": "ptq1",
+    "depth": 0,
+    "config": "pf4",
+    "env": {
+     "GGML_CUDA_PDL": "1",
+     "GGML_CUDA_PDL_PREFETCH": "4"
+    },
+    "round": 1,
+    "tok_s": 159.900092,
+    "stddev": 1.3924,
+    "us_per_token": 6253.905094688751,
+    "error": null,
+    "smi": {
+     "n": 2,
+     "sm_mhz_med": 2778.5,
+     "sm_mhz_min": 2775.0,
+     "sm_mhz_max": 3090.0,
+     "mem_mhz_med": 13365.0,
+     "mem_mhz_max": 14001.0,
+     "power_w_med": 418.06,
+     "power_w_max": 502.07,
+     "power_cap_w": 600.0,
+     "power_default_w": 600.0,
+     "temp_c_max": 58.0,
+     "before": {
+      "clocks.sm": 2782.0,
+      "clocks.max.sm": 3090.0,
+      "clocks.mem": 14001.0,
+      "clocks.max.mem": 14001.0,
+      "power.draw": 430.5,
+      "power.limit": 600.0,
+      "power.default_limit": 600.0,
+      "temperature.gpu": 50.0
+     },
+     "after": {
+      "clocks.sm": 2775.0,
+      "clocks.max.sm": 3090.0,
+      "clocks.mem": 13365.0,
+      "clocks.max.mem": 14001.0,
+      "power.draw": 508.76,
+      "power.limit": 600.0,
+      "power.default_limit": 600.0,
+      "temperature.gpu": 59.0
+     }
+    }
+   },
+   {
+    "model": "ptq1",
+    "depth": 0,
+    "config": "pf1",
+    "env": {
+     "GGML_CUDA_PDL": "1",
+     "GGML_CUDA_PDL_PREFETCH": "1"
+    },
+    "round": 1,
+    "tok_s": 159.803687,
+    "stddev": 1.370305,
+    "us_per_token": 6257.677897006219,
+    "error": null,
+    "smi": {
+     "n": 2,
+     "sm_mhz_med": 2778.5,
+     "sm_mhz_min": 2775.0,
+     "sm_mhz_max": 3090.0,
+     "mem_mhz_med": 13365.0,
+     "mem_mhz_max": 14001.0,
+     "power_w_med": 430.46500000000003,
+     "power_w_max": 500.88,
+     "power_cap_w": 600.0,
+     "power_default_w": 600.0,
+     "temp_c_max": 59.0,
+     "before": {
+      "clocks.sm": 2782.0,
+      "clocks.max.sm": 3090.0,
+      "clocks.mem": 14001.0,
+      "clocks.max.mem": 14001.0,
+      "power.draw": 454.22,
+      "power.limit": 600.0,
+      "power.default_limit": 600.0,
+      "temperature.gpu": 51.0
+     },
+     "after": {
+      "clocks.sm": 2775.0,
+      "clocks.max.sm": 3090.0,
+      "clocks.mem": 13365.0,
+      "clocks.max.mem": 14001.0,
+      "power.draw": 510.97,
+      "power.limit": 600.0,
+      "power.default_limit": 600.0,
+      "temperature.gpu": 59.0
+     }
+    }
+   },
+   {
+    "model": "ptq1",
+    "depth": 0,
+    "config": "pdl1",
+    "env": {
+     "GGML_CUDA_PDL": "1"
+    },
+    "round": 1,
+    "tok_s": 157.335239,
+    "stddev": 1.300532,
+    "us_per_token": 6355.8552194400645,
+    "error": null,
+    "smi": {
+     "n": 2,
+     "sm_mhz_med": 2797.0,
+     "sm_mhz_min": 2797.0,
+     "sm_mhz_max": 3090.0,
+     "mem_mhz_med": 13365.0,
+     "mem_mhz_max": 14001.0,
+     "power_w_med": 411.9,
+     "power_w_max": 490.52,
+     "power_cap_w": 600.0,
+     "power_default_w": 600.0,
+     "temp_c_max": 59.0,
+     "before": {
+      "clocks.sm": 2782.0,
+      "clocks.max.sm": 3090.0,
+      "clocks.mem": 14001.0,
+      "clocks.max.mem": 14001.0,
+      "power.draw": 453.39,
+      "power.limit": 600.0,
+      "power.default_limit": 600.0,
+      "temperature.gpu": 51.0
+     },
+     "after": {
+      "clocks.sm": 2790.0,
+      "clocks.max.sm": 3090.0,
+      "clocks.mem": 13365.0,
+      "clocks.max.mem": 14001.0,
+      "power.draw": 469.15,
+      "power.limit": 600.0,
+      "power.default_limit": 600.0,
+      "temperature.gpu": 52.0
+     }
+    }
+   },
+   {
+    "model": "ptq1",
+    "depth": 0,
+    "config": "pdl0",
+    "env": {
+     "GGML_CUDA_PDL": "0"
+    },
+    "round": 1,
+    "tok_s": 150.340874,
+    "stddev": 1.112869,
+    "us_per_token": 6651.5510612237085,
+    "error": null,
+    "smi": {
+     "n": 2,
+     "sm_mhz_med": 2786.0,
+     "sm_mhz_min": 2782.0,
+     "sm_mhz_max": 3090.0,
+     "mem_mhz_med": 13365.0,
+     "mem_mhz_max": 14001.0,
+     "power_w_med": 383.165,
+     "power_w_max": 465.91,
+     "power_cap_w": 600.0,
+     "power_default_w": 600.0,
+     "temp_c_max": 57.0,
+     "before": {
+      "clocks.sm": 2790.0,
+      "clocks.max.sm": 3090.0,
+      "clocks.mem": 13365.0,
+      "clocks.max.mem": 14001.0,
+      "power.draw": 469.15,
+      "power.limit": 600.0,
+      "power.default_limit": 600.0,
+      "temperature.gpu": 52.0
+     },
+     "after": {
+      "clocks.sm": 2782.0,
+      "clocks.max.sm": 3090.0,
+      "clocks.mem": 13365.0,
+      "clocks.max.mem": 14001.0,
+      "power.draw": 475.43,
+      "power.limit": 600.0,
+      "power.default_limit": 600.0,
+      "temperature.gpu": 59.0
+     }
+    }
+   },
+   {
+    "model": "draft_bf16",
+    "depth": 0,
+    "config": "pdl0",
+    "env": {
+     "GGML_CUDA_PDL": "0"
+    },
+    "round": 0,
+    "tok_s": 583.187689,
+    "stddev": 3.038101,
+    "us_per_token": 1714.7138371777255,
+    "error": null,
+    "smi": {
+     "n": 1,
+     "sm_mhz_med": 2805.0,
+     "sm_mhz_min": 2805.0,
+     "sm_mhz_max": 3090.0,
+     "mem_mhz_med": 13365.0,
+     "mem_mhz_max": 14001.0,
+     "power_w_med": 327.49,
+     "power_w_max": 327.49,
+     "power_cap_w": 600.0,
+     "power_default_w": 600.0,
+     "temp_c_max": 56.0,
+     "before": {
+      "clocks.sm": 2782.0,
+      "clocks.max.sm": 3090.0,
+      "clocks.mem": 13365.0,
+      "clocks.max.mem": 14001.0,
+      "power.draw": 475.43,
+      "power.limit": 600.0,
+      "power.default_limit": 600.0,
+      "temperature.gpu": 59.0
+     },
+     "after": {
+      "clocks.sm": 2805.0,
+      "clocks.max.sm": 3090.0,
+      "clocks.mem": 13365.0,
+      "clocks.max.mem": 14001.0,
+      "power.draw": 327.49,
+      "power.limit": 600.0,
+      "power.default_limit": 600.0,
+      "temperature.gpu": 56.0
+     }
+    }
+   },
+   {
+    "model": "draft_bf16",
+    "depth": 0,
+    "config": "pdl1",
+    "env": {
+     "GGML_CUDA_PDL": "1"
+    },
+    "round": 0,
+    "tok_s": 622.02544,
+    "stddev": 5.739003,
+    "us_per_token": 1607.65128834602,
+    "error": null,
+    "smi": {
+     "n": 0,
+     "sm_mhz_med": 2812.5,
+     "sm_mhz_min": 2805.0,
+     "sm_mhz_max": 3090.0,
+     "mem_mhz_med": 13683.0,
+     "mem_mhz_max": 14001.0,
+     "power_w_med": 377.945,
+     "power_w_max": 402.56,
+     "power_cap_w": 600.0,
+     "power_default_w": 600.0,
+     "temp_c_max": 51.0,
+     "before": {
+      "clocks.sm": 2820.0,
+      "clocks.max.sm": 3090.0,
+      "clocks.mem": 14001.0,
+      "clocks.max.mem": 14001.0,
+      "power.draw": 353.33,
+      "power.limit": 600.0,
+      "power.default_limit": 600.0,
+      "temperature.gpu": 50.0
+     },
+     "after": {
+      "clocks.sm": 2805.0,
+      "clocks.max.sm": 3090.0,
+      "clocks.mem": 13365.0,
+      "clocks.max.mem": 14001.0,
+      "power.draw": 402.56,
+      "power.limit": 600.0,
+      "power.default_limit": 600.0,
+      "temperature.gpu": 51.0
+     }
+    }
+   },
+   {
+    "model": "draft_bf16",
+    "depth": 0,
+    "config": "pf1",
+    "env": {
+     "GGML_CUDA_PDL": "1",
+     "GGML_CUDA_PDL_PREFETCH": "1"
+    },
+    "round": 0,
+    "tok_s": 623.521511,
+    "stddev": 4.364888,
+    "us_per_token": 1603.793906638772,
+    "error": null,
+    "smi": {
+     "n": 0,
+     "sm_mhz_med": 2805.0,
+     "sm_mhz_min": 2805.0,
+     "sm_mhz_max": 3090.0,
+     "mem_mhz_med": 13365.0,
+     "mem_mhz_max": 14001.0,
+     "power_w_med": 404.41999999999996,
+     "power_w_max": 406.28,
+     "power_cap_w": 600.0,
+     "power_default_w": 600.0,
+     "temp_c_max": 52.0,
+     "before": {
+      "clocks.sm": 2805.0,
+      "clocks.max.sm": 3090.0,
+      "clocks.mem": 13365.0,
+      "clocks.max.mem": 14001.0,
+      "power.draw": 402.56,
+      "power.limit": 600.0,
+      "power.default_limit": 600.0,
+      "temperature.gpu": 51.0
+     },
+     "after": {
+      "clocks.sm": 2805.0,
+      "clocks.max.sm": 3090.0,
+      "clocks.mem": 13365.0,
+      "clocks.max.mem": 14001.0,
+      "power.draw": 406.28,
+      "power.limit": 600.0,
+      "power.default_limit": 600.0,
+      "temperature.gpu": 52.0
+     }
+    }
+   },
+   {
+    "model": "draft_bf16",
+    "depth": 0,
+    "config": "pf4",
+    "env": {
+     "GGML_CUDA_PDL": "1",
+     "GGML_CUDA_PDL_PREFETCH": "4"
+    },
+    "round": 0,
+    "tok_s": 623.568678,
+    "stddev": 4.763029,
+    "us_per_token": 1603.6725949856,
+    "error": null,
+    "smi": {
+     "n": 0,
+     "sm_mhz_med": 2805.0,
+     "sm_mhz_min": 2805.0,
+     "sm_mhz_max": 3090.0,
+     "mem_mhz_med": 13365.0,
+     "mem_mhz_max": 14001.0,
+     "power_w_med": 404.67499999999995,
+     "power_w_max": 406.28,
+     "power_cap_w": 600.0,
+     "power_default_w": 600.0,
+     "temp_c_max": 54.0,
+     "before": {
+      "clocks.sm": 2805.0,
+      "clocks.max.sm": 3090.0,
+      "clocks.mem": 13365.0,
+      "clocks.max.mem": 14001.0,
+      "power.draw": 406.28,
+      "power.limit": 600.0,
+      "power.default_limit": 600.0,
+      "temperature.gpu": 52.0
+     },
+     "after": {
+      "clocks.sm": 2805.0,
+      "clocks.max.sm": 3090.0,
+      "clocks.mem": 13365.0,
+      "clocks.max.mem": 14001.0,
+      "power.draw": 403.07,
+      "power.limit": 600.0,
+      "power.default_limit": 600.0,
+      "temperature.gpu": 54.0
+     }
+    }
+   },
+   {
+    "model": "draft_bf16",
+    "depth": 0,
+    "config": "pdl0_pf4",
+    "env": {
+     "GGML_CUDA_PDL": "0",
+     "GGML_CUDA_PDL_PREFETCH": "4"
+    },
+    "round": 0,
+    "tok_s": 586.388878,
+    "stddev": 3.050943,
+    "us_per_token": 1705.3529449786051,
+    "error": null,
+    "smi": {
+     "n": 1,
+     "sm_mhz_med": 2805.0,
+     "sm_mhz_min": 2805.0,
+     "sm_mhz_max": 3090.0,
+     "mem_mhz_med": 13365.0,
+     "mem_mhz_max": 14001.0,
+     "power_w_med": 400.66,
+     "power_w_max": 400.66,
+     "power_cap_w": 600.0,
+     "power_default_w": 600.0,
+     "temp_c_max": 55.0,
+     "before": {
+      "clocks.sm": 2805.0,
+      "clocks.max.sm": 3090.0,
+      "clocks.mem": 13365.0,
+      "clocks.max.mem": 14001.0,
+      "power.draw": 403.07,
+      "power.limit": 600.0,
+      "power.default_limit": 600.0,
+      "temperature.gpu": 54.0
+     },
+     "after": {
+      "clocks.sm": 2805.0,
+      "clocks.max.sm": 3090.0,
+      "clocks.mem": 13365.0,
+      "clocks.max.mem": 14001.0,
+      "power.draw": 400.66,
+      "power.limit": 600.0,
+      "power.default_limit": 600.0,
+      "temperature.gpu": 55.0
+     }
+    }
+   },
+   {
+    "model": "draft_bf16",
+    "depth": 0,
+    "config": "pdl0_pf4",
+    "env": {
+     "GGML_CUDA_PDL": "0",
+     "GGML_CUDA_PDL_PREFETCH": "4"
+    },
+    "round": 1,
+    "tok_s": 585.821101,
+    "stddev": 3.11608,
+    "us_per_token": 1707.0057706917594,
+    "error": null,
+    "smi": {
+     "n": 1,
+     "sm_mhz_med": 2805.0,
+     "sm_mhz_min": 2805.0,
+     "sm_mhz_max": 3090.0,
+     "mem_mhz_med": 13365.0,
+     "mem_mhz_max": 14001.0,
+     "power_w_med": 363.42,
+     "power_w_max": 363.42,
+     "power_cap_w": 600.0,
+     "power_default_w": 600.0,
+     "temp_c_max": 55.0,
+     "before": {
+      "clocks.sm": 2805.0,
+      "clocks.max.sm": 3090.0,
+      "clocks.mem": 13365.0,
+      "clocks.max.mem": 14001.0,
+      "power.draw": 400.66,
+      "power.limit": 600.0,
+      "power.default_limit": 600.0,
+      "temperature.gpu": 55.0
+     },
+     "after": {
+      "clocks.sm": 2805.0,
+      "clocks.max.sm": 3090.0,
+      "clocks.mem": 13365.0,
+      "clocks.max.mem": 14001.0,
+      "power.draw": 363.42,
+      "power.limit": 600.0,
+      "power.default_limit": 600.0,
+      "temperature.gpu": 55.0
+     }
+    }
+   },
+   {
+    "model": "draft_bf16",
+    "depth": 0,
+    "config": "pf4",
+    "env": {
+     "GGML_CUDA_PDL": "1",
+     "GGML_CUDA_PDL_PREFETCH": "4"
+    },
+    "round": 1,
+    "tok_s": 623.688377,
+    "stddev": 4.170008,
+    "us_per_token": 1603.3648162726624,
+    "error": null,
+    "smi": {
+     "n": 1,
+     "sm_mhz_med": 2805.0,
+     "sm_mhz_min": 2805.0,
+     "sm_mhz_max": 3090.0,
+     "mem_mhz_med": 13365.0,
+     "mem_mhz_max": 14001.0,
+     "power_w_med": 364.51,
+     "power_w_max": 364.51,
+     "power_cap_w": 600.0,
+     "power_default_w": 600.0,
+     "temp_c_max": 55.0,
+     "before": {
+      "clocks.sm": 2805.0,
+      "clocks.max.sm": 3090.0,
+      "clocks.mem": 13365.0,
+      "clocks.max.mem": 14001.0,
+      "power.draw": 363.42,
+      "power.limit": 600.0,
+      "power.default_limit": 600.0,
+      "temperature.gpu": 55.0
+     },
+     "after": {
+      "clocks.sm": 2805.0,
+      "clocks.max.sm": 3090.0,
+      "clocks.mem": 13365.0,
+      "clocks.max.mem": 14001.0,
+      "power.draw": 364.51,
+      "power.limit": 600.0,
+      "power.default_limit": 600.0,
+      "temperature.gpu": 55.0
+     }
+    }
+   },
+   {
+    "model": "draft_bf16",
+    "depth": 0,
+    "config": "pf1",
+    "env": {
+     "GGML_CUDA_PDL": "1",
+     "GGML_CUDA_PDL_PREFETCH": "1"
+    },
+    "round": 1,
+    "tok_s": 623.176329,
+    "stddev": 4.168797,
+    "us_per_token": 1604.6822600028506,
+    "error": null,
+    "smi": {
+     "n": 1,
+     "sm_mhz_med": 2805.0,
+     "sm_mhz_min": 2805.0,
+     "sm_mhz_max": 3090.0,
+     "mem_mhz_med": 13365.0,
+     "mem_mhz_max": 14001.0,
+     "power_w_med": 377.56,
+     "power_w_max": 377.56,
+     "power_cap_w": 600.0,
+     "power_default_w": 600.0,
+     "temp_c_max": 50.0,
+     "before": {
+      "clocks.sm": 2812.0,
+      "clocks.max.sm": 3090.0,
+      "clocks.mem": 14001.0,
+      "clocks.max.mem": 14001.0,
+      "power.draw": 342.43,
+      "power.limit": 600.0,
+      "power.default_limit": 600.0,
+      "temperature.gpu": 49.0
+     },
+     "after": {
+      "clocks.sm": 2805.0,
+      "clocks.max.sm": 3090.0,
+      "clocks.mem": 13365.0,
+      "clocks.max.mem": 14001.0,
+      "power.draw": 377.56,
+      "power.limit": 600.0,
+      "power.default_limit": 600.0,
+      "temperature.gpu": 50.0
+     }
+    }
+   },
+   {
+    "model": "draft_bf16",
+    "depth": 0,
+    "config": "pdl1",
+    "env": {
+     "GGML_CUDA_PDL": "1"
+    },
+    "round": 1,
+    "tok_s": 622.63262,
+    "stddev": 4.29798,
+    "us_per_token": 1606.0835360665812,
+    "error": null,
+    "smi": {
+     "n": 0,
+     "sm_mhz_med": 2805.0,
+     "sm_mhz_min": 2805.0,
+     "sm_mhz_max": 3090.0,
+     "mem_mhz_med": 13365.0,
+     "mem_mhz_max": 14001.0,
+     "power_w_med": 388.815,
+     "power_w_max": 400.07,
+     "power_cap_w": 600.0,
+     "power_default_w": 600.0,
+     "temp_c_max": 53.0,
+     "before": {
+      "clocks.sm": 2805.0,
+      "clocks.max.sm": 3090.0,
+      "clocks.mem": 13365.0,
+      "clocks.max.mem": 14001.0,
+      "power.draw": 377.56,
+      "power.limit": 600.0,
+      "power.default_limit": 600.0,
+      "temperature.gpu": 50.0
+     },
+     "after": {
+      "clocks.sm": 2805.0,
+      "clocks.max.sm": 3090.0,
+      "clocks.mem": 13365.0,
+      "clocks.max.mem": 14001.0,
+      "power.draw": 400.07,
+      "power.limit": 600.0,
+      "power.default_limit": 600.0,
+      "temperature.gpu": 53.0
+     }
+    }
+   },
+   {
+    "model": "draft_bf16",
+    "depth": 0,
+    "config": "pdl0",
+    "env": {
+     "GGML_CUDA_PDL": "0"
+    },
+    "round": 1,
+    "tok_s": 584.460247,
+    "stddev": 2.464757,
+    "us_per_token": 1710.9803534679068,
+    "error": null,
+    "smi": {
+     "n": 1,
+     "sm_mhz_med": 2805.0,
+     "sm_mhz_min": 2805.0,
+     "sm_mhz_max": 3090.0,
+     "mem_mhz_med": 13365.0,
+     "mem_mhz_max": 14001.0,
+     "power_w_med": 402.55,
+     "power_w_max": 402.55,
+     "power_cap_w": 600.0,
+     "power_default_w": 600.0,
+     "temp_c_max": 54.0,
+     "before": {
+      "clocks.sm": 2805.0,
+      "clocks.max.sm": 3090.0,
+      "clocks.mem": 13365.0,
+      "clocks.max.mem": 14001.0,
+      "power.draw": 400.07,
+      "power.limit": 600.0,
+      "power.default_limit": 600.0,
+      "temperature.gpu": 53.0
+     },
+     "after": {
+      "clocks.sm": 2805.0,
+      "clocks.max.sm": 3090.0,
+      "clocks.mem": 13365.0,
+      "clocks.max.mem": 14001.0,
+      "power.draw": 402.55,
+      "power.limit": 600.0,
+      "power.default_limit": 600.0,
+      "temperature.gpu": 54.0
+     }
+    }
+   }
+  ],
+  "notes": [
+   "pq2 depth 0: pdl1_vs_pdl0_pct=+4.5%, pf1_vs_pdl1_pct=+0.9%, pf4_vs_pdl1_pct=+1.8%, pdl0_pf4_vs_pdl0_pct=+0.8%",
+   "draft_q8_0 depth 0: pdl1_vs_pdl0_pct=+8.1%, pf1_vs_pdl1_pct=+3.1%, pf4_vs_pdl1_pct=+3.4%, pdl0_pf4_vs_pdl0_pct=+1.0%",
+   "ptq1 depth 0: pdl1_vs_pdl0_pct=+4.7%, pf1_vs_pdl1_pct=+1.5%, pf4_vs_pdl1_pct=+1.6%, pdl0_pf4_vs_pdl0_pct=-0.1%",
+   "draft_bf16 depth 0: pdl1_vs_pdl0_pct=+6.6%, pf1_vs_pdl1_pct=+0.2%, pf4_vs_pdl1_pct=+0.2%, pdl0_pf4_vs_pdl0_pct=+0.4%",
+   "draft_bf16 runs mul_mat_vec_f, which has no pre-wait prefetch: its pf rows are a control",
+   "pdl0_pf<N> vs pdl0 = codegen plus prefetch cost without overlap; compare it with pf<N> vs pdl1 for the overlap gain",
+   "test-backend-ops checks that results are unchanged, not that prefetch addresses are in range",
+   "not covered by the prefetch: more than one column (PQ2_0 verify widths 3-8), ids mat-vecs, other quant types"
+  ],
+  "counters_ok": false,
+  "tbo": [],
+  "summary": {
+   "pq2": {
+    "0": {
+     "tok_s": {
+      "pdl0": 134.7804855,
+      "pdl1": 140.7801015,
+      "pf1": 141.98229700000002,
+      "pf4": 143.3090335,
+      "pdl0_pf4": 135.8702375
+     },
+     "n": {
+      "pdl0": 2,
+      "pdl1": 2,
+      "pf1": 2,
+      "pf4": 2,
+      "pdl0_pf4": 2
+     },
+     "rounds": [
+      0,
+      1
+     ],
+     "pdl1_vs_pdl0_pct": 4.451398121725858,
+     "pf1_vs_pdl1_pct": 0.8539527157536586,
+     "pf4_vs_pdl1_pct": 1.7963703485467386,
+     "pdl0_pf4_vs_pdl0_pct": 0.8085384141163443
+    }
+   },
+   "draft_q8_0": {
+    "0": {
+     "tok_s": {
+      "pdl0": 712.586396,
+      "pdl1": 770.3810125,
+      "pf1": 794.4633185,
+      "pf4": 796.2981575,
+      "pdl0_pf4": 720.0228885
+     },
+     "n": {
+      "pdl0": 2,
+      "pdl1": 2,
+      "pf1": 2,
+      "pf4": 2,
+      "pdl0_pf4": 2
+     },
+     "rounds": [
+      0,
+      1
+     ],
+     "pdl1_vs_pdl0_pct": 8.110541658446135,
+     "pf1_vs_pdl1_pct": 3.126025383446218,
+     "pf4_vs_pdl1_pct": 3.364198309599442,
+     "pdl0_pf4_vs_pdl0_pct": 1.0435917022474372
+    }
+   },
+   "ptq1": {
+    "0": {
+     "tok_s": {
+      "pdl0": 150.38800500000002,
+      "pdl1": 157.405856,
+      "pf1": 159.7499905,
+      "pf4": 159.99720250000001,
+      "pdl0_pf4": 150.264879
+     },
+     "n": {
+      "pdl0": 2,
+      "pdl1": 2,
+      "pf1": 2,
+      "pf4": 2,
+      "pdl0_pf4": 2
+     },
+     "rounds": [
+      0,
+      1
+     ],
+     "pdl1_vs_pdl0_pct": 4.66649650681914,
+     "pf1_vs_pdl1_pct": 1.4892295366698338,
+     "pf4_vs_pdl1_pct": 1.6462834140046345,
+     "pdl0_pf4_vs_pdl0_pct": -0.08187222112562287
+    }
+   },
+   "draft_bf16": {
+    "0": {
+     "tok_s": {
+      "pdl0": 583.8239679999999,
+      "pdl1": 622.32903,
+      "pf1": 623.34892,
+      "pf4": 623.6285275,
+      "pdl0_pf4": 586.1049895
+     },
+     "n": {
+      "pdl0": 2,
+      "pdl1": 2,
+      "pf1": 2,
+      "pf4": 2,
+      "pdl0_pf4": 2
+     },
+     "rounds": [
+      0,
+      1
+     ],
+     "pdl1_vs_pdl0_pct": 6.595320526477599,
+     "pf1_vs_pdl1_pct": 0.1638827615031868,
+     "pf4_vs_pdl1_pct": 0.2088119688069323,
+     "pdl0_pf4_vs_pdl0_pct": 0.39070364099886845
+    }
+   }
+  }
+ }
+}

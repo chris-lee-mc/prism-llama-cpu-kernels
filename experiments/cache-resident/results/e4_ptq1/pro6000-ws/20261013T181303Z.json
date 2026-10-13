@@ -1,0 +1,392 @@
+{
+ "schema": 1,
+ "exp": "e4_ptq1",
+ "gpu": "pro6000-ws",
+ "utc": "2026-10-13T18:13:03.509373+00:00",
+ "env": {
+  "gpu_name": "NVIDIA RTX PRO 6000 Blackwell Workstation Edition",
+  "gpu_tag": "pro6000-ws",
+  "cc": "12.0",
+  "sm": "sm_120",
+  "driver": "580.178.04",
+  "cuda_runtime": "12.8",
+  "cuda_driver": "13.0",
+  "torch": "2.11.0+cu128",
+  "vram_bytes": 101971460096,
+  "sm_count": 188,
+  "l2_bytes": 134217728,
+  "persisting_l2_max_bytes": 83886080,
+  "access_policy_window_max_bytes": 134217728,
+  "persisting_l2_limit_bytes": 25165824,
+  "git_sha": "01c518a74848cea23589e90f1c3a0b1b26110673",
+  "git_branch": "exp/cache-resident",
+  "hostname": "826fc17757b4",
+  "pod_id": "gg3or9a9monm7q",
+  "python": "3.10.12",
+  "counters_ok": null,
+  "transformers": "5.19.0"
+ },
+ "data": {
+  "config": {
+   "quant": "PTQ1_0",
+   "depths": [
+    0,
+    32768
+   ],
+   "kv": [
+    "f16"
+   ],
+   "ncu_depths": [
+    0,
+    32768
+   ],
+   "ncu_kv": [
+    "f16"
+   ],
+   "nsys": "/usr/local/cuda/bin/nsys",
+   "nsys_tokens": 16,
+   "ub": 2048,
+   "n_gen": 128,
+   "bench_cmd_example": [
+    "/workspace/repo/build-cuda/bin/llama-bench",
+    "-m",
+    "/root/.cache/huggingface/hub/models--prism-ml--Ternary-Bonsai-2-27B-gguf/snapshots/b072e1d3b35a0a630cece372c2127528e0994386/Ternary-Bonsai-2-27B-PTQ1_0.gguf",
+    "-ngl",
+    "99",
+    "-fa",
+    "on",
+    "-p",
+    "0",
+    "-n",
+    "128",
+    "-d",
+    "0",
+    "-ctk",
+    "f16",
+    "-ctv",
+    "f16",
+    "-ub",
+    "2048",
+    "-r",
+    "3",
+    "-o",
+    "json"
+   ],
+   "model_path": "/root/.cache/huggingface/hub/models--prism-ml--Ternary-Bonsai-2-27B-gguf/snapshots/b072e1d3b35a0a630cece372c2127528e0994386/Ternary-Bonsai-2-27B-PTQ1_0.gguf",
+   "hf": {
+    "kind": "bonsai2",
+    "key": "PTQ1_0",
+    "repo": "prism-ml/Ternary-Bonsai-2-27B-gguf",
+    "file": "Ternary-Bonsai-2-27B-PTQ1_0.gguf",
+    "exists": true,
+    "source": "api",
+    "checked_utc": "2026-10-13T18:12:18.907922+00:00",
+    "alternatives": [],
+    "note": null
+   },
+   "buckets": {
+    "hadamard": "fwht|hadamard",
+    "act_quant": "quantize_q8_1|quantize_mmq",
+    "mul_mat_vec": "mul_mat_vec",
+    "flash_attn": "flash_attn",
+    "gated_delta_net": "gated_delta|gdn"
+   },
+   "peak_gbps": 1792.0,
+   "prof_tool": "/workspace/repo/build-cuda/bin/cr_decode_prof",
+   "quick": false
+  },
+  "rows": [
+   {
+    "quant": "PTQ1_0",
+    "depth": 0,
+    "kv": "f16",
+    "tg_tok_s": 143.761338,
+    "tg_stddev": 0.240163,
+    "us_per_token": 6955.973100361656,
+    "buckets": null,
+    "dram_bytes_per_token": null,
+    "ncu_us_per_token": null,
+    "l2_hit_rate": null,
+    "ncu_replay_mode": null,
+    "ncu_passes": null,
+    "ncu_l2_state_ok": null,
+    "bw_bound_ratio": null,
+    "nsys_buckets": {
+     "hadamard": {
+      "us_per_token": 968.31725,
+      "count": 4128,
+      "time_share": 0.117693093590748
+     },
+     "act_quant": {
+      "us_per_token": 0.0,
+      "count": 0,
+      "time_share": 0.0
+     },
+     "mul_mat_vec": {
+      "us_per_token": 5225.628625,
+      "count": 7312,
+      "time_share": 0.6351434912809999
+     },
+     "flash_attn": {
+      "us_per_token": 116.605375,
+      "count": 256,
+      "time_share": 0.014172676685310798
+     },
+     "gated_delta_net": {
+      "us_per_token": 212.158875,
+      "count": 768,
+      "time_share": 0.02578662554186947
+     },
+     "other": {
+      "us_per_token": 1704.767125,
+      "count": 11472,
+      "time_share": 0.20720411290107182
+     }
+    },
+    "nsys_kernel_us_per_token": 8227.47725,
+    "nsys_kernels_top": [
+     {
+      "name": "void mul_mat_vec_q<(ggml_type)143, (int)1, (bool)0, (bool)0, (bool)1, (bool)0, (bool)1, (bool)0>(const void *, const void *, const int *, ggml_cuda_mm_fusion_ar",
+      "time_ns": 41109703.0,
+      "count": 3872,
+      "us_per_token": 2569.3564375
+     },
+     {
+      "name": "void mul_mat_vec_q<(ggml_type)143, (int)1, (bool)1, (bool)1, (bool)1, (bool)0, (bool)1, (bool)0>(const void *, const void *, const int *, ggml_cuda_mm_fusion_ar",
+      "time_ns": 20159158.0,
+      "count": 640,
+      "us_per_token": 1259.947375
+     },
+     {
+      "name": "void fwht_quantize_q8_1<(int)1024, (int)256, (ggml_cuda_q8_1_layout)1, float, (bool)1>(const T4 *, const float *, void *, long, long, unsigned int, uint3, float",
+      "time_ns": 15475509.0,
+      "count": 4112,
+      "us_per_token": 967.2193125
+     },
+     {
+      "name": "void mul_mat_vec_q<(ggml_type)143, (int)1, (bool)1, (bool)0, (bool)0, (bool)0, (bool)1, (bool)0>(const void *, const void *, const int *, ggml_cuda_mm_fusion_ar",
+      "time_ns": 15390413.0,
+      "count": 1024,
+      "us_per_token": 961.9008125
+     },
+     {
+      "name": "void rms_norm_f32<(int)1024, (bool)1, (bool)0>(const float *, float *, int, long, long, long, float, const float *, long, long, long, uint3, uint3, uint3, uint3",
+      "time_ns": 8083995.0,
+      "count": 2064,
+      "us_per_token": 505.2496875
+     },
+     {
+      "name": "void cpy_scalar<&cpy_1_scalar<float, float>>(const char *, char *, long, long, long, long, long, long, long, long, long, long, long, long, long, long, long)",
+      "time_ns": 4152998.0,
+      "count": 1792,
+      "us_per_token": 259.562375
+     },
+     {
+      "name": "void mul_mat_vec_f<__nv_bfloat16, float, (int)1, (int)256, (bool)0, (bool)0>(const T1 *, const float *, const int *, ggml_cuda_mm_fusion_args_device, float *, i",
+      "time_ns": 3878832.0,
+      "count": 1536,
+      "us_per_token": 242.427
+     },
+     {
+      "name": "void k_get_rows_float<float, float>(const T1 *, const int *, T2 *, long, long, uint3, unsigned long, unsigned long, unsigned long, unsigned long, unsigned long,",
+      "time_ns": 3438063.0,
+      "count": 800,
+      "us_per_token": 214.8789375
+     },
+     {
+      "name": "void gated_delta_net_cuda<(int)128, (bool)0, (bool)0, (bool)1, (bool)0>(const float *, const float *, const float *, const float *, const float *, const float *",
+      "time_ns": 3394542.0,
+      "count": 768,
+      "us_per_token": 212.158875
+     },
+     {
+      "name": "void mul_mat_vec_q<(ggml_type)143, (int)1, (bool)1, (bool)0, (bool)1, (bool)0, (bool)1, (bool)0>(const void *, const void *, const int *, ggml_cuda_mm_fusion_ar",
+      "time_ns": 3071952.0,
+      "count": 240,
+      "us_per_token": 191.997
+     },
+     {
+      "name": "void rms_norm_f32<(int)256, (bool)1, (bool)0>(const float *, float *, int, long, long, long, float, const float *, long, long, long, uint3, uint3, uint3, uint3,",
+      "time_ns": 2048762.0,
+      "count": 1280,
+      "us_per_token": 128.047625
+     },
+     {
+      "name": "void flash_attn_ext_vec<(int)256, (int)1, (ggml_type)1, (ggml_type)1, (bool)0>(const char *, const char *, const char *, const char *, const char *, const int *",
+      "time_ns": 1865686.0,
+      "count": 256,
+      "us_per_token": 116.605375
+     },
+     {
+      "name": "void unary_gated_op_kernel<&op_sigmoid, float>(const T2 *, const T2 *, T2 *, long, long, long, long)",
+      "time_ns": 1748597.0,
+      "count": 256,
+      "us_per_token": 109.2873125
+     },
+     {
+      "name": "void unary_gated_op_kernel<&op_silu, float>(const T2 *, const T2 *, T2 *, long, long, long, long)",
+      "time_ns": 1564249.0,
+      "count": 1152,
+      "us_per_token": 97.7655625
+     },
+     {
+      "name": "void l2_norm_f32<(int)32>(const float *, float *, int, long, long, long, float)",
+      "time_ns": 1476373.0,
+      "count": 768,
+      "us_per_token": 92.2733125
+     }
+    ],
+    "nsys_error": null
+   },
+   {
+    "quant": "PTQ1_0",
+    "depth": 32768,
+    "kv": "f16",
+    "tg_tok_s": 121.059442,
+    "tg_stddev": 1.088466,
+    "us_per_token": 8260.404834841383,
+    "buckets": null,
+    "dram_bytes_per_token": null,
+    "ncu_us_per_token": null,
+    "l2_hit_rate": null,
+    "ncu_replay_mode": null,
+    "ncu_passes": null,
+    "ncu_l2_state_ok": null,
+    "bw_bound_ratio": null,
+    "nsys_buckets": {
+     "hadamard": {
+      "us_per_token": 927.9148125,
+      "count": 4128,
+      "time_share": 0.09835018319999482
+     },
+     "act_quant": {
+      "us_per_token": 0.0,
+      "count": 0,
+      "time_share": 0.0
+     },
+     "mul_mat_vec": {
+      "us_per_token": 5187.4561875,
+      "count": 7312,
+      "time_share": 0.5498212330591195
+     },
+     "flash_attn": {
+      "us_per_token": 1524.0540625,
+      "count": 512,
+      "time_share": 0.16153529853643903
+     },
+     "gated_delta_net": {
+      "us_per_token": 213.6670625,
+      "count": 768,
+      "time_share": 0.02264668529653388
+     },
+     "other": {
+      "us_per_token": 1581.713,
+      "count": 11472,
+      "time_share": 0.16764659990791278
+     }
+    },
+    "nsys_kernel_us_per_token": 9434.805125,
+    "nsys_kernels_top": [
+     {
+      "name": "void mul_mat_vec_q<(ggml_type)143, (int)1, (bool)0, (bool)0, (bool)1, (bool)0, (bool)1, (bool)0>(const void *, const void *, const int *, ggml_cuda_mm_fusion_ar",
+      "time_ns": 41193252.0,
+      "count": 3872,
+      "us_per_token": 2574.57825
+     },
+     {
+      "name": "void flash_attn_ext_f16<(int)256, (int)256, (int)1, (int)8, (bool)0, (bool)0, (ggml_type)1>(const char *, const char *, const char *, const char *, const char *",
+      "time_ns": 23367430.0,
+      "count": 256,
+      "us_per_token": 1460.464375
+     },
+     {
+      "name": "void mul_mat_vec_q<(ggml_type)143, (int)1, (bool)1, (bool)1, (bool)1, (bool)0, (bool)1, (bool)0>(const void *, const void *, const int *, ggml_cuda_mm_fusion_ar",
+      "time_ns": 20060690.0,
+      "count": 640,
+      "us_per_token": 1253.793125
+     },
+     {
+      "name": "void mul_mat_vec_q<(ggml_type)143, (int)1, (bool)1, (bool)0, (bool)0, (bool)0, (bool)1, (bool)0>(const void *, const void *, const int *, ggml_cuda_mm_fusion_ar",
+      "time_ns": 15540880.0,
+      "count": 1024,
+      "us_per_token": 971.305
+     },
+     {
+      "name": "void fwht_quantize_q8_1<(int)1024, (int)256, (ggml_cuda_q8_1_layout)1, float, (bool)1>(const T4 *, const float *, void *, long, long, unsigned int, uint3, float",
+      "time_ns": 14829069.0,
+      "count": 4112,
+      "us_per_token": 926.8168125
+     },
+     {
+      "name": "void rms_norm_f32<(int)1024, (bool)1, (bool)0>(const float *, float *, int, long, long, long, float, const float *, long, long, long, uint3, uint3, uint3, uint3",
+      "time_ns": 8057781.0,
+      "count": 2064,
+      "us_per_token": 503.6113125
+     },
+     {
+      "name": "void mul_mat_vec_f<__nv_bfloat16, float, (int)1, (int)256, (bool)0, (bool)0>(const T1 *, const float *, const int *, ggml_cuda_mm_fusion_args_device, float *, i",
+      "time_ns": 3869995.0,
+      "count": 1536,
+      "us_per_token": 241.8746875
+     },
+     {
+      "name": "void k_get_rows_float<float, float>(const T1 *, const int *, T2 *, long, long, uint3, unsigned long, unsigned long, unsigned long, unsigned long, unsigned long,",
+      "time_ns": 3456141.0,
+      "count": 800,
+      "us_per_token": 216.0088125
+     },
+     {
+      "name": "void gated_delta_net_cuda<(int)128, (bool)0, (bool)0, (bool)1, (bool)0>(const float *, const float *, const float *, const float *, const float *, const float *",
+      "time_ns": 3418673.0,
+      "count": 768,
+      "us_per_token": 213.6670625
+     },
+     {
+      "name": "void cpy_scalar<&cpy_1_scalar<float, float>>(const char *, char *, long, long, long, long, long, long, long, long, long, long, long, long, long, long, long)",
+      "time_ns": 3168330.0,
+      "count": 1792,
+      "us_per_token": 198.020625
+     },
+     {
+      "name": "void mul_mat_vec_q<(ggml_type)143, (int)1, (bool)1, (bool)0, (bool)1, (bool)0, (bool)1, (bool)0>(const void *, const void *, const int *, ggml_cuda_mm_fusion_ar",
+      "time_ns": 2334482.0,
+      "count": 240,
+      "us_per_token": 145.905125
+     },
+     {
+      "name": "void rms_norm_f32<(int)256, (bool)1, (bool)0>(const float *, float *, int, long, long, long, float, const float *, long, long, long, uint3, uint3, uint3, uint3,",
+      "time_ns": 2101555.0,
+      "count": 1280,
+      "us_per_token": 131.3471875
+     },
+     {
+      "name": "void unary_gated_op_kernel<&op_silu, float>(const T2 *, const T2 *, T2 *, long, long, long, long)",
+      "time_ns": 1601942.0,
+      "count": 1152,
+      "us_per_token": 100.121375
+     },
+     {
+      "name": "void l2_norm_f32<(int)32>(const float *, float *, int, long, long, long, float)",
+      "time_ns": 1313117.0,
+      "count": 768,
+      "us_per_token": 82.0698125
+     },
+     {
+      "name": "void ssm_conv_f32<(bool)1, (unsigned long)128, (unsigned long)4>(const float *, const float *, const float *, int, int, int, int, float *, int, int, int, long)",
+      "time_ns": 1162972.0,
+      "count": 768,
+      "us_per_token": 72.68575
+     }
+    ],
+    "nsys_error": null
+   }
+  ],
+  "notes": [
+   "ncu skipped (--no-ncu): timing only, analytic bytes",
+   "kernel split via nsys /usr/local/cuda/bin/nsys",
+   "depth 0 kv=f16: mul_mat_vec 64% of kernel time, hadamard+act_quant 12%, bw_bound_ratio n/a",
+   "unpack (Hadamard + ternary decode) is fused in mul_mat_vec for PQ2_0/PTQ1_0; ncu is kernel-replay, dram_bytes counts reads only; rows with ncu_l2_state_ok false ran more than one pass on a warmed L2 (--cache-control none), so dram bytes may be under-reported"
+  ],
+  "counters_ok": false
+ }
+}

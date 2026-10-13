@@ -1,0 +1,231 @@
+{
+ "schema": 1,
+ "exp": "e4_pdl",
+ "gpu": "pro6000-ws",
+ "utc": "2026-10-13T17:34:03.701778+00:00",
+ "env": {
+  "gpu_name": "NVIDIA RTX PRO 6000 Blackwell Workstation Edition",
+  "gpu_tag": "pro6000-ws",
+  "cc": "12.0",
+  "sm": "sm_120",
+  "driver": "580.178.04",
+  "cuda_runtime": "12.8",
+  "cuda_driver": "13.0",
+  "torch": "2.11.0+cu128",
+  "vram_bytes": 101971460096,
+  "sm_count": 188,
+  "l2_bytes": 134217728,
+  "persisting_l2_max_bytes": 83886080,
+  "access_policy_window_max_bytes": 134217728,
+  "persisting_l2_limit_bytes": 25165824,
+  "git_sha": "01c518a74848cea23589e90f1c3a0b1b26110673",
+  "git_branch": "exp/cache-resident",
+  "hostname": "6873ed1cadde",
+  "pod_id": "ab923slb8etrmv",
+  "python": "3.10.12",
+  "counters_ok": null,
+  "transformers": "5.19.0"
+ },
+ "data": {
+  "config": {
+   "models": [
+    "pq2",
+    "draft_q8_0",
+    "ptq1",
+    "draft_bf16"
+   ],
+   "depths": [
+    0
+   ],
+   "reps": 5,
+   "rounds": 2,
+   "configs": {
+    "pdl0": {
+     "GGML_CUDA_PDL": "0"
+    },
+    "pdl1": {
+     "GGML_CUDA_PDL": "1"
+    },
+    "pf1": {
+     "GGML_CUDA_PDL": "1",
+     "GGML_CUDA_PDL_PREFETCH": "1"
+    },
+    "pf4": {
+     "GGML_CUDA_PDL": "1",
+     "GGML_CUDA_PDL_PREFETCH": "4"
+    },
+    "pdl0_pf4": {
+     "GGML_CUDA_PDL": "0",
+     "GGML_CUDA_PDL_PREFETCH": "4"
+    }
+   },
+   "n_gen": 128,
+   "bench_cmd_example": [
+    "/workspace/repo/build-cuda/bin/llama-bench",
+    "-m",
+    "<model.gguf>",
+    "-ngl",
+    "99",
+    "-fa",
+    "on",
+    "-p",
+    "0",
+    "-n",
+    "128",
+    "-d",
+    "0",
+    "-ctk",
+    "f16",
+    "-ctv",
+    "f16",
+    "-ub",
+    "2048",
+    "-r",
+    "5",
+    "-o",
+    "json"
+   ],
+   "tbo_cmd": [
+    "/workspace/repo/build-cuda/bin/test-backend-ops",
+    "test",
+    "-o",
+    "MUL_MAT,MUL_MAT_ID,MUL_MAT_VEC_FUSION",
+    "-b",
+    "CUDA0",
+    "-p",
+    "type(_a)?=(pq2_0|ptq1_0|q8_0),"
+   ],
+   "quick": false,
+   "models_info": {
+    "pq2": {
+     "kind": "bonsai2",
+     "key": "PQ2_0",
+     "repo": "prism-ml/Ternary-Bonsai-2-27B-gguf",
+     "file": "Ternary-Bonsai-2-27B-PQ2_0.gguf",
+     "exists": true,
+     "source": "api",
+     "checked_utc": "2026-10-13T17:33:55.399452+00:00",
+     "alternatives": [],
+     "note": null
+    },
+    "draft_q8_0": {
+     "kind": "draft",
+     "key": null,
+     "repo": "ggml-org/Qwen3.5-0.8B-GGUF",
+     "file": "Qwen3.5-0.8B-Q8_0.gguf",
+     "exists": true,
+     "source": "api",
+     "checked_utc": "2026-10-13T17:33:55.716765+00:00",
+     "alternatives": [],
+     "note": null
+    },
+    "ptq1": {
+     "kind": "bonsai2",
+     "key": "PTQ1_0",
+     "repo": "prism-ml/Ternary-Bonsai-2-27B-gguf",
+     "file": "Ternary-Bonsai-2-27B-PTQ1_0.gguf",
+     "exists": true,
+     "source": "api",
+     "checked_utc": "2026-10-13T17:33:55.971918+00:00",
+     "alternatives": [],
+     "note": null
+    },
+    "draft_bf16": {
+     "kind": "draft",
+     "key": null,
+     "repo": "ggml-org/Qwen3.5-0.8B-GGUF",
+     "file": "Qwen3.5-0.8B-BF16.gguf",
+     "exists": true,
+     "source": "api",
+     "checked_utc": "2026-10-13T17:33:56.234374+00:00",
+     "alternatives": [],
+     "note": null
+    }
+   },
+   "health_gate": {
+    "sm": 0.4,
+    "mem": 0.5,
+    "power_cap": 0.75
+   }
+  },
+  "rows": [
+   {
+    "model": "pq2",
+    "depth": 0,
+    "config": "pdl0",
+    "env": {
+     "GGML_CUDA_PDL": "0"
+    },
+    "round": 0,
+    "tok_s": 127.737913,
+    "stddev": 3.228392,
+    "us_per_token": 7828.529341950341,
+    "error": null,
+    "smi": {
+     "n": 3,
+     "sm_mhz_med": 2265.0,
+     "sm_mhz_min": 2235.0,
+     "sm_mhz_max": 3090.0,
+     "mem_mhz_med": 13365.0,
+     "mem_mhz_max": 14001.0,
+     "power_w_med": 350.18,
+     "power_w_max": 367.54,
+     "power_cap_w": 350.0,
+     "power_default_w": 600.0,
+     "temp_c_max": 40.0,
+     "before": {
+      "clocks.sm": 180.0,
+      "clocks.max.sm": 3090.0,
+      "clocks.mem": 405.0,
+      "clocks.max.mem": 14001.0,
+      "power.draw": 22.07,
+      "power.limit": 350.0,
+      "power.default_limit": 600.0,
+      "temperature.gpu": 29.0
+     },
+     "after": {
+      "clocks.sm": 2722.0,
+      "clocks.max.sm": 3090.0,
+      "clocks.mem": 14001.0,
+      "clocks.max.mem": 14001.0,
+      "power.draw": 271.47,
+      "power.limit": 350.0,
+      "power.default_limit": 600.0,
+      "temperature.gpu": 36.0
+     }
+    }
+   }
+  ],
+  "notes": [
+   "ABORT: unhealthy host: power cap 350 W < 75% of default 600 W",
+   "pq2 depth 0: no complete pair",
+   "draft_bf16 runs mul_mat_vec_f, which has no pre-wait prefetch: its pf rows are a control",
+   "pdl0_pf<N> vs pdl0 = codegen plus prefetch cost without overlap; compare it with pf<N> vs pdl1 for the overlap gain",
+   "test-backend-ops checks that results are unchanged, not that prefetch addresses are in range",
+   "not covered by the prefetch: more than one column (PQ2_0 verify widths 3-8), ids mat-vecs, other quant types"
+  ],
+  "counters_ok": false,
+  "tbo": [],
+  "summary": {
+   "pq2": {
+    "0": {
+     "tok_s": {
+      "pdl0": null,
+      "pdl1": null,
+      "pf1": null,
+      "pf4": null,
+      "pdl0_pf4": null
+     },
+     "n": {
+      "pdl0": 0,
+      "pdl1": 0,
+      "pf1": 0,
+      "pf4": 0,
+      "pdl0_pf4": 0
+     },
+     "rounds": []
+    }
+   }
+  }
+ }
+}

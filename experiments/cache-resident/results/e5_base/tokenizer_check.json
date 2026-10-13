@@ -1,0 +1,67 @@
+{
+ "check": "GGUF header tokenizer comparison (HTTP range read of the first 32 MiB, no download of weights)",
+ "utc": "2026-10-13",
+ "target": "prism-ml/Ternary-Bonsai-2-27B-gguf/Ternary-Bonsai-2-27B-PQ2_0.gguf",
+ "drafts": [
+  "ggml-org/Qwen3.5-0.8B-GGUF/Qwen3.5-0.8B-BF16.gguf",
+  "ggml-org/Qwen3.5-0.8B-GGUF/Qwen3.5-0.8B-Q8_0.gguf"
+ ],
+ "fields": {
+  "general.architecture": [
+   "qwen35",
+   "qwen35",
+   "qwen35"
+  ],
+  "tokenizer.ggml.model": [
+   "gpt2",
+   "gpt2",
+   "gpt2"
+  ],
+  "tokenizer.ggml.pre": [
+   "qwen35",
+   "qwen35",
+   "qwen35"
+  ],
+  "n_tokens": [
+   248320,
+   248320,
+   248320
+  ],
+  "n_merges": [
+   247587,
+   247587,
+   247587
+  ],
+  "tokens_sha256_16": [
+   "f307bf31f9c6130c",
+   "f307bf31f9c6130c",
+   "f307bf31f9c6130c"
+  ],
+  "merges_sha256_16": [
+   "4ba698529766c7a2",
+   "4ba698529766c7a2",
+   "4ba698529766c7a2"
+  ],
+  "token_type_sha256_16": [
+   "4e54056be99c97dd",
+   "4e54056be99c97dd",
+   "4e54056be99c97dd"
+  ],
+  "eos_token_id": [
+   248046,
+   248046,
+   248046
+  ],
+  "bos_token_id": [
+   248044,
+   null,
+   null
+  ],
+  "add_bos_token": [
+   false,
+   false,
+   false
+  ]
+ },
+ "verdict": "compatible: identical token list, merges and token types; add_bos false in all three, so the bos id difference is not checked by common_speculative_are_compatible; eos ids equal"
+}

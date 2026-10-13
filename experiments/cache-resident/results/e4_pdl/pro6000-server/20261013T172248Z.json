@@ -1,0 +1,239 @@
+{
+ "schema": 1,
+ "exp": "e4_pdl",
+ "gpu": "pro6000-server",
+ "utc": "2026-10-13T17:22:48.289240+00:00",
+ "env": {
+  "gpu_name": "NVIDIA RTX PRO 6000 Blackwell Server Edition",
+  "gpu_tag": "pro6000-server",
+  "cc": "12.0",
+  "sm": "sm_120",
+  "driver": "580.159.04",
+  "cuda_runtime": "12.8",
+  "cuda_driver": "13.0",
+  "torch": "2.11.0+cu128",
+  "vram_bytes": 101973950464,
+  "sm_count": 188,
+  "l2_bytes": 134217728,
+  "persisting_l2_max_bytes": 83886080,
+  "access_policy_window_max_bytes": 134217728,
+  "persisting_l2_limit_bytes": 25165824,
+  "git_sha": "c0f1a73c6bba918d44b85db04c57145c326d625f",
+  "git_branch": "exp/cache-resident",
+  "hostname": "6bd47b06fcb2",
+  "pod_id": "9tcjccv61akeei",
+  "python": "3.10.12",
+  "counters_ok": null,
+  "transformers": "5.19.0"
+ },
+ "data": {
+  "config": {
+   "models": [
+    "pq2",
+    "draft_q8_0",
+    "ptq1",
+    "draft_bf16"
+   ],
+   "depths": [
+    0
+   ],
+   "reps": 5,
+   "rounds": 2,
+   "configs": {
+    "pdl0": {
+     "GGML_CUDA_PDL": "0"
+    },
+    "pdl1": {
+     "GGML_CUDA_PDL": "1"
+    },
+    "pf1": {
+     "GGML_CUDA_PDL": "1",
+     "GGML_CUDA_PDL_PREFETCH": "1"
+    },
+    "pf4": {
+     "GGML_CUDA_PDL": "1",
+     "GGML_CUDA_PDL_PREFETCH": "4"
+    },
+    "pdl0_pf4": {
+     "GGML_CUDA_PDL": "0",
+     "GGML_CUDA_PDL_PREFETCH": "4"
+    }
+   },
+   "n_gen": 128,
+   "bench_cmd_example": [
+    "/workspace/repo/build-cuda/bin/llama-bench",
+    "-m",
+    "<model.gguf>",
+    "-ngl",
+    "99",
+    "-fa",
+    "on",
+    "-p",
+    "0",
+    "-n",
+    "128",
+    "-d",
+    "0",
+    "-ctk",
+    "f16",
+    "-ctv",
+    "f16",
+    "-ub",
+    "2048",
+    "-r",
+    "5",
+    "-o",
+    "json"
+   ],
+   "tbo_cmd": [
+    "/workspace/repo/build-cuda/bin/test-backend-ops",
+    "test",
+    "-o",
+    "MUL_MAT,MUL_MAT_ID,MUL_MAT_VEC_FUSION",
+    "-b",
+    "CUDA0",
+    "-p",
+    "type(_a)?=(pq2_0|ptq1_0|q8_0),"
+   ],
+   "quick": false,
+   "models_info": {
+    "pq2": {
+     "kind": "bonsai2",
+     "key": "PQ2_0",
+     "repo": "prism-ml/Ternary-Bonsai-2-27B-gguf",
+     "file": "Ternary-Bonsai-2-27B-PQ2_0.gguf",
+     "exists": true,
+     "source": "api",
+     "checked_utc": "2026-10-13T17:12:35.209213+00:00",
+     "alternatives": [],
+     "note": null
+    },
+    "draft_q8_0": {
+     "kind": "draft",
+     "key": null,
+     "repo": "ggml-org/Qwen3.5-0.8B-GGUF",
+     "file": "Qwen3.5-0.8B-Q8_0.gguf",
+     "exists": true,
+     "source": "api",
+     "checked_utc": "2026-10-13T17:17:40.777716+00:00",
+     "alternatives": [],
+     "note": null
+    },
+    "ptq1": {
+     "kind": "bonsai2",
+     "key": "PTQ1_0",
+     "repo": "prism-ml/Ternary-Bonsai-2-27B-gguf",
+     "file": "Ternary-Bonsai-2-27B-PTQ1_0.gguf",
+     "exists": true,
+     "source": "api",
+     "checked_utc": "2026-10-13T17:19:07.701978+00:00",
+     "alternatives": [],
+     "note": null
+    },
+    "draft_bf16": {
+     "kind": "draft",
+     "key": null,
+     "repo": "ggml-org/Qwen3.5-0.8B-GGUF",
+     "file": "Qwen3.5-0.8B-BF16.gguf",
+     "exists": true,
+     "source": "api",
+     "checked_utc": "2026-10-13T17:20:37.307872+00:00",
+     "alternatives": [],
+     "note": null
+    }
+   },
+   "health_gate": {
+    "sm": 0.4,
+    "mem": 0.5,
+    "power_cap": 0.75
+   }
+  },
+  "rows": [],
+  "notes": [
+   "time budget used up; round 0 pq2 pdl0 and later skipped",
+   "time budget used up; round 0 pq2 pdl1 and later skipped",
+   "time budget used up; round 0 pq2 pf1 and later skipped",
+   "time budget used up; round 0 pq2 pf4 and later skipped",
+   "time budget used up; round 0 pq2 pdl0_pf4 and later skipped",
+   "time budget used up; round 1 pq2 pdl0_pf4 and later skipped",
+   "time budget used up; round 1 pq2 pf4 and later skipped",
+   "time budget used up; round 1 pq2 pf1 and later skipped",
+   "time budget used up; round 1 pq2 pdl1 and later skipped",
+   "time budget used up; round 1 pq2 pdl0 and later skipped",
+   "time budget used up; round 0 draft_q8_0 pdl0 and later skipped",
+   "time budget used up; round 0 draft_q8_0 pdl1 and later skipped",
+   "time budget used up; round 0 draft_q8_0 pf1 and later skipped",
+   "time budget used up; round 0 draft_q8_0 pf4 and later skipped",
+   "time budget used up; round 0 draft_q8_0 pdl0_pf4 and later skipped",
+   "time budget used up; round 1 draft_q8_0 pdl0_pf4 and later skipped",
+   "time budget used up; round 1 draft_q8_0 pf4 and later skipped",
+   "time budget used up; round 1 draft_q8_0 pf1 and later skipped",
+   "time budget used up; round 1 draft_q8_0 pdl1 and later skipped",
+   "time budget used up; round 1 draft_q8_0 pdl0 and later skipped",
+   "time budget used up; round 0 ptq1 pdl0 and later skipped",
+   "time budget used up; round 0 ptq1 pdl1 and later skipped",
+   "time budget used up; round 0 ptq1 pf1 and later skipped",
+   "time budget used up; round 0 ptq1 pf4 and later skipped",
+   "time budget used up; round 0 ptq1 pdl0_pf4 and later skipped",
+   "time budget used up; round 1 ptq1 pdl0_pf4 and later skipped",
+   "time budget used up; round 1 ptq1 pf4 and later skipped",
+   "time budget used up; round 1 ptq1 pf1 and later skipped",
+   "time budget used up; round 1 ptq1 pdl1 and later skipped",
+   "time budget used up; round 1 ptq1 pdl0 and later skipped",
+   "time budget used up; round 0 draft_bf16 pdl0 and later skipped",
+   "time budget used up; round 0 draft_bf16 pdl1 and later skipped",
+   "time budget used up; round 0 draft_bf16 pf1 and later skipped",
+   "time budget used up; round 0 draft_bf16 pf4 and later skipped",
+   "time budget used up; round 0 draft_bf16 pdl0_pf4 and later skipped",
+   "time budget used up; round 1 draft_bf16 pdl0_pf4 and later skipped",
+   "time budget used up; round 1 draft_bf16 pf4 and later skipped",
+   "time budget used up; round 1 draft_bf16 pf1 and later skipped",
+   "time budget used up; round 1 draft_bf16 pdl1 and later skipped",
+   "time budget used up; round 1 draft_bf16 pdl0 and later skipped",
+   "draft_bf16 runs mul_mat_vec_f, which has no pre-wait prefetch: its pf rows are a control",
+   "pdl0_pf<N> vs pdl0 = codegen plus prefetch cost without overlap; compare it with pf<N> vs pdl1 for the overlap gain",
+   "test-backend-ops checks that results are unchanged, not that prefetch addresses are in range",
+   "not covered by the prefetch: more than one column (PQ2_0 verify widths 3-8), ids mat-vecs, other quant types"
+  ],
+  "counters_ok": false,
+  "tbo": [
+   {
+    "prefetch": 0,
+    "cmd": [
+     "/workspace/repo/build-cuda/bin/test-backend-ops",
+     "test",
+     "-o",
+     "MUL_MAT,MUL_MAT_ID,MUL_MAT_VEC_FUSION",
+     "-b",
+     "CUDA0",
+     "-p",
+     "type(_a)?=(pq2_0|ptq1_0|q8_0),"
+    ],
+    "passed": 791,
+    "total": 791,
+    "fail_lines": [],
+    "returncode": 0,
+    "ok": true
+   },
+   {
+    "prefetch": 4,
+    "cmd": [
+     "/workspace/repo/build-cuda/bin/test-backend-ops",
+     "test",
+     "-o",
+     "MUL_MAT,MUL_MAT_ID,MUL_MAT_VEC_FUSION",
+     "-b",
+     "CUDA0",
+     "-p",
+     "type(_a)?=(pq2_0|ptq1_0|q8_0),"
+    ],
+    "passed": 791,
+    "total": 791,
+    "fail_lines": [],
+    "returncode": 0,
+    "ok": true
+   }
+  ],
+  "summary": {}
+ }
+}
