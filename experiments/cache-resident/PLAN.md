@@ -106,4 +106,4 @@ def reset(dev=0):
 - Day 10: E10 on PRO 6000.
 - Day 11: E11 chart, write-up.
 
-No purchase decision: an RTX PRO 6000 Blackwell is already available on GCP at work, so PRO 6000 runs (E1 confirm, E4, E5, E10) may run there instead of RunPod.
+No purchase decision. RunPod is the primary platform for all runs, PRO 6000 included (cheaper than GCP). A PRO 6000 on GCP at work is the fallback only when RunPod has no PRO 6000 capacity.
