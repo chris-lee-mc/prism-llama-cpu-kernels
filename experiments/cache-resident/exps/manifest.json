@@ -36,7 +36,7 @@
   "failsafe_min": 40,
   "build_llama": false,
   "disk_gb": 40,
-  "desc": "E1 working-set sweep: ternary GEMV chain, persisting off/0.5/0.75/1.0, ncu hit and DRAM bytes"
+  "desc": "E1 two-tier sweep: hot set W (persisting off/0.5/0.75/1.0/1.0L) + 512 MiB cold set per token, one CUDA graph"
  },
  "e2_08b": {
   "cmd": "python3 -m exps.e2_hybrid_bf16 --model 0.8B",

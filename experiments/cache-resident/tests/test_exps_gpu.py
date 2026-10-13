@@ -26,23 +26,13 @@ def _newest(tmp, exp):
 
 
 def test_e1_quick_and_plot(tmp_path):
-    _run(tmp_path, "exps.e1_sweep", "--no-ncu")
+    _run(tmp_path, "exps.e1_sweep", "--no-calib")
     doc = _newest(tmp_path, "e1")
     rows = doc["data"]["rows"]
-    assert len(rows) == 4 and all(r["us_per_token"] > 0 for r in rows)
+    assert len(rows) == 8 and all(r["us_per_token"] > 0 and r["finite"] and r["check_ok"] for r in rows)
     from exps import plot_e1
     out = plot_e1.plot(plot_e1.load_latest(tmp_path / "results" / "e1"), tmp_path / "knee.png")
     assert out.stat().st_size > 5000
-
-
-@pytest.mark.slow
-def test_e1_quick_with_ncu(tmp_path):
-    from harness import counters
-    if not counters.probe()["ok"]:
-        pytest.skip("ncu counters unavailable on this host")
-    _run(tmp_path, "exps.e1_sweep")
-    rows = _newest(tmp_path, "e1")["data"]["rows"]
-    assert all(r["l2_hit_rate"] is not None and r["dram_bytes_per_token"] is not None for r in rows)
 
 
 @pytest.mark.slow
