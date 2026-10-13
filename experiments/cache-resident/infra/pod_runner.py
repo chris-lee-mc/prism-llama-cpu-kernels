@@ -7,7 +7,9 @@ from __future__ import annotations
 
 import argparse
 import datetime as dt
+import fnmatch
 import hashlib
+import hmac
 import http.server
 import json
 import os
@@ -31,6 +33,9 @@ from infra.gpus import tag_from_name  # noqa: E402
 
 GRAPHQL_URL = "https://api.runpod.io/graphql"
 _NAME_RE = re.compile(r"^[a-z0-9_.-]+$")
+DENY_GLOBS = ("*.nsys-rep", "*.sqlite", "*.qdrep")
+SECRET_ENVS = ("RUNPOD_API_KEY", "HF_TOKEN")
+SCAN_MAX = 10 << 20
 
 
 def utc_now() -> str:
@@ -125,7 +130,36 @@ class Status:
         log(f"phase {name}")
 
 
+def redact(tok: str) -> str:
+    return tok[:2] + "***" if tok else "<unset>"
+
+
+def secret_values(environ=None) -> list[bytes]:
+    env = os.environ if environ is None else environ
+    return [v.encode() for k in SECRET_ENVS if len(v := env.get(k) or "") >= 8]
+
+
+def is_blocked_file(p: pathlib.Path, secret_vals: list[bytes]) -> bool:
+    """True for denied names, or text files (< 10 MB) containing a secret value. Binaries are not scanned."""
+    if any(fnmatch.fnmatch(p.name.lower(), g) for g in DENY_GLOBS):
+        return True
+    if not secret_vals:
+        return False
+    try:
+        if p.stat().st_size >= SCAN_MAX:
+            return False
+        data = p.read_bytes()
+    except OSError:
+        return True
+    if b"\0" in data[:8192]:
+        return False
+    return any(sec in data for sec in secret_vals)
+
+
 class _Handler(http.server.SimpleHTTPRequestHandler):
+    token = ""
+    secret_vals: list = []
+
     def end_headers(self):
         self.send_header("Cache-Control", "no-store")
         super().end_headers()
@@ -133,13 +167,36 @@ class _Handler(http.server.SimpleHTTPRequestHandler):
     def log_message(self, *a):
         pass
 
+    def _gate(self) -> bool:
+        """Strip the /<token> prefix, else 404. Also 404 for denied files."""
+        path = self.path.split("?", 1)[0].split("#", 1)[0]
+        head, _, rest = path.lstrip("/").partition("/")
+        if not self.token or not hmac.compare_digest(head.encode(), self.token.encode()):
+            self.send_error(404)
+            return False
+        self.path = "/" + rest
+        fs = pathlib.Path(self.translate_path(self.path))
+        if fs.is_file() and is_blocked_file(fs, self.secret_vals):
+            self.send_error(404)
+            return False
+        return True
 
-def start_server(root: pathlib.Path, port: int):
-    handler = partial(_Handler, directory=str(root))
+    def do_GET(self):
+        if self._gate():
+            super().do_GET()
+
+    def do_HEAD(self):
+        if self._gate():
+            super().do_HEAD()
+
+
+def start_server(root: pathlib.Path, port: int, token: str):
+    cls = type("_TokHandler", (_Handler,), {"token": token, "secret_vals": secret_values()})
+    handler = partial(cls, directory=str(root))
     srv = http.server.ThreadingHTTPServer(("0.0.0.0", port), handler)
     srv.daemon_threads = True
     threading.Thread(target=srv.serve_forever, daemon=True).start()
-    log(f"serving {root} on :{srv.server_address[1]}")
+    log(f"serving {root} on :{srv.server_address[1]} (token {redact(token)})")
     return srv
 
 
@@ -257,7 +314,11 @@ def main(argv=None) -> int:
     root.mkdir(parents=True, exist_ok=True)
     gpu = detect_gpu_tag()
     started = utc_now()
-    srv = start_server(root, a.port) if serve else None
+    token = os.environ.get("CR_RESULTS_TOKEN") or ""
+    if serve and not token:
+        print("error: CR_RESULTS_TOKEN is not set; refusing to serve results (use --no-serve)", file=sys.stderr)
+        return 2
+    srv = start_server(root, a.port, token) if serve else None
     port = srv.server_address[1] if srv else None
     st = Status(root, a.exp, gpu, port)
 
@@ -283,6 +344,7 @@ def main(argv=None) -> int:
     logf = open(run_d / "logs" / f"{stamp()}-runner.log", "w", encoding="utf-8", errors="replace")
     env = dict(os.environ)
     env.pop("RUNPOD_API_KEY", None)
+    env.pop("CR_RESULTS_TOKEN", None)
     env.update({"CR_EXP": a.exp, "CR_GPU_TAG": gpu, "CR_RESULTS_DIR": str(root), "CR_EXP_DIR": str(EXP_DIR),
                 "CR_LLAMA_BIN": os.environ.get("CR_LLAMA_BIN") or str(EXP_DIR.parent.parent / "build-cuda" / "bin"),
                 "PYTHONUNBUFFERED": "1"})
@@ -312,7 +374,7 @@ def main(argv=None) -> int:
         st.phase("running")
         log(f"cmd: {cmd}")
         # a login shell can restore RUNPOD_API_KEY from the host profile, so unset it again inside the shell
-        code, to = run_logged(["bash", "-lc", "unset RUNPOD_API_KEY; " + cmd], env, logf, remaining(), holder)
+        code, to = run_logged(["bash", "-lc", "unset RUNPOD_API_KEY CR_RESULTS_TOKEN; " + cmd], env, logf, remaining(), holder)
         if to:
             status, code = "timeout", 124
         elif code != 0:

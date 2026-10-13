@@ -26,6 +26,7 @@ Scope: code for PLAN.md P0.1-P0.6 and E1-E5. Four units built in parallel by dif
 | CR_FAILSAFE_MIN | 40 | pod lifetime cap, counted from container start |
 | CR_LINGER_MIN | 10 | serve results after DONE, then self-terminate (still bounded by failsafe) |
 | CR_PORT | 8000 | results HTTP server |
+| CR_RESULTS_TOKEN | unset | secret path prefix for the results server; required to serve (set by runpod.py launch) |
 | CR_BUILD_LLAMA | 0 | bootstrap builds llama.cpp when 1 |
 | CR_LLAMA_BIN | `<repo>/build-cuda/bin` | E4, E5 |
 | CR_RESULTS_DIR | `EXP_DIR/results` | results helper, runner |
@@ -81,6 +82,7 @@ Self-terminate = POST `https://api.runpod.io/graphql` with `Authorization: Beare
 python3 infra/pod_runner.py --exp NAME [--cmd STR] [--failsafe-min 40] [--linger-min 10] [--port 8000] [--serve|--no-serve] [--manifest exps/manifest.json]
 ```
 - Serve default: on iff RUNPOD_POD_ID set. Server: `http.server.ThreadingHTTPServer` serving CR_RESULTS_DIR on 0.0.0.0:port, started first.
+- Auth: the proxy is public, so serving requires env CR_RESULTS_TOKEN (launch sets `secrets.token_urlsafe(24)` per launch). Unset and serving -> error exit 2 (use `--no-serve`; local no-serve mode is unchanged). Only paths under `/<token>/` answer (constant-time compare); everything else, including `/`, is 404, so no listing outside it. 404 also for `*.nsys-rep`, `*.sqlite`, `*.qdrep` and for text files < 10 MB containing the value of RUNPOD_API_KEY or HF_TOKEN (binaries are not scanned). The token is removed from the child env, logged only as `ab***`, and never written to result JSON.
 - Writes `results/_status/STATUS.json` `{exp, gpu, phase: "bootstrap"|"running"|"uploading"|"done", started_utc, updated_utc, pid}` on each phase change.
 - Runs cmd via `bash -lc` with cwd EXP_DIR, env + {CR_EXP, CR_GPU_TAG, CR_RESULTS_DIR, CR_LLAMA_BIN, CR_EXP_DIR}; new process group; tee to `results/<exp>/<gpu>/logs/<UTCSTAMP>-runner.log`. Child timeout = failsafe - 3 min; on timeout kill the group, status `timeout`.
 - If CR_REQUIRE_COUNTERS=1: run `python -m harness.counters --probe` first; failure -> status `no_counters`, skip cmd.
@@ -102,16 +104,16 @@ class Ledger:  # JSONL at CR_LEDGER
     def record_end(self, pod_id, cost_usd) -> None
     def session_spent(self, session_id: str | None = None) -> float   # ended costs + est_cost of open pods
 def startup_script(env: dict) -> str
-def proxy_url(pod_id: str, port: int = 8000) -> str   # https://<id>-<port>.proxy.runpod.net/
+def proxy_url(pod_id: str, port: int = 8000, token: str | None = None) -> str   # https://<id>-<port>.proxy.runpod.net/[<token>/]
 def launch(exp: str, gpu: str | None = None, *, cmd=None, cloud="any", failsafe_min=40, build_llama=None, max_price=None, dry_run=False) -> int
 ```
 - Gate rule: refuse if `balance < est` (balance < est + 2.0 only warns; the account auto-tops-up) or `session_spent + est > CR_SESSION_CAP_USD` or `price_hr > max_price` (defaults: rtx3090 0.50, rtx4090 0.80, rtx5090 1.30, pro6000 2.60, l40s 1.20). Price = communityPrice or securePrice for the chosen cloud; skip candidates with no price/stock.
-- Launch flow: manifest entry -> gate per candidate in cascade order -> create (on "no longer any instances available"-type error, try next) -> ledger launch -> `try:` wait `desiredStatus RUNNING` and proxy reachable (<= 15 min) -> poll `proxy_url/_status/DONE.json` every 20 s until present or deadline `failsafe_min + 2` min (print STATUS.json phase changes) -> fetch MANIFEST.json, download each file to local CR_RESULTS_DIR preserving path, verify sha256 -> `finally:` terminate, confirm `pod()` is None or TERMINATED, ledger end with cost = costPerHr * wall time. SIGINT goes through finally.
-- Pod params: image `nvidia/cuda:12.8.1-devel-ubuntu22.04`, disk from manifest (`disk_gb`), ports `8000/http`, env = {RUNPOD_API_KEY, CR_EXP, CR_CMD?, CR_FAILSAFE_MIN, CR_LINGER_MIN, CR_BUILD_LLAMA, CR_BRANCH, CR_REPO_URL, HF_HUB_ENABLE_HF_TRANSFER=1}, name `cr-<exp>-<gpu>-<HHMM>`.
+- Launch flow: manifest entry -> gate per candidate in cascade order -> create (on "no longer any instances available"-type error, try next) -> ledger launch -> `try:` wait `desiredStatus RUNNING` and proxy reachable (<= 15 min) -> poll `proxy_url(token)/_status/DONE.json` every 20 s until present or deadline `failsafe_min + 2` min (print STATUS.json phase changes) -> fetch MANIFEST.json, download each file to local CR_RESULTS_DIR preserving path, verify sha256 -> `finally:` terminate, confirm `pod()` is None or TERMINATED, ledger end with cost = costPerHr * wall time. SIGINT goes through finally.
+- Pod params: image `nvidia/cuda:12.8.1-devel-ubuntu22.04`, disk from manifest (`disk_gb`), ports `8000/http`, env = {RUNPOD_API_KEY, CR_RESULTS_TOKEN (random per launch; shown as <redacted> in dry-run), CR_EXP, CR_CMD?, CR_FAILSAFE_MIN, CR_LINGER_MIN, CR_BUILD_LLAMA, CR_BRANCH, CR_REPO_URL, HF_HUB_ENABLE_HF_TRANSFER=1}, name `cr-<exp>-<gpu>-<HHMM>`.
 - CLI: `python -m infra.runpod balance | prices [--gpu KEY] | pods | terminate POD_ID | launch --exp E [--gpu KEY] [--cmd S] [--cloud any|community|secure] [--failsafe-min N] [--max-price X] [--build-llama] [--dry-run]`. `--failsafe-min` > 40 requires `--allow-long` and is capped at 90. `--dry-run` prints candidates, prices, gate decision, startup script; creates nothing.
 
 ### 2.5 infra tests (offline)
-`test_infra_results.py` (tmp root, monkeypatched metadata, filename/collision/schema, no GPU), `test_infra_gpus.py` (tag table incl. Max-Q ordering, cascade order), `test_infra_runpod.py` (mock `_post`: gate pass/fail cases, cascade fallback on no-capacity, terminate always called on exception and on success, ledger math, startup_script contains failsafe, restart marker, clone of CR_BRANCH, no secrets printed), `test_infra_runner.py` (run pod_runner with `--cmd "python -c ..."` writing a result, `--no-serve`; MANIFEST+DONE content; serve on ephemeral port and GET DONE.json; failsafe of 0.02 min kills `sleep 60` child, status timeout, no network call without RUNPOD_POD_ID), `bash -n` on the .sh files, ascii.
+`test_infra_results.py` (tmp root, monkeypatched metadata, filename/collision/schema, no GPU), `test_infra_gpus.py` (tag table incl. Max-Q ordering, cascade order), `test_infra_runpod.py` (mock `_post`: gate pass/fail cases, cascade fallback on no-capacity, terminate always called on exception and on success, ledger math, startup_script contains failsafe, restart marker, clone of CR_BRANCH, no secrets printed), `test_infra_runner.py` (run pod_runner with `--cmd "python -c ..."` writing a result, `--no-serve`; MANIFEST+DONE content; serve on ephemeral port and GET <token>/_status/DONE.json; mock-server test: 404 without/with wrong token, 200 with token, 404 for denied names and secret-bearing files; refuses to serve without token; failsafe of 0.02 min kills `sleep 60` child, status timeout, no network call without RUNPOD_POD_ID), `bash -n` on the .sh files, ascii.
 On-GPU acceptance (later): one `launch --exp p0_smoke --gpu rtx5090` end to end: results downloaded, pod terminated, ledger cost recorded; cold start to running cmd < 5 min.
 
 ## 3. harness/ (P0.2, P0.3, power, timing)

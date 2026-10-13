@@ -94,12 +94,13 @@ def env(tmp_path, monkeypatch):
     monkeypatch.setenv("CR_RESULTS_DIR", str(res))
     monkeypatch.setenv("CR_SESSION_ID", "s1")
     monkeypatch.setattr(runpod, "_sleep", lambda s: None)
+    monkeypatch.setattr(runpod, "_new_token", lambda: "TOK")
     return res, Ledger(tmp_path / "ledger.jsonl")
 
 
 def serve_http(monkeypatch, files=FILES, done_status="ok", fail=None):
     man = {"files": [{"path": p, "size": len(b), "sha256": hashlib.sha256(b).hexdigest()} for p, b in files.items()]}
-    base = proxy_url("pod1")
+    base = proxy_url("pod1", token="TOK")
 
     def fake_get(url, timeout=20.0):
         if fail:
@@ -223,6 +224,26 @@ def test_cr_term_function_sends_terminate(tmp_path):
 def test_proxy_url():
     assert proxy_url("abc") == "https://abc-8000.proxy.runpod.net/"
     assert proxy_url("abc", 9) == "https://abc-9.proxy.runpod.net/"
+    assert proxy_url("abc", token="t") == "https://abc-8000.proxy.runpod.net/t/"
+
+
+def test_token_passed_to_pod_and_not_printed(env, monkeypatch, capsys):
+    res, led = env
+    serve_http(monkeypatch)
+    urls = []
+    real = runpod.http_get
+    monkeypatch.setattr(runpod, "http_get", lambda url, timeout=20.0: urls.append(url) or real(url, timeout))
+    api = FakeAPI()
+    assert runpod.launch("p0_x", "rtx5090", manifest=MAN, client=api, ledger=led) == 0
+    assert urls and all("/TOK/" in u for u in urls)
+    assert "TOK" not in capsys.readouterr().out
+    assert "CR_RESULTS_TOKEN" in json.dumps(api.created[-1])
+    assert not any("TOK" in p.read_text() for p in res.rglob("*.json"))
+
+
+def test_new_token_is_random():
+    assert runpod.secrets.token_urlsafe(24) != runpod.secrets.token_urlsafe(24)
+    assert len(runpod._new_token()) >= 32
 
 
 # ---- API client
@@ -591,7 +612,7 @@ def test_transient_pod_errors_do_not_kill_run(env, monkeypatch):
 def test_pod_errors_give_up_after_n_in_a_row(env, monkeypatch):
     res, led = env
     serve_http(monkeypatch, fail=None)
-    monkeypatch.setattr(runpod, "http_get", lambda url, timeout=20.0: (200, b"listing") if url.endswith(".net/") else (404, b""))
+    monkeypatch.setattr(runpod, "http_get", lambda url, timeout=20.0: (200, b"listing") if url.endswith("/TOK/") else (404, b""))
     api = FakeAPI(pod_errors=["boom"] * runpod.MAX_POD_FAILS)
     assert runpod.launch("p0_x", "rtx5090", manifest=MAN, client=api, ledger=led) == 1
     assert api.terminated == ["pod1"]

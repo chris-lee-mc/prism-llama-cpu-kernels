@@ -16,6 +16,7 @@ import hashlib
 import json
 import os
 import pathlib
+import secrets
 import signal
 import sys
 import time
@@ -133,8 +134,13 @@ class Ledger:
 
 # ---------------------------------------------------------------- pod startup
 
-def proxy_url(pod_id: str, port: int = 8000) -> str:
-    return f"https://{pod_id}-{port}.proxy.runpod.net/"
+def proxy_url(pod_id: str, port: int = 8000, token: str | None = None) -> str:
+    """Public proxy base; with a token the results server only answers under /<token>/."""
+    return f"https://{pod_id}-{port}.proxy.runpod.net/" + (f"{token}/" if token else "")
+
+
+def _new_token() -> str:
+    return secrets.token_urlsafe(24)
 
 
 def startup_script(env: dict) -> str:
@@ -445,7 +451,7 @@ def launch(exp: str, gpu: str | None = None, *, cmd=None, cloud="any", failsafe_
     min_vcpu = 16 if build_llama else 4
     cap = float(os.environ.get("CR_SESSION_CAP_USD", 300))
     ledger = ledger or Ledger()
-    env = {"RUNPOD_API_KEY": "<redacted>", "CR_EXP": exp, "CR_FAILSAFE_MIN": failsafe_min,
+    env = {"RUNPOD_API_KEY": "<redacted>", "CR_RESULTS_TOKEN": "<redacted>", "CR_EXP": exp, "CR_FAILSAFE_MIN": failsafe_min,
            "CR_LINGER_MIN": os.environ.get("CR_LINGER_MIN", 10), "CR_BUILD_LLAMA": int(build_llama),
            "CR_BRANCH": os.environ.get("CR_BRANCH", DEFAULT_BRANCH),
            "CR_REPO_URL": os.environ.get("CR_REPO_URL", DEFAULT_REPO), "HF_HUB_ENABLE_HF_TRANSFER": 1}
@@ -500,6 +506,8 @@ def launch(exp: str, gpu: str | None = None, *, cmd=None, cloud="any", failsafe_
 
     run_env = dict(env)
     run_env["RUNPOD_API_KEY"] = client.api_key
+    token = _new_token()  # per launch; never printed or logged
+    run_env["CR_RESULTS_TOKEN"] = token
 
     def on_signal(signum, frame):
         raise _Interrupt(f"signal {signum}")
@@ -558,7 +566,7 @@ def launch(exp: str, gpu: str | None = None, *, cmd=None, cloud="any", failsafe_
             fails[0] = 0
             return p
 
-        base = proxy_url(pod_id)
+        base = proxy_url(pod_id, token=token)
         ready_deadline = t0 + 15 * 60
         seen_running = False
         while True:
@@ -578,7 +586,7 @@ def launch(exp: str, gpu: str | None = None, *, cmd=None, cloud="any", failsafe_
                 print("error: pod not ready within 15 min")
                 return 1
             _sleep(10)
-        print(f"pod ready after {_now() - t0:.0f}s: {base}")
+        print(f"pod ready after {_now() - t0:.0f}s: {proxy_url(pod_id)}<token>/")
         deadline = _now() + (failsafe_min + 2) * 60
         phase, done = None, None
         while _now() < deadline:

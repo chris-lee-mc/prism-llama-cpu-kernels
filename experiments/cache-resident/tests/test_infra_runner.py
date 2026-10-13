@@ -7,6 +7,7 @@ import pathlib
 import subprocess
 import sys
 import time
+import urllib.error
 import urllib.request
 
 import pytest
@@ -164,7 +165,7 @@ def test_serve_done_json(results_dir):
     for k in list(env):
         if k.startswith("RUNPOD_") or k.startswith("CR_"):
             env.pop(k)
-    env.update({"CR_RESULTS_DIR": str(results_dir), "CR_GPU_TAG": "testgpu"})
+    env.update({"CR_RESULTS_DIR": str(results_dir), "CR_GPU_TAG": "testgpu", "CR_RESULTS_TOKEN": "tok123"})
     p = subprocess.Popen([sys.executable, str(RUNNER), "--exp", "t6", "--cmd", "echo hi", "--serve",
                           "--port", "0", "--linger-min", "0.1"], cwd=str(EXP_DIR), env=env,
                          stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
@@ -176,14 +177,14 @@ def test_serve_done_json(results_dir):
             try:
                 if port is None:
                     port = read(results_dir, "_status/STATUS.json")["port"]
-                with urllib.request.urlopen(f"http://127.0.0.1:{port}/_status/DONE.json", timeout=2) as r:
+                with urllib.request.urlopen(f"http://127.0.0.1:{port}/tok123/_status/DONE.json", timeout=2) as r:
                     assert r.status == 200
                     body = json.loads(r.read())
             except Exception:
                 time.sleep(0.2)
         assert body is not None, "DONE.json not served"
         assert body["status"] == "ok" and body["exp"] == "t6"
-        with urllib.request.urlopen(f"http://127.0.0.1:{port}/", timeout=2) as r:
+        with urllib.request.urlopen(f"http://127.0.0.1:{port}/tok123/", timeout=2) as r:
             assert r.status == 200
     finally:
         p.wait(timeout=40)
@@ -218,3 +219,55 @@ def test_login_shell_cannot_restore_api_key(results_dir, tmp_path):
     cmd = "python -c \"import os; assert 'RUNPOD_API_KEY' not in os.environ\""
     r = run_runner(results_dir, "--exp", "t1", "--cmd", cmd, "--no-serve", "--linger-min", "0", env_extra={"HOME": str(home)})
     assert r.returncode == 0, r.stdout + r.stderr
+
+
+def test_serve_refused_without_token(results_dir):
+    r = run_runner(results_dir, "--exp", "t7", "--cmd", "echo hi", "--serve", "--port", "0")
+    assert r.returncode == 2 and "CR_RESULTS_TOKEN" in r.stderr
+    assert not (results_dir / "t7").exists()
+
+
+def _get(url):
+    try:
+        with urllib.request.urlopen(url, timeout=5) as r:
+            return r.status, r.read()
+    except urllib.error.HTTPError as e:
+        return e.code, b""
+
+
+def test_token_gate_and_denied_files(tmp_path, monkeypatch):
+    monkeypatch.setenv("RUNPOD_API_KEY", "rpa_SECRETVALUE123")
+    monkeypatch.setenv("HF_TOKEN", "hf_SECRETVALUE456")
+    (tmp_path / "ok.json").write_text('{"a": 1}')
+    (tmp_path / "leak.log").write_text("key=rpa_SECRETVALUE123")
+    (tmp_path / "leak2.txt").write_text("t hf_SECRETVALUE456 t")
+    (tmp_path / "bin.dat").write_bytes(b"\0\1rpa_SECRETVALUE123")
+    for n in ("a.nsys-rep", "b.sqlite", "c.qdrep", "D.SQLITE"):
+        (tmp_path / n).write_bytes(b"x")
+    (tmp_path / "sub").mkdir()
+    (tmp_path / "sub" / "f.txt").write_text("hi")
+    srv = pod_runner.start_server(tmp_path, 0, "tok123")
+    base = f"http://127.0.0.1:{srv.server_address[1]}"
+    try:
+        assert _get(base + "/ok.json")[0] == 404          # no token
+        assert _get(base + "/")[0] == 404                 # no listing outside token
+        assert _get(base + "/wrong/ok.json")[0] == 404
+        assert _get(base + "/tok123x/ok.json")[0] == 404
+        assert _get(base + "/tok123/../../etc/passwd")[0] == 404
+        assert _get(base + "/tok123/ok.json") == (200, b'{"a": 1}')
+        assert _get(base + "/tok123/sub/f.txt") == (200, b"hi")
+        assert _get(base + "/tok123/")[0] == 200
+        for n in ("leak.log", "leak2.txt", "a.nsys-rep", "b.sqlite", "c.qdrep", "D.SQLITE"):
+            assert _get(f"{base}/tok123/{n}")[0] == 404, n
+        assert _get(base + "/tok123/bin.dat")[0] == 200   # binaries are not scanned
+    finally:
+        srv.shutdown()
+
+
+def test_token_not_logged_or_in_child_env(results_dir, tmp_path):
+    out = tmp_path / "env.txt"
+    r = run_runner(results_dir, "--exp", "t8", "--cmd", f"env > {out}; true", "--serve", "--port", "0",
+                   "--linger-min", "0", env_extra={"CR_RESULTS_TOKEN": "tok-very-secret"})
+    assert r.returncode == 0
+    assert "tok-very-secret" not in r.stdout + r.stderr
+    assert "tok-very-secret" not in out.read_text()
