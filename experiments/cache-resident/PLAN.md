@@ -18,7 +18,7 @@ Develop on 5090, validate on PRO 6000, sanity-check on 3090.
 
 Phase 0 ~$15 (20 h 5090/4090); Phase 1 ~$35 (25 h 5090, 6 h PRO 6000, 4 h 3090); Phase 2 $45-130; Phase 3 ~$40; contingency 30%. Total ~$200-300. Patterns: budget gate, 40-min failsafe, result push.
 
-## 3. Phase 0 - Harness and kernels (5090 community, fallback 4090)
+## 3. Phase 0 - Harness and kernels (day 1) (5090 community, fallback 4090)
 
 - P0.1 Pod template. Image `nvidia/cuda:12.8.1-devel-ubuntu22.04` (CUDA >= 12.8 for sm_120). Startup installs: PyTorch cu128, `cuda-python`, CuPy, Nsight Compute, PrismML llama.cpp fork built with `-DGGML_CUDA=ON`. Cold start < 3 min.
 - P0.2 Persisting-L2 control. Exposes `cudaDeviceGetAttribute(MaxPersistingL2CacheSize)`, `cudaDeviceSetLimit(PersistingL2CacheSize)`, `cudaStreamSetAttribute(AccessPolicyWindow)` with hitRatio, hitProp=Persisting, missProp=Streaming, `cudaCtxResetPersistingL2Cache()`. Expose to PyTorch via `torch.utils.cpp_extension.load_inline`. Deliverable `l2persist.py`. Log device-reported max on every GPU.
@@ -94,6 +94,16 @@ def reset(dev=0):
 
 `num_bytes` is capped by `cudaDevAttrMaxAccessPolicyWindowSize`. For CUDA-Graph-captured decode, set the attribute on kernel nodes (`cudaGraphKernelNodeSetAttribute`) or on the capture stream before capture - verify which the driver honors on sm_120 in P0.2.
 
-## 9. Schedule
+## 9. Schedule (days)
 
-Wk1 P0 on 5090. Wk2 E1 5090+3090, E2, E3. Wk3 E1 confirm + E4 + E5 on PRO 6000, go/no-go. Wk4-9 Phase 2. Wk10-11 Phase 3.
+- Day 1: P0.1-P0.6 on 5090. Exit: hit-rate counter moves; GEMV >= 70% BW.
+- Day 2: E1 on 5090 + 3090; E2, E3 on 5090. Regenerate projections.
+- Day 3: E1 confirm + E4 + E5 on PRO 6000. Go/no-go.
+- Day 4-5: E6 ternary QAT (full + 48K vocab).
+- Day 6-7: E7 looped core, R sweep.
+- Day 8: E9 dense control; E8 only if E7 margin < 15%.
+- Day 9: Phase 2 figure; pick draft.
+- Day 10: E10 on PRO 6000.
+- Day 11: E11 chart, write-up.
+
+No purchase decision: an RTX PRO 6000 Blackwell is already available on GCP at work, so PRO 6000 runs (E1 confirm, E4, E5, E10) may run there instead of RunPod.

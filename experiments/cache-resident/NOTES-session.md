@@ -7,3 +7,4 @@
 - Pods have NO GitHub credentials. Results path (replaces P0.6 "push from pod"): pod writes results/<exp>/<gpu>/<timestamp>.json and serves the results dir over HTTP on port 8000; orchestrator fetches via https://<podId>-8000.proxy.runpod.net/ and commits/pushes from the container.
 - Every pod must have: budget gate (refuse launch if clientBalance < est cost + $2 margin or session spend cap exceeded), 40-min failsafe self-terminate (pod-side `runpodctl remove pod $RUNPOD_POD_ID` or sleep-then-exit), and orchestrator-side termination in a finally block.
 - AGENTS.md: ASCII only in code/comments (no em dash, arrows, x-sign), concise comments, commits use `Assisted-by: Claude` (never Co-authored-by).
+- Schedule is in days, not weeks. No card purchase decision: the user has an RTX PRO 6000 Blackwell on GCP at work; PRO 6000 experiments must be runnable outside RunPod too (plain local run of the pod-side runner on any CUDA host, no RunPod API dependency).
