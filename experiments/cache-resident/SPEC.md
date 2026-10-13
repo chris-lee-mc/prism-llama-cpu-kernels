@@ -34,7 +34,7 @@ Scope: code for PLAN.md P0.1-P0.6 and E1-E5. Four units built in parallel by dif
 | CR_NCU | auto search | counters |
 | CR_L2_BACKEND | auto (`cuda-python`, then `inline`); `auto` = unset | l2persist |
 | CR_REQUIRE_COUNTERS | 0 | runner aborts early with status `no_counters` if ncu probe fails |
-| CR_SESSION_CAP_USD | 25 | budget gate |
+| CR_SESSION_CAP_USD | 300 | budget gate |
 | CR_SESSION_ID | UTC date YYYY-MM-DD | ledger grouping |
 | CR_LEDGER | `EXP_DIR/.runpod_ledger.jsonl` | budget gate (gitignored) |
 | HF_HOME | `/workspace/hf` if /workspace exists else default | model downloads |
@@ -104,7 +104,7 @@ def startup_script(env: dict) -> str
 def proxy_url(pod_id: str, port: int = 8000) -> str   # https://<id>-<port>.proxy.runpod.net/
 def launch(exp: str, gpu: str | None = None, *, cmd=None, cloud="any", failsafe_min=40, build_llama=None, max_price=None, dry_run=False) -> int
 ```
-- Gate rule: refuse if `balance < est + 2.0` or `session_spent + est > CR_SESSION_CAP_USD` or `price_hr > max_price` (defaults: rtx3090 0.50, rtx4090 0.80, rtx5090 1.30, pro6000 2.60, l40s 1.20). Price = communityPrice or securePrice for the chosen cloud; skip candidates with no price/stock.
+- Gate rule: refuse if `balance < est` (balance < est + 2.0 only warns; the account auto-tops-up) or `session_spent + est > CR_SESSION_CAP_USD` or `price_hr > max_price` (defaults: rtx3090 0.50, rtx4090 0.80, rtx5090 1.30, pro6000 2.60, l40s 1.20). Price = communityPrice or securePrice for the chosen cloud; skip candidates with no price/stock.
 - Launch flow: manifest entry -> gate per candidate in cascade order -> create (on "no longer any instances available"-type error, try next) -> ledger launch -> `try:` wait `desiredStatus RUNNING` and proxy reachable (<= 15 min) -> poll `proxy_url/_status/DONE.json` every 20 s until present or deadline `failsafe_min + 2` min (print STATUS.json phase changes) -> fetch MANIFEST.json, download each file to local CR_RESULTS_DIR preserving path, verify sha256 -> `finally:` terminate, confirm `pod()` is None or TERMINATED, ledger end with cost = costPerHr * wall time. SIGINT goes through finally.
 - Pod params: image `nvidia/cuda:12.8.1-devel-ubuntu22.04`, disk from manifest (`disk_gb`), ports `8000/http`, env = {RUNPOD_API_KEY, CR_EXP, CR_CMD?, CR_FAILSAFE_MIN, CR_LINGER_MIN, CR_BUILD_LLAMA, CR_BRANCH, CR_REPO_URL, HF_HUB_ENABLE_HF_TRANSFER=1}, name `cr-<exp>-<gpu>-<HHMM>`.
 - CLI: `python -m infra.runpod balance | prices [--gpu KEY] | pods | terminate POD_ID | launch --exp E [--gpu KEY] [--cmd S] [--cloud any|community|secure] [--failsafe-min N] [--max-price X] [--build-llama] [--dry-run]`. `--failsafe-min` > 40 requires `--allow-long` and is capped at 90. `--dry-run` prints candidates, prices, gate decision, startup script; creates nothing.

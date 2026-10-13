@@ -63,10 +63,12 @@ def est_cost(price_hr: float, failsafe_min: int) -> float:
 
 def budget_gate(balance: float, price_hr: float, failsafe_min: int, session_spent: float, cap: float,
                 margin: float = 2.0) -> tuple[bool, str]:
-    """Hard gate: session cap only. Low balance is a warning, the account auto-tops-up."""
+    """Hard gate: session cap, or balance below this run's est cost. Balance below est + margin only warns (auto top-up)."""
     est = est_cost(price_hr, failsafe_min)
     if session_spent + est > cap:
         return False, f"session spend ${session_spent:.2f} + est ${est:.2f} > cap ${cap:.2f}"
+    if balance is not None and balance < est:
+        return False, f"balance ${balance:.2f} < est ${est:.2f}"
     bal = "unknown" if balance is None else f"${balance:.2f}"
     why = f"ok: est ${est:.2f}, balance {bal}, session ${session_spent:.2f}/{cap:.2f}"
     if balance is not None and balance < est + margin:
@@ -428,7 +430,7 @@ def launch(exp: str, gpu: str | None = None, *, cmd=None, cloud="any", failsafe_
             print(f"error: refusing; pass --failsafe-min {sug} --allow-long")
             return 2
     min_vcpu = 16 if build_llama else 4
-    cap = float(os.environ.get("CR_SESSION_CAP_USD", 25))
+    cap = float(os.environ.get("CR_SESSION_CAP_USD", 300))
     ledger = ledger or Ledger()
     env = {"RUNPOD_API_KEY": "<redacted>", "CR_EXP": exp, "CR_FAILSAFE_MIN": failsafe_min,
            "CR_LINGER_MIN": os.environ.get("CR_LINGER_MIN", 10), "CR_BUILD_LLAMA": int(build_llama),

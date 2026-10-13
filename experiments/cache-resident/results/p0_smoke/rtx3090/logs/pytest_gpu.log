@@ -1,0 +1,8 @@
+...........................................s                             [100%]
+=============================== warnings summary ===============================
+tests/test_harness_p0_l2.py: 12 warnings
+  /workspace/repo/experiments/cache-resident/harness/p0_l2_check.py:205: DeprecationWarning: ExternalStream is deprecated. Use Stream.from_external() instead to interoperate with external streams that implement the CUDA stream protocol.
+    with self._stream_ctx(handle):
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+43 passed, 1 skipped, 466 deselected, 12 warnings in 23.74s

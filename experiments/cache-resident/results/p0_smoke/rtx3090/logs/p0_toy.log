@@ -1,0 +1,17 @@
+{
+ "total_bytes_per_token": 206889984,
+ "us_per_token_eager": 1222.5945281982422,
+ "us_per_token_graph": 963.3624267578125,
+ "us_per_layer_graph": 40.14010111490885,
+ "launches_per_token": 294,
+ "weight_bytes_per_token": 118809600,
+ "extra_bytes_per_token": 88080384,
+ "eff_gbps": 214.75820340667258,
+ "us_per_layer_gdn": 36.4865525563558,
+ "us_per_layer_attn": 50.99072138468424,
+ "floor_us_per_layer": 17.9477326075236,
+ "eff_gbps_net": 388.4405577138496,
+ "l2_bytes": 6291456,
+ "l2_assisted": false
+}
+wrote /workspace/repo/experiments/cache-resident/results/p0_toy/rtx3090/20261013T040715Z.json

@@ -1,0 +1,33 @@
+[l2persist] NVIDIA GeForce RTX 3090 sm_86 L2=6.0 MiB persisting_max=4.1 MiB window_max=128.0 MiB limit=1.1 MiB backend=cuda-python
+/workspace/repo/experiments/cache-resident/harness/p0_l2_check.py:205: DeprecationWarning: ExternalStream is deprecated. Use Stream.from_external() instead to interoperate with external streams that implement the CUDA stream protocol.
+  with self._stream_ctx(handle):
+[p0_l2] eager        off     79.9 us/rep (median of 95)
+[p0_l2] eager        on      78.8 us/rep (median of 95)
+[p0_l2] graph-nodes  off     78.8 us/rep (median of 95)
+[p0_l2] graph-nodes  on      78.8 us/rep (median of 95)
+[p0_l2] graph-stream off     78.8 us/rep (median of 95)
+[p0_l2] graph-stream on      78.8 us/rep (median of 95)
+[p0_l2] timing-only result written: /workspace/repo/experiments/cache-resident/results/p0_l2/rtx3090/20261013T040644Z.json
+[p0_l2] eager        off hit=None dram/rep=None ncu_ok=False replay=application ERR_NVGPUCTRPERM
+[p0_l2] eager        on  hit=None dram/rep=None ncu_ok=False replay=application ERR_NVGPUCTRPERM
+[p0_l2] graph-nodes  off hit=None dram/rep=None ncu_ok=False replay=application ERR_NVGPUCTRPERM
+[p0_l2] graph-nodes  on  hit=None dram/rep=None ncu_ok=False replay=application ERR_NVGPUCTRPERM
+[p0_l2] graph-stream off hit=None dram/rep=None ncu_ok=False replay=application ERR_NVGPUCTRPERM
+[p0_l2] graph-stream on  hit=None dram/rep=None ncu_ok=False replay=application ERR_NVGPUCTRPERM
+{
+ "pass": true,
+ "verdict": {
+  "control": true,
+  "counters_ok": false,
+  "speedup": 1.012987017895738,
+  "basis": "timing",
+  "pass": true
+ },
+ "methods": {
+  "eager": true,
+  "graph-nodes": true,
+  "graph-stream": true
+ },
+ "methods_honored": [],
+ "result": "/workspace/repo/experiments/cache-resident/results/p0_l2/rtx3090/20261013T040701Z.json"
+}

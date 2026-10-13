@@ -129,7 +129,7 @@ def test_est_cost():
 @pytest.mark.parametrize("bal,price,spent,cap,ok", [
     (50, 0.69, 0, 25, True),
     (2.5, 0.69, 0, 25, True),       # low balance only warns (auto top-up)
-    (0.0, 0.69, 0, 25, True),
+    (0.3, 0.69, 0, 25, False),      # below this run's est cost
     (50, 0.69, 24.9, 25, False),    # cap
     (50, 0.69, 24.4, 25, True),
 ])

@@ -1,0 +1,79 @@
+{
+ "schema": 1,
+ "exp": "p0_toy",
+ "gpu": "rtx3090",
+ "utc": "2026-10-13T04:07:15.885241+00:00",
+ "env": {
+  "gpu_name": "NVIDIA GeForce RTX 3090",
+  "gpu_tag": "rtx3090",
+  "cc": "8.6",
+  "sm": "sm_86",
+  "driver": "580.65.06",
+  "cuda_runtime": "12.8",
+  "cuda_driver": "13.0",
+  "torch": "2.11.0+cu128",
+  "vram_bytes": 25296044032,
+  "sm_count": 82,
+  "l2_bytes": 6291456,
+  "persisting_l2_max_bytes": 4325376,
+  "access_policy_window_max_bytes": 134213632,
+  "persisting_l2_limit_bytes": 1179648,
+  "git_sha": "1459e595a14d396a88e17def812158cef7fd70d7",
+  "git_branch": "exp/cache-resident",
+  "hostname": "2f32e83448b9",
+  "pod_id": "gqgrja7hck6hcz",
+  "python": "3.10.12",
+  "counters_ok": null
+ },
+ "data": {
+  "config": {
+   "config": {
+    "layers": 24,
+    "d": 1024,
+    "attn_every": 4,
+    "H": 16,
+    "dk": 128,
+    "dv": 128,
+    "Hq": 8,
+    "Hkv": 2,
+    "D": 256,
+    "F": 3584,
+    "ctx": 4096,
+    "kinds": null
+   },
+   "variant": "lut",
+   "tokens": 200,
+   "arena_bytes": 118907904,
+   "n_matrices": 144,
+   "l2_bytes": 6291456,
+   "total_bytes_per_token": 206889984
+  },
+  "rows": [
+   {
+    "total_bytes_per_token": 206889984,
+    "us_per_token_eager": 1222.5945281982422,
+    "us_per_token_graph": 963.3624267578125,
+    "us_per_layer_graph": 40.14010111490885,
+    "launches_per_token": 294,
+    "weight_bytes_per_token": 118809600,
+    "extra_bytes_per_token": 88080384,
+    "eff_gbps": 214.75820340667258,
+    "us_per_layer_gdn": 36.4865525563558,
+    "us_per_layer_attn": 50.99072138468424,
+    "floor_us_per_layer": 17.9477326075236,
+    "eff_gbps_net": 388.4405577138496,
+    "l2_bytes": 6291456,
+    "l2_assisted": false
+   }
+  ],
+  "notes": [
+   "eager = precomputed launch list called from Python; graph = same list captured once",
+   "eff_gbps counts ternary weights+scales, attention K/V reads and GDN state read+write",
+   "us_per_layer_gdn / us_per_layer_attn: homogeneous models with the same layer count, graph mode",
+   "floor_us_per_layer: same layer kinds and count at tiny sizes (d=F=H*dv=128, ctx=32), graph mode",
+   "eff_gbps_net: total bytes / (graph us - layers * floor); use floor_us_per_layer with eff_gbps_net for projections",
+   "weights are random, residual values are not meaningful"
+  ],
+  "counters_ok": null
+ }
+}

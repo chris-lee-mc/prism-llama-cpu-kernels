@@ -94,6 +94,11 @@ def env_metadata() -> dict:
     try:
         import torch
         md["torch"] = torch.__version__
+        try:
+            import transformers
+            md["transformers"] = transformers.__version__
+        except Exception:
+            md["transformers"] = None
         md["cuda_runtime"] = torch.version.cuda
         if torch.cuda.is_available():
             p = torch.cuda.get_device_properties(0)
