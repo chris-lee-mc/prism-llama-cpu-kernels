@@ -1,0 +1,155 @@
+{
+ "schema": 1,
+ "exp": "e2_08b",
+ "gpu": "pro6000-server",
+ "utc": "2026-10-13T12:29:04.553069+00:00",
+ "env": {
+  "gpu_name": "NVIDIA RTX PRO 6000 Blackwell Server Edition",
+  "gpu_tag": "pro6000-server",
+  "cc": "12.0",
+  "sm": "sm_120",
+  "driver": "595.91.07",
+  "cuda_runtime": "12.8",
+  "cuda_driver": "13.2",
+  "torch": "2.11.0+cu128",
+  "vram_bytes": 101975851008,
+  "sm_count": 188,
+  "l2_bytes": 134217728,
+  "persisting_l2_max_bytes": 83886080,
+  "access_policy_window_max_bytes": 134217728,
+  "persisting_l2_limit_bytes": 25165824,
+  "git_sha": "a3285a01d32646a3bf8500fec249088ecd1ac312",
+  "git_branch": "exp/cache-resident",
+  "hostname": "19205c73dfce",
+  "pod_id": "pnlm7wpq50qit4",
+  "python": "3.10.12",
+  "counters_ok": null,
+  "transformers": "5.19.0"
+ },
+ "data": {
+  "config": {
+   "model": "0.8B",
+   "ctx": [
+    0,
+    1024
+   ],
+   "decode": 32,
+   "compile_mode_requested": "reduce-overhead",
+   "torch": "2.11.0+cu128",
+   "quick": true,
+   "device": {
+    "name": "NVIDIA RTX PRO 6000 Blackwell Server Edition",
+    "cc": "12.0",
+    "l2_bytes": 134217728,
+    "persisting_max_bytes": 83886080,
+    "window_max_bytes": 134217728,
+    "persisting_limit_bytes": 25165824,
+    "backend": "cuda-python"
+   },
+   "load": {
+    "hf": {
+     "kind": "qwen",
+     "key": "0.8B",
+     "repo": "Qwen/Qwen3.5-0.8B",
+     "file": null,
+     "exists": true,
+     "source": "api",
+     "checked_utc": "2026-10-13T12:28:20.401479+00:00",
+     "alternatives": [],
+     "note": null
+    },
+    "repo_used": "Qwen/Qwen3.5-0.8B",
+    "transformers": "5.19.0",
+    "load_errors": [],
+    "load_path": "AutoModelForCausalLM",
+    "class": "Qwen3_5ForCausalLM",
+    "fla_available": false,
+    "causal_conv1d_available": false,
+    "gdn_impl": "torch_fallback",
+    "cache_kind": "static",
+    "mode_errors": [
+     "ctx=0 reduce-overhead: BackendCompilerFailed: backend='inductor' raised:\nRuntimeError: one of the variables needed for gradient computation has been modified by an inplace operation: [torch.cuda.FloatTensor [1, 16, 128, 128]], which is output 0 of torch::autograd::CopyBackwards, is at version 1; expected version 0 instead. Hint: the backtrace f",
+     "ctx=0 default: BackendCompilerFailed: backend='inductor' raised:\nRuntimeError: one of the variables needed for gradient computation has been modified by an inplace operation: [torch.cuda.FloatTensor [1, 16, 128, 128]], which is output 0 of torch::autograd::CopyBackwards, is at version 1; expected version 0 instead. Hint: the backtrace f",
+     "ctx=1024 reduce-overhead: BackendCompilerFailed: backend='inductor' raised:\nRuntimeError: one of the variables needed for gradient computation has been modified by an inplace operation: [torch.cuda.FloatTensor [1, 16, 128, 128]], which is output 0 of torch::autograd::CopyBackwards, is at version 1; expected version 0 instead. Hint: the backtrace f",
+     "ctx=1024 default: BackendCompilerFailed: backend='inductor' raised:\nRuntimeError: one of the variables needed for gradient computation has been modified by an inplace operation: [torch.cuda.FloatTensor [1, 16, 128, 128]], which is output 0 of torch::autograd::CopyBackwards, is at version 1; expected version 0 instead. Hint: the backtrace f"
+    ]
+   }
+  },
+  "rows": [
+   {
+    "model": "0.8B",
+    "ctx": 0,
+    "tok_s": 240.45680959987197,
+    "us_per_token": 4158.751010894775,
+    "compile_mode_used": "cuda_graph_manual",
+    "cache_kind": "static",
+    "dynamo_recompiles": 0,
+    "modes_rejected_recompile": [],
+    "dram_bytes_per_token": null,
+    "l2_hit_rate": null,
+    "ncu_us_per_token": null,
+    "counters_ok": false,
+    "gdn_impl": "torch_fallback",
+    "analytic": {
+     "weight_bytes": 1504786048,
+     "kv_bytes": 1572864,
+     "gdn_state_bytes": 18874368,
+     "conv_state_bytes": 884736,
+     "cache_len": 128,
+     "kv_bytes_per_token": 12288,
+     "n_layers": 24
+    },
+    "prefill_and_compile_s": 13.352833483135328,
+    "split": null,
+    "split_read_only": null
+   },
+   {
+    "model": "0.8B",
+    "ctx": 1024,
+    "tok_s": 215.74581327087273,
+    "us_per_token": 4635.08415222168,
+    "compile_mode_used": "cuda_graph_manual",
+    "cache_kind": "static",
+    "dynamo_recompiles": 0,
+    "modes_rejected_recompile": [],
+    "dram_bytes_per_token": null,
+    "l2_hit_rate": null,
+    "ncu_us_per_token": null,
+    "counters_ok": false,
+    "gdn_impl": "torch_fallback",
+    "analytic": {
+     "weight_bytes": 1504786048,
+     "kv_bytes": 14155776,
+     "gdn_state_bytes": 18874368,
+     "conv_state_bytes": 884736,
+     "cache_len": 1152,
+     "kv_bytes_per_token": 12288,
+     "n_layers": 24
+    },
+    "prefill_and_compile_s": 11.958212943049148,
+    "split": null,
+    "split_read_only": null
+   }
+  ],
+  "notes": [
+   "ncu counters unavailable (ERR_NVGPUCTRPERM needs host NVreg_RestrictProfilingToAdminUsers=0): timing-only run, analytic bytes, counters_ok=false [ERR_NVGPUCTRPERM]",
+   "fit and split use analytic bytes where ncu bytes are missing (see fit.bytes_source)",
+   "ncu dram_bytes_per_token counts reads only; split has the spec 2x state, split_read_only has 1x",
+   "ncu is kernel replay; rows with ncu_l2_state_ok false ran more than one pass on a warmed L2 (--cache-control none): dram bytes may be under-reported",
+   "static cache is read in full every step, so KV bytes scale with cache_len not ctx",
+   "reduce-overhead can skip CUDA graphs silently (mutated inputs); compare us/token with the other modes",
+   "gdn_impl=torch_fallback: GatedDeltaNet runs HF torch ops (several state-sized fp32 temporaries per layer per token), not a fused fla kernel; fit.floor_us_per_layer and fit.eff_bw_gbps describe that path, so proj_hybrid built on them is not representative of a fused implementation",
+   "ncu counts kernel nodes only; any cudaMemcpy node (e.g. a same-dtype copy_ into the cache) is excluded from dram_bytes_per_token"
+  ],
+  "counters_ok": false,
+  "fit": {
+   "intercept_us": -54294.303935268545,
+   "n_points": 2,
+   "r2": 1.0,
+   "floor_us_per_layer": null,
+   "eff_bw_gbps": 26.416200991071562,
+   "bytes_source": "analytic_bytes",
+   "gdn_impl": "torch_fallback"
+  }
+ }
+}
