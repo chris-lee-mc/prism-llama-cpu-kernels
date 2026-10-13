@@ -255,7 +255,15 @@ __device__ __forceinline__ void gemv_body(const uint32_t* __restrict__ q, const 
       const int i = it * NT + tid;
       const int r = i >> 3, c = i & 7;
       const int gr = min(rblk * RB + r, N - 1);
-      if (c < nc) cp_async16(qs + sl * kQStage + q_chunk(r, c) * 16, qb + (size_t)gr * qpitch + (size_t)tt * kTileBytes + c * 16);
+      if (c < nc) {
+        unsigned char* dst = qs + sl * kQStage + q_chunk(r, c) * 16;
+        const unsigned char* src = qb + (size_t)gr * qpitch + (size_t)tt * kTileBytes + c * 16;
+        if (dbg & 64) {
+          *reinterpret_cast<uint4*>(dst) = ld_stream(reinterpret_cast<const uint4*>(src));
+        } else {
+          cp_async16(dst, src);
+        }
+      }
     }
   };
   const unsigned short* srow = reinterpret_cast<const unsigned short*>(s) + (size_t)(row < N ? row : N - 1) * (size_t)G;
@@ -263,7 +271,7 @@ __device__ __forceinline__ void gemv_body(const uint32_t* __restrict__ q, const 
 #pragma unroll
     for (int u = 0; u < kTile; ++u) {
       const int g = tt * kTile + u;
-      v[u] = g < G ? __ldg(srow + g) : (unsigned short)0;
+      v[u] = (g < G && !(dbg & 128)) ? __ldg(srow + g) : (unsigned short)0;
     }
   };
 
@@ -318,8 +326,8 @@ __device__ __forceinline__ void gemv_body(const uint32_t* __restrict__ q, const 
   }
   acc += __shfl_xor_sync(kFull, acc, 1);
 
-  if (S == 1) {
-    if (h == 0 && row < N) y[row] = __float2half(acc);
+  if (S == 1 || (dbg & 32)) {
+    if (h == 0 && row < N && split == 0) y[row] = __float2half(acc);
     return;
   }
 #if defined(__CUDA_ARCH__) && __CUDA_ARCH__ >= 900
@@ -389,7 +397,7 @@ bool pdl_on() {
   return v != 0;
 }
 
-// debug only: 1 skip dot, 2 plain __ldg for q, 8 skip table build, 16 coalesced read floor
+// debug only: 1 skip dot, 8 skip table build, 16 coalesced read floor, 32 skip split-K reduce, 64 q via registers, 128 no s
 int dbg_bits() {
   static const int v = env_int("CR_GEMV_DBG", 0);
   return v;
