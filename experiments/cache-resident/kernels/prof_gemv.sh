@@ -17,5 +17,5 @@ echo TEST; python3 -m pytest -q -m gpu tests/test_kernels_gpu.py -k 'gemv and no
 echo TEST_PDL; CR_GEMV_PDL=1 python3 -m pytest -q -m gpu tests/test_kernels_gpu.py -k 'gemv and not bench' 2>&1 | tail -1
 echo NEW; CR_GEMV_VERBOSE=1 python3 -m kernels.bench_gemv --result-exp '' 2>&1 | grep -E "^ +[0-9]|rror|^cr_gemv|target|device" | uniq
 echo NEW_PDL; CR_GEMV_PDL=1 python3 -m kernels.bench_gemv --result-exp '' 2>&1 | grep -E "^ +[0-9]|rror|target"
-for o in "CR_GEMV_W=2" "CR_GEMV_W=8" "CR_GEMV_D=3"; do echo "$o"; env $o CR_GEMV_VERBOSE=1 python3 -m kernels.bench_gemv --variants lut --result-exp '' 2>&1 | grep -E "^ +[0-9]|rror|^cr_gemv" | uniq; done
+for o in "CR_GEMV_H=1" "CR_GEMV_W=2"; do echo "$o"; env $o CR_GEMV_VERBOSE=1 python3 -m kernels.bench_gemv --variants lut --result-exp '' 2>&1 | grep -E "^ +[0-9]|rror|^cr_gemv" | uniq; done
 } 2>&1 | tee $L/gemv_final.log

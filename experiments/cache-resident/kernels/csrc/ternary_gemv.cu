@@ -1,6 +1,6 @@
 // Ternary GEMV kernels, see ternary_gemv.h and SPEC.md section 4.
 //
-// Block = W warps, RB = 32 * W rows, lane = row. K is cut in tiles of kTile groups (128 B of a row).
+// Block = W * H warps, RB = 32 * W rows, lane = row (H = 2: two warps per row set, one per half of each group). K is cut in tiles of kTile groups (128 B of a row).
 // Tiles stream through a ring of D slots in shared memory with cp.async (q and scales); each warp copy
 // instruction reads 4 full 128 B lines. Per tile the block builds one table from x (LUT: pair sums,
 // FP4: x as float) that all RB rows share; a lane then decodes its row from shared memory.
@@ -216,10 +216,10 @@ __host__ __device__ __forceinline__ int smem_bytes(int W, bool fp4, int K, int S
   return ring_slots(K, S, D) * RB * (kTileBytes + 2 * kTile) + table_floats(fp4) * 4 + (S > 1 ? S * RB * 4 : 0);
 }
 
-template <int W, bool FP4>
+template <int W, int H, bool FP4>
 __device__ __forceinline__ void gemv_body(const uint32_t* __restrict__ q, const __half* __restrict__ s, const __half* __restrict__ x,
                                           __half* __restrict__ y, int N, int K, int S, int D) {
-  constexpr int NT = W * 32;
+  constexpr int NT = W * H * 32;
   constexpr int RB = 32 * W;
   constexpr int kQStage = RB * kTileBytes;  // bytes
   extern __shared__ __align__(16) unsigned char dsm[];
@@ -227,7 +227,8 @@ __device__ __forceinline__ void gemv_body(const uint32_t* __restrict__ q, const 
   unsigned char* qs = dsm;                                                          // [slots][RB * 8] uint4, swizzled
   unsigned short* ss = reinterpret_cast<unsigned short*>(dsm + slots * kQStage);  // [slots][RB][kTile]
   float* table = reinterpret_cast<float*>(dsm + slots * (kQStage + RB * 2 * kTile));
-  __shared__ __align__(16) uint32_t stage[FP4 ? W * 256 : 1];
+  __shared__ __align__(16) uint32_t stage[FP4 ? W * H * 256 : 1];
+  __shared__ float hsum[H > 1 ? RB : 1];
   __shared__ float tab[16];
 
   const int tid = threadIdx.x;
@@ -235,7 +236,8 @@ __device__ __forceinline__ void gemv_body(const uint32_t* __restrict__ q, const 
   const int lane = tid & 31;
   const int rblk = blockIdx.x / S;
   const int split = blockIdx.x - rblk * S;
-  const int rl = tid;  // row inside the block
+  const int rl = tid % RB;  // row inside the block
+  const int h0 = tid / RB;  // with H = 2, warps W .. 2W - 1 take the second half of each group
   const int row = rblk * RB + rl;
   const int G = K >> 7;
   const int nt = (n_tiles(K) - split + S - 1) / S;  // tiles of this block: split, split + S, ...
@@ -248,13 +250,13 @@ __device__ __forceinline__ void gemv_body(const uint32_t* __restrict__ q, const 
   auto issue = [&](int tt, int sl) {
     const int nc = min(kTile, G - tt * kTile) * 2;  // valid 16 B chunks per row
 #pragma unroll
-    for (int it = 0; it < 8; ++it) {
+    for (int it = 0; it < 8 / H; ++it) {
       const int i = it * NT + tid;
       const int r = i >> 3, c = i & 7;
       const int gr = min(rblk * RB + r, N - 1);
       if (c < nc) cp_async16(qs + sl * kQStage + q_chunk(r, c) * 16, qb + (size_t)gr * qpitch + (size_t)tt * kTileBytes + c * 16);
     }
-    if (s8) {
+    if (s8 && h0 == 0) {
       const int gr = min(row, N - 1);
       cp_async8(ss + (sl * RB + rl) * kTile, reinterpret_cast<const unsigned short*>(s) + (size_t)gr * G + tt * kTile);
     }
@@ -313,7 +315,7 @@ __device__ __forceinline__ void gemv_body(const uint32_t* __restrict__ q, const 
       if (u < ng) {
         float d = 0.f;
 #pragma unroll
-        for (int hh = 0; hh < 2; ++hh) {
+        for (int hh = h0; hh < 2; hh += H) {
           const uint4 w = qt[q_chunk(rl, 2 * u + hh)];
           if (FP4) {
             d += fp4_dot(table + u * 128 + 64 * hh, reinterpret_cast<const char*>(tab), stage + warp * 256, lane, w);
@@ -331,18 +333,24 @@ __device__ __forceinline__ void gemv_body(const uint32_t* __restrict__ q, const 
     xc = xn;
   }
 
+  if (H > 1) {
+    if (h0 == 1) hsum[rl] = acc;
+    __syncthreads();
+    acc += hsum[rl];
+  }
   if (S == 1) {
-    if (row < N) y[row] = __float2half(acc);
+    if (h0 == 0 && row < N) y[row] = __float2half(acc);
     return;
   }
 #if defined(__CUDA_ARCH__) && __CUDA_ARCH__ >= 900
   // split-K: every block stores its partials into block 0 of the cluster, block 0 sums in a fixed order
   float* red = table + table_floats(FP4);  // [S][RB]
   cluster_wait();                          // phase 1 done: all blocks of the cluster run
-  st_cluster(red + split * RB + rl, 0, acc);
+  if (h0 == 0) st_cluster(red + split * RB + rl, 0, acc);
   cluster_arrive_release();
   if (split != 0) return;
   cluster_wait();
+  if (h0 != 0) return;
   float t = 0.f;
   for (int k = 0; k < S; ++k) t += red[k * RB + rl];
   if (row < N) y[row] = __float2half(t);
@@ -350,17 +358,21 @@ __device__ __forceinline__ void gemv_body(const uint32_t* __restrict__ q, const 
 }
 
 // Kernel symbols start with the launcher name (ncu filters use it).
-template <int W>
-__global__ void __launch_bounds__(W * 32, W == 2 ? 6 : 16 / W) cr_gemv_lut_kernel(const uint32_t* __restrict__ q, const __half* __restrict__ s, const __half* __restrict__ x,
+// Shapes: (W, H) = (2, 1), (4, 1), (4, 2): RB = 32 * W rows, H warps per row set.
+template <int W, int H>
+__global__ void __launch_bounds__(W * H * 32, W * H == 2 ? 6 : 16 / (W * H)) cr_gemv_lut_kernel(const uint32_t* __restrict__ q, const __half* __restrict__ s, const __half* __restrict__ x,
                                                              __half* __restrict__ y, int N, int K, int S, int D) {
-  gemv_body<W, false>(q, s, x, y, N, K, S, D);
+  gemv_body<W, H, false>(q, s, x, y, N, K, S, D);
 }
 
-template <int W>
-__global__ void __launch_bounds__(W * 32, W == 2 ? 6 : 16 / W) cr_gemv_fp4_kernel(const uint32_t* __restrict__ q, const __half* __restrict__ s, const __half* __restrict__ x,
+template <int W, int H>
+__global__ void __launch_bounds__(W * H * 32, W * H == 2 ? 6 : 16 / (W * H)) cr_gemv_fp4_kernel(const uint32_t* __restrict__ q, const __half* __restrict__ s, const __half* __restrict__ x,
                                                              __half* __restrict__ y, int N, int K, int S, int D) {
-  gemv_body<W, true>(q, s, x, y, N, K, S, D);
+  gemv_body<W, H, true>(q, s, x, y, N, K, S, D);
 }
+
+constexpr int kShapeW[3] = {2, 4, 4};
+constexpr int kShapeH[3] = {1, 1, 2};
 
 inline bool args_ok(const void* q, const void* s, const void* x, const void* y, int N, int K) {
   if (!q || !s || !x || !y || N < 1 || K < 128 || (K & 127)) return false;
@@ -373,10 +385,11 @@ int env_int(const char* name, int def) {
   return e && *e ? atoi(e) : def;
 }
 
-// Knobs, read once. CR_GEMV_PDL=1 enables PDL. CR_GEMV_W / _S / _D force the config, CR_GEMV_VERBOSE=1 prints it (tuning).
+// Knobs, read once. CR_GEMV_PDL=1 enables PDL. CR_GEMV_W / _H / _S / _D force the config, CR_GEMV_VERBOSE=1 prints it (tuning).
 struct Knobs {
   int pdl = env_int("CR_GEMV_PDL", 0);
   int w = env_int("CR_GEMV_W", 0);
+  int h = env_int("CR_GEMV_H", 0);
   int s = env_int("CR_GEMV_S", 0);
   int d = env_int("CR_GEMV_D", 0);
   int verbose = env_int("CR_GEMV_VERBOSE", 0);
@@ -388,17 +401,17 @@ const Knobs& knobs() {
 }
 
 template <bool FP4>
-const void* kernel_of(int W) {
-  if (W == 2) return FP4 ? (const void*)cr_gemv_fp4_kernel<2> : (const void*)cr_gemv_lut_kernel<2>;
-  if (W == 8) return FP4 ? (const void*)cr_gemv_fp4_kernel<8> : (const void*)cr_gemv_lut_kernel<8>;
-  return FP4 ? (const void*)cr_gemv_fp4_kernel<4> : (const void*)cr_gemv_lut_kernel<4>;
+const void* kernel_of(int v) {
+  if (v == 0) return FP4 ? (const void*)cr_gemv_fp4_kernel<2, 1> : (const void*)cr_gemv_lut_kernel<2, 1>;
+  if (v == 1) return FP4 ? (const void*)cr_gemv_fp4_kernel<4, 1> : (const void*)cr_gemv_lut_kernel<4, 1>;
+  return FP4 ? (const void*)cr_gemv_fp4_kernel<4, 2> : (const void*)cr_gemv_lut_kernel<4, 2>;
 }
 
 struct Dev {
   int major = 0;
   int sms = 0;
   bool attr[2][3] = {};
-  int occ[2][3][64] = {};  // blocks per SM by (fp4, W index, smem in KiB), 0 = unknown, -1 = none fit
+  int occ[2][3][64] = {};  // blocks per SM by (fp4, shape, smem in KiB), 0 = unknown, -1 = none fit
 };
 
 Dev* dev() {
@@ -416,31 +429,29 @@ Dev* dev() {
   return &c;
 }
 
-int widx(int W) { return W == 2 ? 0 : (W == 4 ? 1 : 2); }
-
 template <bool FP4>
-int occupancy(Dev& dv, int W, int smem) {
+int occupancy(Dev& dv, int v, int smem) {
   const int kb = (smem + 1023) >> 10;
   if (kb >= 64) return 0;
-  int& o = dv.occ[FP4][widx(W)][kb];
+  int& o = dv.occ[FP4][v][kb];
   if (o == 0) {
-    const void* f = kernel_of<FP4>(W);
-    if (!dv.attr[FP4][widx(W)]) {
+    const void* f = kernel_of<FP4>(v);
+    if (!dv.attr[FP4][v]) {
       cudaFuncSetAttribute(f, cudaFuncAttributeMaxDynamicSharedMemorySize, 63 << 10);
-      dv.attr[FP4][widx(W)] = true;
+      dv.attr[FP4][v] = true;
     }
     int n = 0;
-    if (cudaOccupancyMaxActiveBlocksPerMultiprocessor(&n, f, W * 32, kb << 10) != cudaSuccess) n = 0;
+    if (cudaOccupancyMaxActiveBlocksPerMultiprocessor(&n, f, kShapeW[v] * kShapeH[v] * 32, kb << 10) != cudaSuccess) n = 0;
     o = n > 0 ? n : -1;
   }
   return o > 0 ? o : 0;
 }
 
 struct Cfg {
-  int W = 4, S = 1, D = 2, smem = 0;
+  int v = 1, S = 1, D = 2, smem = 0;
 };
 
-// Pick (W, S, D): every SM busy, fewest waves, most resident warps, deepest ring, widest block, least split.
+// Pick (shape, S, D): every SM busy, fewest waves, most resident warps, most blocks, deepest ring, least split.
 template <bool FP4>
 Cfg choose(Dev& dv, int N, int K) {
   const Knobs& kn = knobs();
@@ -448,19 +459,20 @@ Cfg choose(Dev& dv, int N, int K) {
   Cfg best;
   long long bkey[5] = {0, 0, 0, 0, 0};
   bool have = false;
-  for (int W : {2, 4, 8}) {
-    if (kn.w && kn.w != W) continue;
+  for (int v = 0; v < 3; ++v) {
+    const int W = kShapeW[v], H = kShapeH[v];
+    if ((kn.w && kn.w != W) || (kn.h && kn.h != H)) continue;
     const int rblocks = (N + 32 * W - 1) / (32 * W);
     for (int S = 1; S <= kMaxSplit; S *= 2) {
       if (S > T || (S > 1 && dv.major < 9) || (kn.s && kn.s != S)) continue;
       for (int D = 2; D <= kMaxDepth; ++D) {
         if (kn.d && kn.d != D) continue;
         const int smem = smem_bytes(W, FP4, K, S, D);
-        const int occ = occupancy<FP4>(dv, W, smem);
+        const int occ = occupancy<FP4>(dv, v, smem);
         if (occ == 0) continue;
         const long long blocks = (long long)rblocks * S, cap = (long long)occ * dv.sms;
         const long long waves = (blocks + cap - 1) / cap;
-        const long long key[5] = {blocks >= dv.sms ? 1 : 0, -waves, std::min(blocks, cap) * W, ring_slots(K, S, D) * 16 + W, -S};
+        const long long key[5] = {blocks >= dv.sms ? 1 : 0, -waves, std::min(blocks, cap) * W * H, blocks * 4 + ring_slots(K, S, D), -S};
         bool better = !have;
         for (int i = 0; i < 5 && !better; ++i) {
           if (key[i] != bkey[i]) {
@@ -471,7 +483,7 @@ Cfg choose(Dev& dv, int N, int K) {
         if (better) {
           have = true;
           for (int i = 0; i < 5; ++i) bkey[i] = key[i];
-          best.W = W;
+          best.v = v;
           best.S = S;
           best.D = D;
           best.smem = smem;
@@ -491,13 +503,14 @@ cudaError_t launch(const uint32_t* q, const __half* s, const __half* x, __half* 
   if (c.smem == 0) return cudaErrorInvalidConfiguration;
   if (knobs().verbose) {
     static int last_n = -1, last_k = -1;
-    if (N != last_n || K != last_k) fprintf(stderr, "cr_gemv %s N=%d K=%d W=%d S=%d D=%d smem=%d\n", FP4 ? "fp4" : "lut", N, K, c.W, c.S, c.D, c.smem);
+    if (N != last_n || K != last_k) fprintf(stderr, "cr_gemv %s N=%d K=%d W=%d H=%d S=%d D=%d smem=%d\n", FP4 ? "fp4" : "lut", N, K, kShapeW[c.v], kShapeH[c.v], c.S, c.D, c.smem);
     last_n = N;
     last_k = K;
   }
   cudaLaunchConfig_t cfg = {};
-  cfg.gridDim = dim3((unsigned)(((N + 32 * c.W - 1) / (32 * c.W)) * c.S));
-  cfg.blockDim = dim3(c.W * 32);
+  const int W = kShapeW[c.v];
+  cfg.gridDim = dim3((unsigned)(((N + 32 * W - 1) / (32 * W)) * c.S));
+  cfg.blockDim = dim3(W * kShapeH[c.v] * 32);
   cfg.dynamicSmemBytes = (size_t)c.smem;
   cfg.stream = st;
   cudaLaunchAttribute at[2];
@@ -516,12 +529,12 @@ cudaError_t launch(const uint32_t* q, const __half* s, const __half* x, __half* 
   }
   cfg.attrs = at;
   cfg.numAttrs = (unsigned)na;
-  if (c.W == 2) {
-    cudaLaunchKernelEx(&cfg, FP4 ? cr_gemv_fp4_kernel<2> : cr_gemv_lut_kernel<2>, q, s, x, y, N, K, c.S, c.D);
-  } else if (c.W == 8) {
-    cudaLaunchKernelEx(&cfg, FP4 ? cr_gemv_fp4_kernel<8> : cr_gemv_lut_kernel<8>, q, s, x, y, N, K, c.S, c.D);
+  if (c.v == 0) {
+    cudaLaunchKernelEx(&cfg, FP4 ? cr_gemv_fp4_kernel<2, 1> : cr_gemv_lut_kernel<2, 1>, q, s, x, y, N, K, c.S, c.D);
+  } else if (c.v == 1) {
+    cudaLaunchKernelEx(&cfg, FP4 ? cr_gemv_fp4_kernel<4, 1> : cr_gemv_lut_kernel<4, 1>, q, s, x, y, N, K, c.S, c.D);
   } else {
-    cudaLaunchKernelEx(&cfg, FP4 ? cr_gemv_fp4_kernel<4> : cr_gemv_lut_kernel<4>, q, s, x, y, N, K, c.S, c.D);
+    cudaLaunchKernelEx(&cfg, FP4 ? cr_gemv_fp4_kernel<4, 2> : cr_gemv_lut_kernel<4, 2>, q, s, x, y, N, K, c.S, c.D);
   }
   return cudaGetLastError();
 }
