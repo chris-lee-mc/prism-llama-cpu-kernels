@@ -1,0 +1,364 @@
+{
+ "schema": 1,
+ "exp": "r1",
+ "gpu": "pro6000-server",
+ "utc": "2026-10-13T21:07:27.828499+00:00",
+ "env": {
+  "gpu_name": "NVIDIA RTX PRO 6000 Blackwell Server Edition",
+  "gpu_tag": "pro6000-server",
+  "cc": "12.0",
+  "sm": "sm_120",
+  "driver": "580.159.04",
+  "cuda_runtime": "12.8",
+  "cuda_driver": "13.0",
+  "torch": "2.11.0+cu128",
+  "vram_bytes": 101973950464,
+  "sm_count": 188,
+  "l2_bytes": 134217728,
+  "persisting_l2_max_bytes": 83886080,
+  "access_policy_window_max_bytes": 134217728,
+  "persisting_l2_limit_bytes": 25165824,
+  "git_sha": "e29b45b9b1a640d0689dd17556c709023564d46b",
+  "git_branch": "exp/cache-resident",
+  "hostname": "20da9fcff269",
+  "pod_id": "5nwxkp9w16wf09",
+  "python": "3.10.12",
+  "counters_ok": null,
+  "transformers": "5.19.0"
+ },
+ "data": {
+  "config": {
+   "parts": [
+    "b",
+    "a",
+    "c"
+   ],
+   "part_order": "bac",
+   "budget_min": 32.0,
+   "weights": {
+    "a": 6.0,
+    "b": 26.0,
+    "c": 5.0
+   },
+   "seed": 20261013,
+   "limit": 200,
+   "code_floor": 20,
+   "n_predict": 192,
+   "configs": [
+    "base",
+    "k4",
+    "k4_tbs",
+    "k4_ptq1",
+    "ngram_mod",
+    "ngram_map_k",
+    "ngram_mod_short",
+    "ngram_map_k_short"
+   ],
+   "variants": [
+    "bf16",
+    "q8_0",
+    "ptq1_0"
+   ],
+   "quick": false,
+   "thresholds": {
+    "overhead_ms": 2.0,
+    "agreement": 0.5,
+    "ptq1_alpha_drop": 0.05,
+    "ngram_speedup": 1.15,
+    "min_n_category": 15,
+    "step_wall_tol": 0.1
+   },
+   "prompts_file": "/workspace/repo/experiments/cache-resident/exps/data/prompts_e5.jsonl",
+   "step_config": "k4",
+   "models": {
+    "pq2": {
+     "kind": "bonsai2",
+     "key": "PQ2_0",
+     "repo": "prism-ml/Ternary-Bonsai-2-27B-gguf",
+     "file": "Ternary-Bonsai-2-27B-PQ2_0.gguf",
+     "exists": true,
+     "source": "api",
+     "checked_utc": "2026-10-13T21:06:22.071589+00:00",
+     "alternatives": [],
+     "note": null
+    },
+    "draft_bf16": {
+     "kind": "draft",
+     "key": null,
+     "repo": "ggml-org/Qwen3.5-0.8B-GGUF",
+     "file": "Qwen3.5-0.8B-BF16.gguf",
+     "exists": true,
+     "source": "api",
+     "checked_utc": "2026-10-13T21:06:22.546385+00:00",
+     "alternatives": [],
+     "note": null
+    },
+    "draft_q8_0": {
+     "kind": "draft",
+     "key": null,
+     "repo": "ggml-org/Qwen3.5-0.8B-GGUF",
+     "file": "Qwen3.5-0.8B-Q8_0.gguf",
+     "exists": true,
+     "source": "api",
+     "checked_utc": "2026-10-13T21:06:22.871025+00:00",
+     "alternatives": [],
+     "note": null
+    }
+   },
+   "host_smi": {
+    "clocks.sm": 180.0,
+    "clocks.max.sm": 2430.0,
+    "clocks.mem": 405.0,
+    "clocks.max.mem": 12481.0,
+    "power.draw": 34.45,
+    "power.limit": 600.0,
+    "power.default_limit": 600.0,
+    "temperature.gpu": 23.0
+   },
+   "ptq1_0_quantize": {
+    "quantize": {
+     "tensor_types": {
+      "q6_K": 1,
+      "ptq1_0": 194
+     },
+     "n_fallback": 0,
+     "src_mib": 1475.05,
+     "dst_mib": 308.93,
+     "needs_imatrix": false,
+     "exit": 0,
+     "seconds": 20.10232705809176,
+     "tail": null
+    },
+    "size_bytes": 334893856
+   }
+  },
+  "rows": [
+   {
+    "part": "a",
+    "name": "bf16",
+    "same_top": 0.63319,
+    "mean_kld": 1.450553,
+    "error": null
+   },
+   {
+    "part": "a",
+    "name": "q8_0",
+    "same_top": 0.63074,
+    "mean_kld": 1.449922,
+    "error": null
+   },
+   {
+    "part": "a",
+    "name": "ptq1_0",
+    "same_top": 0.00122,
+    "mean_kld": 13.476765,
+    "error": null
+   }
+  ],
+  "notes": [
+   "unhealthy host: SM clock 180 MHz < 40% of max 2430; parts ['b', 'c'] (timings) skipped, part a (no timing) still runs",
+   "part a: no E5 chat text (0 chars from 0 target-alone outputs); repo text is the primary",
+   "post-hoc PTQ1_0/PQ2_0 in this fork scale each 128 group by its absolute maximum and ignore the imatrix (ggml-quants.c quantize_ptq1_0), so a collapse in agreement says the recipe is naive, not that ternary 0.8B is hopeless",
+   "draft-simple samples its draft tokens on the CPU in this fork (common/speculative.cpp); --spec-draft-backend-sampling only reaches the eagle3, dflash and mtp types. Backend sampling in R1 is the target's own -bs (k4_tbs against k4), and no earlier E5 run had it (the flag defaults to off)"
+  ],
+  "counters_ok": false,
+  "agree": {
+   "text": {
+    "seed": 20261013,
+    "n_chars": 52059,
+    "sha256_16": "287ae1b1c98bac6c",
+    "files": [
+     {
+      "path": "common/speculative.cpp",
+      "lines": 4034,
+      "sha256_16": "3c92fa05a22432e2"
+     },
+     {
+      "path": "tools/server/server-context.cpp",
+      "lines": 5493,
+      "sha256_16": "1b7b0f796fe703d8"
+     },
+     {
+      "path": "common/sampling.cpp",
+      "lines": 1085,
+      "sha256_16": "535977bbec6f8347"
+     },
+     {
+      "path": "src/llama-quant.cpp",
+      "lines": 1435,
+      "sha256_16": "1b24384bc66f6bb3"
+     },
+     {
+      "path": "gguf-py/gguf/gguf_writer.py",
+      "lines": 1598,
+      "sha256_16": "97c9ab659f024b4a"
+     },
+     {
+      "path": "tools/server/tests/utils.py",
+      "lines": 718,
+      "sha256_16": "8c477c8afce84317"
+     },
+     {
+      "path": "scripts/compare-commits.sh",
+      "lines": 66,
+      "sha256_16": "a1048b31e74bf7b6"
+     },
+     {
+      "path": "AGENTS.md",
+      "lines": 229,
+      "sha256_16": "5c746ea1a952e625"
+     },
+     {
+      "path": "CONTRIBUTING.md",
+      "lines": 201,
+      "sha256_16": "b54ec76866741f56"
+     }
+    ],
+    "prompts_file": "experiments/cache-resident/exps/data/prompts_e5.jsonl",
+    "n_tasks": 14,
+    "kind": "repo",
+    "git_sha": "e29b45b9b1a640d0689dd17556c709023564d46b"
+   },
+   "base": {
+    "exit": 0,
+    "seconds": 7.441589298192412,
+    "n_vocab": null,
+    "logits_bytes": 2032316404
+   },
+   "variants": {
+    "bf16": {
+     "name": "bf16",
+     "same_top": 0.63319,
+     "same_top_unc": 0.00753,
+     "mean_kld": 1.450553,
+     "mean_kld_unc": 0.035345,
+     "median_kld": 0.617127,
+     "kld_p99": 11.364819,
+     "ppl_q": 9.272356,
+     "ppl_base": 7.682908,
+     "n_vocab": null,
+     "vocab_mismatch": null,
+     "exit": 0,
+     "seconds": 3.5003930390812457
+    },
+    "q8_0": {
+     "name": "q8_0",
+     "same_top": 0.63074,
+     "same_top_unc": 0.00755,
+     "mean_kld": 1.449922,
+     "mean_kld_unc": 0.035262,
+     "median_kld": 0.621944,
+     "kld_p99": 11.302933,
+     "ppl_q": 9.293359,
+     "ppl_base": 7.682908,
+     "n_vocab": null,
+     "vocab_mismatch": null,
+     "exit": 0,
+     "seconds": 3.334123058244586
+    },
+    "ptq1_0": {
+     "name": "ptq1_0",
+     "quantize": {
+      "tensor_types": {
+       "q6_K": 1,
+       "ptq1_0": 194
+      },
+      "n_fallback": 0,
+      "src_mib": 1475.05,
+      "dst_mib": 308.93,
+      "needs_imatrix": false,
+      "exit": 0,
+      "seconds": 20.10232705809176,
+      "tail": null
+     },
+     "same_top": 0.00122,
+     "same_top_unc": 0.00055,
+     "mean_kld": 13.476765,
+     "mean_kld_unc": 0.04695,
+     "median_kld": 13.298526,
+     "kld_p99": 21.167015,
+     "ppl_q": 3567533.847299,
+     "ppl_base": 7.682908,
+     "n_vocab": null,
+     "vocab_mismatch": null,
+     "exit": 0,
+     "seconds": 3.2551049012690783
+    }
+   },
+   "summary": {
+    "bf16_agreement": 0.63319,
+    "q8_0_agreement": 0.63074,
+    "ptq1_0_agreement": 0.00122,
+    "bf16_ge_0p5": true,
+    "ptq1_delta_vs_bf16": -0.63197,
+    "ptq1_within_0p05": false,
+    "note": "agreement is teacher-forced top-1 on the fixed text; it stands in for per-token alpha"
+   },
+   "errors": [],
+   "chunks": 4,
+   "n_ctx": 2048,
+   "vocab_gguf": {
+    "target": 248320,
+    "bf16": 248320,
+    "q8_0": 248320,
+    "ptq1_0": 248320
+   }
+  },
+  "e5": null,
+  "step": null,
+  "host": {
+   "problem": "SM clock 180 MHz < 40% of max 2430",
+   "allow_power_cap": true,
+   "parts_skipped": [
+    "b",
+    "c"
+   ]
+  },
+  "verdict": {
+   "thresholds": {
+    "overhead_ms": 2.0,
+    "agreement": 0.5,
+    "ptq1_alpha_drop": 0.05,
+    "ngram_speedup": 1.15,
+    "min_n_category": 15,
+    "step_wall_tol": 0.1
+   },
+   "host": {
+    "problem": "SM clock 180 MHz < 40% of max 2430",
+    "allow_power_cap": true,
+    "parts_skipped": [
+     "b",
+     "c"
+    ]
+   },
+   "c1_overhead": {
+    "measured": false
+   },
+   "c2_agreement": {
+    "text_kind": "repo",
+    "bf16": 0.63319,
+    "q8_0": 0.63074,
+    "ptq1_0": 0.00122,
+    "bf16_ge_0p5": true,
+    "ptq1_delta": -0.63197,
+    "ptq1_within_0p05": false,
+    "ptq1_basis": "kl_proxy",
+    "secondary_text": {}
+   },
+   "c3_ngram": {
+    "by_config_category": {},
+    "configs_missing": [],
+    "best_speedup": null,
+    "rollback": {},
+    "checkpoint_replay": null,
+    "speedup_is": "lower bound on n-gram speedup",
+    "weak_cells": [],
+    "best_ci_lower": null,
+    "status": "not_measured",
+    "ngram_ge_1p15": null,
+    "go": null,
+    "provisional": false
+   }
+  }
+ }
+}

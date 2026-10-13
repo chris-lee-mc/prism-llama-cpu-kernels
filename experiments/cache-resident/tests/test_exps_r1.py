@@ -10,7 +10,7 @@ import time
 
 import pytest
 
-from exps import common, e5_cost, e5_spec, fetch_models, make_prompts, r1, r1_agree, r1_step, spec_math
+from exps import common, e4_pdl, e5_cost, e5_spec, fetch_models, make_prompts, r1, r1_agree, r1_step, spec_math
 
 EXP = pathlib.Path(__file__).resolve().parent.parent
 
@@ -981,6 +981,29 @@ def test_r1_allow_power_cap_runs_everything_and_records_the_cap(pod, monkeypatch
     d = _result(pod)["data"]
     assert d["e5"]["summary"]["base"]["n_ok"] == 4 and "power cap" in d["verdict"]["host"]["power_cap_note"]
     assert d["verdict"]["host"]["parts_skipped"] == [] and any("power cap accepted" in n for n in d["notes"])
+
+
+IDLE = {"clocks.sm": 180.0, "clocks.max.sm": 2430.0, "clocks.mem": 405.0, "clocks.max.mem": 14001.0, "power.draw": 40.0,
+        "power.limit": 600.0, "power.default_limit": 600.0, "temperature.gpu": 30.0}
+
+
+def test_host_health_judges_clocks_only_under_load():
+    load = e4_pdl.smi_summary(None, [dict(IDLE, **{"clocks.sm": 2400.0, "clocks.mem": 14001.0})] * 3, None)
+    assert r1.host_health(IDLE, load, True) == (None, None)
+    assert r1.host_health(IDLE, None, True) == (None, None)  # idle 180 MHz is not throttling
+    slow = e4_pdl.smi_summary(None, [IDLE] * 3, None)
+    assert "SM clock" in r1.host_health(IDLE, slow, False)[0]
+    bad, cap = r1.host_health(CAPPED, load, False)
+    assert bad is None and "power cap" in cap
+    assert "power cap" in r1.host_health(CAPPED, load, True)[0]
+
+
+def test_r1_idle_clocks_do_not_skip_timed_parts(pod, monkeypatch):
+    monkeypatch.setattr(r1.e4_pdl, "smi_sample", lambda: dict(IDLE))
+    assert r1.main(["--quick", "--parts", "b", "--configs", "base", "--limit", "4", "--budget-min", "4"]) == 0
+    d = _result(pod)["data"]
+    assert d["e5"]["summary"]["base"]["n_ok"] == 4 and d["verdict"]["host"]["problem"] is None
+    assert d["verdict"]["host"]["probe"]["error"] == "llama-bench not found" and any("clocks not checked" in n for n in d["notes"])
 
 
 def test_r1_sigterm_still_writes_the_result_and_names_the_cut_part(pod, monkeypatch):

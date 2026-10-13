@@ -28,7 +28,8 @@ all. Partial results are written to raw/partial.json after every config and ever
 still writes its result (the notes say which part was cut).
 Result: results/r1/<gpu>/<stamp>.json with data.agree, data.e5, data.step and data.verdict (inputs of the E6 go/no-go).
 Needs llama-server, llama-perplexity, llama-quantize and, for c, nsys (CR_NSYS or PATH); a missing tool skips its part.
-An unhealthy host (throttled clocks, or a power cap without --allow-power-cap) still runs part a, which has no timing.
+An unhealthy host (throttled clocks under a short llama-bench load, or a power cap without --allow-power-cap) still runs
+part a, which has no timing. Clocks of an idle GPU are not checked: an idle Server Edition parks at 180 MHz.
 """
 from __future__ import annotations
 
@@ -63,6 +64,29 @@ NGRAM_STATE_NOTE = ("ngram-mod keeps its token pool across requests on one serve
 
 
 # ---------------------------------------------------------------- pure helpers
+
+PROBE_N_GEN, PROBE_REPS, PROBE_TIMEOUT_S = 1024, 2, 240.0
+
+
+def host_health(idle: dict | None, load: dict | None, check_power: bool) -> tuple[str | None, str | None]:
+    """(problem, power cap) from an idle nvidia-smi sample and a summary taken under load.
+
+    An idle GPU parks its SM clock (180 MHz on a Server Edition host), so clocks are judged only under load.
+    """
+    cap = e4_pdl.health_problem({k: v for k, v in e4_pdl.smi_summary(idle, [], idle).items() if k.startswith("power")}) if idle else None
+    clocks = e4_pdl.health_problem({k: v for k, v in load.items() if not k.startswith("power")}) if load and load.get("n") else None
+    return clocks or (cap if check_power else None), cap
+
+
+def host_probe(bin_dir, target: str) -> dict:
+    """nvidia-smi samples during a short target tg run (llama-bench); also the plain target tok/s of this host."""
+    cmd = e4_bonsai.bench_cmd(bin_dir, target, 0, "f16", PROBE_REPS, PROBE_N_GEN)
+    if not (pathlib.Path(bin_dir) / "llama-bench").exists():
+        return {"cmd": cmd, "error": "llama-bench not found", "smi": None, "tg": None}
+    with e4_pdl.SmiWatch() as watch:
+        got, err = e4_bonsai.run_bench_entries(cmd, PROBE_TIMEOUT_S)
+    return {"cmd": cmd, "error": err, "smi": watch.summary(), "tg": e4_pdl.tg_rows(got).get(0)}
+
 
 def part_budget_s(left_s: float, part: str, remaining: list[str]) -> float:
     """Seconds for `part` from left_s: its weight share of the remaining parts, less the end reserve."""
@@ -479,9 +503,12 @@ def run(args) -> int:
     from infra.results import run_dir
     (run_dir(EXP, args.gpu) / "raw").mkdir(parents=True, exist_ok=True)
     smi = e4_pdl.smi_sample()
-    bad = e4_pdl.health_problem(e4_pdl.smi_summary(smi, [], smi), check_power=not args.allow_power_cap) if smi else None
+    probe = host_probe(bin_dir, paths["pq2"]) if {"b", "c"} & set(runnable) else None
+    bad, cap = host_health(smi, (probe or {}).get("smi"), check_power=not args.allow_power_cap)
     config["host_smi"] = smi
-    doc["host"] = {"problem": bad, "allow_power_cap": args.allow_power_cap, "parts_skipped": []}
+    doc["host"] = {"problem": bad, "allow_power_cap": args.allow_power_cap, "parts_skipped": [], "probe": probe}
+    if probe and not (probe.get("smi") or {}).get("n"):
+        notes.append(f"host probe gave no load samples ({probe.get('error')}); clocks not checked, power cap only")
     rc = 0
     if bad:
         skipped = [p for p in runnable if p != "a"]
@@ -489,11 +516,9 @@ def run(args) -> int:
         notes.append(f"unhealthy host: {bad}; parts {skipped} (timings) skipped, part a (no timing) still runs")
         runnable = [p for p in runnable if p == "a"]
         rc = 1
-    elif args.allow_power_cap and smi:
-        cap = e4_pdl.health_problem(e4_pdl.smi_summary(smi, [], smi), check_power=True)
-        if cap:
-            doc["host"]["power_cap_note"] = cap
-            notes.append(f"power cap accepted (--allow-power-cap): {cap}; timings are for the capped host")
+    elif cap:
+        doc["host"]["power_cap_note"] = cap
+        notes.append(f"power cap accepted (--allow-power-cap): {cap}; timings are for the capped host")
     cut = {"part": None}
     try:
         with tempfile.TemporaryDirectory(prefix="cr-r1q-") as qdir:

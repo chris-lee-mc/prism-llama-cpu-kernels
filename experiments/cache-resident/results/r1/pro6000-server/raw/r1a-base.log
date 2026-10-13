@@ -1,0 +1,11 @@
+0.08 minutes
+[1]29.1328,[2]9.1913,[3]7.6268,[4]7.6829,
+
+0.02.019.782 I cmn          init: llama threadpool init, n_threads = 128
+0.02.109.606 I 
+0.02.109.764 I system_info: n_threads = 128 (n_threads_batch = 128) / 256 | CUDA : ARCHS = 1200 | USE_GRAPHS = 1 | FA_QUANTS = q4_0-q4_0,q8_0-q8_0,f16-f16,bf16-bf16 | BLACKWELL_NATIVE_FP4 = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | LLAMAFILE = 1 | OPENMP = 1 | REPACK = 1 | 
+0.02.110.104 I perplexity: saving all logits to /tmp/cr-r1a-xx5yl6ba/target_logprobs.bin
+0.02.110.111 I perplexity: tokenizing the input ..
+0.02.137.472 I perplexity: tokenization took 27.352 ms
+0.02.137.515 I perplexity: calculating perplexity over 4 chunks, n_ctx=2048, batch_size=2048, n_seq=1
+0.04.004.004 I perplexity: 1.38 seconds per pass - ETA 0.06.752.089 I Final estimate: PPL = 7.6829 +/- 0.34217
