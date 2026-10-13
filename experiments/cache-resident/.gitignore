@@ -3,3 +3,9 @@ results/_status/
 __pycache__/
 *.pyc
 .pytest_cache/
+# nsys reports hold the process environment and the full CUDA trace: never commit or serve them
+*.nsys-rep
+*.qdrep
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm

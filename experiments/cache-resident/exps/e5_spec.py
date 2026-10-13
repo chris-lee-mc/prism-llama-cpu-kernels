@@ -7,6 +7,9 @@ k=0 is the plain target. k>0 adds `-md DRAFT -ngld 99 --spec-type draft-simple -
 template supports it), then /completion with greedy sampling. If the server rejects the draft (vocab
 mismatch; llama.cpp allows a small vocab size difference) the run is recorded as draft_incompatible and
 repeated with `--spec-type ngram-simple`, clearly labelled.
+R1 (exps.r1) reuses this module: matrix_configs() lists one server config per variant (K, draft backend sampling flag,
+ngram-mod, ngram-map-k), run_config() runs the same shuffled prompts on one server, summarize_matrix() pairs each config
+with target alone per category. Acceptance is reported as r (accepted / drafted) and alpha (exps/spec_math.py).
 """
 from __future__ import annotations
 
@@ -23,7 +26,7 @@ import time
 import urllib.error
 import urllib.request
 
-from exps import common, hf_ids, make_prompts
+from exps import common, hf_ids, make_prompts, spec_math
 
 PORT = 8081
 CTX = 16384
@@ -37,7 +40,7 @@ def llama_bin() -> pathlib.Path:
 
 
 def server_cmd(bin_dir, model: str, k: int, draft: str | None = None, port: int = PORT, ctx: int = CTX,
-               spec_type: str = "draft-simple") -> list[str]:
+               spec_type: str = "draft-simple", extra: list[str] | None = None) -> list[str]:
     cmd = [str(pathlib.Path(bin_dir) / "llama-server"), "-m", model, "-ngl", "99", "-fa", "on", "-c", str(ctx), "-np", "1",
            "--host", "127.0.0.1", "--port", str(port)]
     if k > 0:
@@ -46,7 +49,7 @@ def server_cmd(bin_dir, model: str, k: int, draft: str | None = None, port: int 
                 raise ValueError("draft model path required for draft-simple")
             cmd += ["-md", draft, "-ngld", "99"]
         cmd += ["--spec-type", spec_type, "--spec-draft-n-max", str(k)]
-    return cmd
+    return cmd + list(extra or [])
 
 
 def completion_body(prompt: str, n_predict: int) -> dict:
@@ -60,14 +63,17 @@ def template_body(prompt: str, thinking: bool | None) -> dict:
     return body
 
 
-def parse_completion(resp: dict) -> dict:
-    """Pull the per-prompt numbers out of a /completion response."""
+def parse_completion(resp: dict, keep_text: bool = False) -> dict:
+    """Pull the per-prompt numbers out of a /completion response (and the output text when keep_text)."""
     t = resp.get("timings") or {}
-    return {"tokens_predicted": int(resp.get("tokens_predicted", t.get("predicted_n", 0)) or 0),
+    out = {"tokens_predicted": int(resp.get("tokens_predicted", t.get("predicted_n", 0)) or 0),
             "predicted_per_second": t.get("predicted_per_second"), "predicted_ms": t.get("predicted_ms"),
             "prompt_n": t.get("prompt_n"), "prompt_ms": t.get("prompt_ms"),
             "draft_n": int(t.get("draft_n", 0) or 0), "draft_n_accepted": int(t.get("draft_n_accepted", 0) or 0),
             "stop_type": resp.get("stop_type"), "truncated": resp.get("truncated")}
+    if keep_text:
+        out["text"] = resp.get("content")
+    return out
 
 
 def summarize(rows: list[dict], k: int, wall_s: float) -> dict:
@@ -77,7 +83,9 @@ def summarize(rows: list[dict], k: int, wall_s: float) -> dict:
     ms = sum(r.get("predicted_ms") or 0 for r in ok)
     toks = sum(r.get("tokens_predicted", 0) for r in ok)
     speeds = [r["predicted_per_second"] for r in ok]
+    st = spec_math.run_stats(toks, drafted, accepted)
     return {"k": k, "n_prompts": len(rows), "n_ok": len(ok), "acceptance": accepted / drafted if drafted else None,
+            "alpha": st["alpha"], "tokens_per_step": st["tokens_per_step"], "steps": st["steps"], "k_eff": st["k_eff"],
             "draft_n": drafted, "draft_n_accepted": accepted,
             "tok_s_mean": statistics.fmean(speeds) if speeds else None,
             "tok_s_median": statistics.median(speeds) if speeds else None,
@@ -159,7 +167,7 @@ class Server:
 
 
 def run_prompts(prompts: list[dict], n_predict: int, budget: common.Budget, notes: list, k: int, spec_type: str,
-                on_row=None):
+                on_row=None, keep_text: bool = False):
     """Run all prompts against the live server. on_row(rows) is called after each prompt. Returns (rows, info)."""
     base = f"http://127.0.0.1:{PORT}"
     info = {"thinking_disabled": None, "template_supports_enable_thinking": None, "draft_not_used": False,
@@ -182,7 +190,7 @@ def run_prompts(prompts: list[dict], n_predict: int, budget: common.Budget, note
                 except urllib.error.HTTPError:
                     info["thinking_disabled"] = False
             resp = post_json(base + "/completion", completion_body(text, n_predict), budget.timeout(300.0, reserve_s=10))
-            row.update(parse_completion(resp))
+            row.update(parse_completion(resp, keep_text))
         except Exception as e:
             row["error"] = f"{type(e).__name__}: {e}"
         rows.append(row)
@@ -279,6 +287,160 @@ def run(args) -> int:
         notes.append("no prompt completed; see attempts[].log_tail")
     common.write_result(exp, args, config, rows, notes, False, extra={"summary": summary})
     return 0 if rows else 1
+
+
+# ---------------------------------------------------------------- R1 matrix: one server per config, same prompts
+
+SEED = 20261013
+CODE_CATS = ("code_fix", "refactor")
+BS_ON, BS_OFF = "--spec-draft-backend-sampling", "--no-spec-draft-backend-sampling"  # common/arg.cpp; the fork default is ON
+NGRAM_MOD_SHORT = ["--spec-ngram-mod-n-match", "4", "--spec-ngram-mod-n-min", "2", "--spec-ngram-mod-n-max", "16"]
+NGRAM_MAP_K_SHORT = ["--spec-ngram-map-k-size-n", "4", "--spec-ngram-map-k-size-m", "16", "--spec-ngram-map-k-min-hits", "1"]
+
+
+def _cfg(name, spec_type, k=0, extra=(), weight=1.0, categories=None, desc=""):
+    return {"name": name, "spec_type": spec_type, "k": k, "extra": list(extra), "weight": weight,
+            "categories": list(categories) if categories else None, "desc": desc}
+
+
+def matrix_configs() -> list[dict]:
+    """R1b configs in run order. weight = expected cost relative to target alone (time share). Short n-gram variants only
+    run on the code categories: the defaults (n_match 24 / size_n 12) need long repeats, which 150-token prompts rarely have."""
+    return [
+        _cfg("base", "none", desc="target alone"),
+        _cfg("k4_bs", "draft-simple", 4, [BS_ON], 2.0, desc="draft-simple K=4, draft backend sampling on"),
+        _cfg("k4_nobs", "draft-simple", 4, [BS_OFF], 2.0, desc="control: draft-simple K=4, draft sampling on the CPU"),
+        _cfg("k2_bs", "draft-simple", 2, [BS_ON], 1.6, desc="draft-simple K=2, backend sampling"),
+        _cfg("k3_bs", "draft-simple", 3, [BS_ON], 1.8, desc="draft-simple K=3, backend sampling"),
+        _cfg("ngram_mod", "ngram-mod", desc="ngram-mod, fork defaults (n_match 24, n_min 48, n_max 64)"),
+        _cfg("ngram_map_k", "ngram-map-k", desc="ngram-map-k, fork defaults (size_n 12, size_m 48, min_hits 1)"),
+        _cfg("ngram_mod_short", "ngram-mod", extra=NGRAM_MOD_SHORT, categories=CODE_CATS,
+             desc="ngram-mod n_match 4, n_min 2, n_max 16; code_fix and refactor only"),
+        _cfg("ngram_map_k_short", "ngram-map-k", extra=NGRAM_MAP_K_SHORT, categories=CODE_CATS,
+             desc="ngram-map-k size_n 4, size_m 16; code_fix and refactor only"),
+    ]
+
+
+def config_cmd(bin_dir, target: str, draft: str | None, cfg: dict, port: int | None = None) -> list[str]:
+    port = port or PORT
+    t = cfg["spec_type"]
+    if t == "draft-simple":
+        return server_cmd(bin_dir, target, cfg["k"], draft, port, extra=cfg["extra"])
+    cmd = server_cmd(bin_dir, target, 0, None, port)
+    return cmd + (["--spec-type", t] if t != "none" else []) + cfg["extra"]
+
+
+def time_shares(cfgs: list[dict], left_s: float) -> list[float]:
+    """Seconds for each config from left_s, proportional to weight."""
+    tot = sum(c["weight"] for c in cfgs) or 1.0
+    return [left_s * c["weight"] / tot for c in cfgs]
+
+
+def spec_log_lines(text: str, n: int = 6) -> list[str]:
+    """Server log lines about speculative decoding (enabled / disabled / checkpoints), to show the type really ran."""
+    return [ln.strip()[:240] for ln in text.splitlines() if "specul" in ln.lower()][:n]
+
+
+def warmup(n_predict: int = 16) -> None:
+    """Untimed request: CUDA graph capture and allocator growth must not land in the first timed prompt."""
+    try:
+        post_json(f"http://127.0.0.1:{PORT}/completion", completion_body("Write a Python function that adds two numbers.", n_predict), 120.0)
+    except Exception:
+        pass
+
+
+def run_config(cfg: dict, *, bin_dir, target: str, draft: str | None, prompts: list[dict], n_predict: int, budget_s: float,
+               notes: list, log_path: str, on_row=None) -> dict:
+    """Start one server, run the prompts in order within budget_s (startup included), stop it. Never raises."""
+    from exps import e4_pdl
+    cmd = config_cmd(bin_dir, target, draft, cfg)
+    res = {"name": cfg["name"], "spec_type": cfg["spec_type"], "k": cfg["k"], "cmd": cmd, "log": log_path, "rows": [],
+           "error": None, "budget_s": budget_s, "planned": len(prompts)}
+    budget = common.Budget(budget_s / 60.0)
+    srv = Server(cmd, log_path)
+    t0 = time.monotonic()
+    try:
+        with e4_pdl.SmiWatch() as watch:
+            ready, err = srv.wait_ready(budget.timeout(600.0, reserve_s=10))
+            res["startup_s"] = time.monotonic() - t0
+            if not ready:
+                res["error"] = err
+                res["log_tail"] = srv.tail()
+            else:
+                warmup()
+                # model load is part of the share, but prompts keep at least 60% of it
+                run_budget = common.Budget(max(budget_s - (time.monotonic() - t0), 0.6 * budget_s) / 60.0)
+                rows, info = run_prompts(prompts, n_predict, run_budget, notes, cfg["k"], cfg["spec_type"], on_row, keep_text=True)
+                res["rows"], res["chat"] = rows, info
+        res["smi"] = watch.summary()
+    except Exception as e:  # keep the other configs going
+        res["error"] = f"{type(e).__name__}: {e}"
+    finally:
+        res["spec_log"] = spec_log_lines(srv.tail(200000))
+        srv.stop()
+    res["wall_s"] = time.monotonic() - t0
+    return res
+
+
+def _ok(r: dict) -> bool:
+    return "error" not in r and bool(r.get("predicted_per_second")) and bool(r.get("predicted_ms"))
+
+
+def _agg(rows: list[dict]) -> dict:
+    toks = sum(r["tokens_predicted"] for r in rows)
+    ms = sum(r["predicted_ms"] for r in rows)
+    st = spec_math.run_stats(toks, sum(r.get("draft_n", 0) for r in rows), sum(r.get("draft_n_accepted", 0) for r in rows))
+    return {"n": len(rows), "tokens": toks, "ms": ms, "tok_s": toks / (ms / 1e3) if ms else None, "r": st["r"],
+            "alpha": st["alpha"], "k_eff": st["k_eff"], "steps": st["steps"], "tokens_per_step": st["tokens_per_step"],
+            "ms_per_step": spec_math.observed_step_ms(ms, toks, sum(r.get("draft_n_accepted", 0) for r in rows))}
+
+
+def _pair_stats(c_rows: list[dict], b_rows: list[dict]) -> dict:
+    c, b = _agg(c_rows), _agg(b_rows)
+    ratios = [x["predicted_per_second"] / y["predicted_per_second"] for x, y in zip(c_rows, b_rows)]
+    texts = [(x.get("text"), y.get("text")) for x, y in zip(c_rows, b_rows) if x.get("text") is not None and y.get("text") is not None]
+    eq = [a == b_ for a, b_ in texts]
+    fracs = [spec_math.common_prefix_len(a, b_) / max(len(b_), 1) for a, b_ in texts]
+    return {"n": c["n"], "tok_s": c["tok_s"], "base_tok_s": b["tok_s"],
+            "speedup": c["tok_s"] / b["tok_s"] if c["tok_s"] and b["tok_s"] else None,
+            "speedup_median_prompt": common.median(ratios), "r": c["r"], "alpha": c["alpha"], "k_eff": c["k_eff"],
+            "tokens_per_step": c["tokens_per_step"], "ms_per_step": c["ms_per_step"], "base_ms_per_token": 1e3 / b["tok_s"] if b["tok_s"] else None,
+            "draft_n": sum(x.get("draft_n", 0) for x in c_rows), "draft_n_accepted": sum(x.get("draft_n_accepted", 0) for x in c_rows),
+            "text_equal": sum(eq), "text_compared": len(eq), "text_equal_frac": sum(eq) / len(eq) if eq else None,
+            "median_prefix_frac": common.median(fracs)}
+
+
+def summarize_matrix(runs: dict, base: str = "base") -> dict:
+    """Per config, per category and overall: tok/s, speedup, r, alpha, output equality, all on the prompts that the
+    config and the target-alone run both finished (paired), so a time-budget cut cannot bias the ratio."""
+    out: dict = {}
+    base_rows = {r["id"]: r for r in (runs.get(base) or {}).get("rows", []) if _ok(r)}
+    for name, run in runs.items():
+        rows = {r["id"]: r for r in run.get("rows", []) if _ok(r)}
+        ids = [i for i in rows if i in base_rows]
+        entry = {"planned": run.get("planned"), "n_ok": len(rows), "n_paired": len(ids), "error": run.get("error"), "k": run.get("k"),
+                 "spec_type": run.get("spec_type"), "by_category": {}}
+        if ids:
+            entry["all"] = _pair_stats([rows[i] for i in ids], [base_rows[i] for i in ids])
+            for cat in sorted({rows[i]["category"] for i in ids}):
+                sel = [i for i in ids if rows[i]["category"] == cat]
+                entry["by_category"][cat] = _pair_stats([rows[i] for i in sel], [base_rows[i] for i in sel])
+        out[name] = entry
+    return out
+
+
+def step_residual(stats: dict, k: int, cost: dict | None, draft_key: str = "draft_bf16") -> dict | None:
+    """Observed ms per step minus the e5_cost step model (k t_draft + t_verify(k + 1)); the part no kernel time explains."""
+    try:
+        td = cost["drafts"][draft_key]["t_draft_ms"]
+        tv = cost["target_verify_ms"][str(k + 1)] if str(k + 1) in cost["target_verify_ms"] else cost["target_verify_ms"][k + 1]
+    except (KeyError, TypeError):
+        return None
+    obs = stats.get("ms_per_step")
+    if obs is None:
+        return None
+    model = k * td + tv
+    return {"observed_ms": obs, "model_ms": model, "residual_ms": obs - model}
 
 
 # ---------------------------------------------------------------- CLI

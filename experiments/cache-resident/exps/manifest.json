@@ -173,5 +173,16 @@
   "build_llama": true,
   "disk_gb": 80,
   "desc": "E5 step cost: Bonsai 2 27B PQ2_0 verify batch cost for widths 1-9 (llama-bench -p W -n 0 -d 512) and the Qwen3.5-0.8B draft decode cost (BF16, Q8_0); break-even acceptance per K"
+ },
+ "r1": {
+  "cmd": "python3 -m exps.fetch_models --models pq2,draft_bf16,draft_q8_0 && python3 -m exps.r1",
+  "gpus": [
+   "pro6000"
+  ],
+  "est_min": 38,
+  "failsafe_min": 65,
+  "build_llama": true,
+  "disk_gb": 80,
+  "desc": "R1 pre-E6 measurements on one PRO 6000: (a) Qwen3.5-0.8B BF16/Q8_0/post-hoc PTQ1_0 top-1 agreement and KL vs Bonsai 2 27B PQ2_0 (llama-perplexity, 8192 tokens), (b) E5 on 200 fixed-seed prompts for target alone, draft-simple K=2/3/4 with draft backend sampling, K=4 without, ngram-mod, ngram-map-k (per-category r, alpha, tok/s, speedup, output equality), (c) one nsys capture of ~20 K=4 steps split into verify, draft, copies and idle; needs --allow-long (failsafe 65: clone, cold CUDA build, ~10 GB of downloads, three timed parts)"
  }
 }

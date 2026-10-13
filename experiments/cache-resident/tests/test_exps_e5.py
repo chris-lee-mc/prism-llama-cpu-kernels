@@ -240,5 +240,7 @@ def test_e5_cost_cmds_rows_and_break_even():
     assert ec.break_even(0.0, {1: 8.0, 5: 16.0}, 8.0, 4) == pytest.approx(0.519, abs=0.003)
     assert ec.break_even(100.0, {1: 8.0, 5: 16.0}, 8.0, 4) is None
     s = ec.summarize([{"model": "pq2", "kind": "verify", "width": w, "ms_per_batch": 8.0 + w} for w in range(1, 10)]
-                     + [{"model": "draft_bf16", "kind": "decode", "width": 1, "ms_per_batch": 2.0}])
+                     + [{"model": "pq2", "kind": "decode", "width": 1, "ms_per_batch": 8.0},
+                        {"model": "draft_bf16", "kind": "decode", "width": 1, "ms_per_batch": 2.0}])
     assert s["drafts"]["draft_bf16"]["t_step_ms"][4] == pytest.approx(4 * 2.0 + 13.0) and "draft_q8_0" not in s["drafts"]
+    assert s["baseline"]["plain_ms"] == 8.0   # the tg row, not the width-1 prompt path (9.0)

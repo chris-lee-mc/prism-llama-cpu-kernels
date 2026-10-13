@@ -1,0 +1,597 @@
+{
+ "schema": 1,
+ "exp": "e5_cost",
+ "gpu": "pro6000-ws",
+ "utc": "2026-10-13T19:34:38.678754+00:00",
+ "derived_from": "20261013T183456Z.json",
+ "kind": "resummary",
+ "data": {
+  "rows": [
+   {
+    "model": "pq2",
+    "kind": "verify",
+    "width": 1,
+    "depth": 512,
+    "tok_s": 115.714484,
+    "stddev": 38.64646,
+    "ms_per_batch": 8.641960499949167,
+    "n_gen": 0,
+    "smi": {
+     "n": 1,
+     "sm_mhz_med": 2655.0,
+     "sm_mhz_min": 2655.0,
+     "sm_mhz_max": 3090.0,
+     "mem_mhz_med": 13365.0,
+     "mem_mhz_max": 14001.0,
+     "power_w_med": 157.43,
+     "power_w_max": 157.43,
+     "power_cap_w": 600.0,
+     "power_default_w": 600.0,
+     "temp_c_max": 49.0,
+     "before": {
+      "clocks.sm": 2617.0,
+      "clocks.max.sm": 3090.0,
+      "clocks.mem": 14001.0,
+      "clocks.max.mem": 14001.0,
+      "power.draw": 99.62,
+      "power.limit": 600.0,
+      "power.default_limit": 600.0,
+      "temperature.gpu": 46.0
+     },
+     "after": {
+      "clocks.sm": 2797.0,
+      "clocks.max.sm": 3090.0,
+      "clocks.mem": 13365.0,
+      "clocks.max.mem": 14001.0,
+      "power.draw": 274.76,
+      "power.limit": 600.0,
+      "power.default_limit": 600.0,
+      "temperature.gpu": 49.0
+     }
+    }
+   },
+   {
+    "model": "pq2",
+    "kind": "verify",
+    "width": 2,
+    "depth": 512,
+    "tok_s": 216.357537,
+    "stddev": 62.351613,
+    "ms_per_batch": 9.243958069276783,
+    "n_gen": 0,
+    "smi": {
+     "n": 1,
+     "sm_mhz_med": 2655.0,
+     "sm_mhz_min": 2655.0,
+     "sm_mhz_max": 3090.0,
+     "mem_mhz_med": 13365.0,
+     "mem_mhz_max": 14001.0,
+     "power_w_med": 157.43,
+     "power_w_max": 157.43,
+     "power_cap_w": 600.0,
+     "power_default_w": 600.0,
+     "temp_c_max": 49.0,
+     "before": {
+      "clocks.sm": 2617.0,
+      "clocks.max.sm": 3090.0,
+      "clocks.mem": 14001.0,
+      "clocks.max.mem": 14001.0,
+      "power.draw": 99.62,
+      "power.limit": 600.0,
+      "power.default_limit": 600.0,
+      "temperature.gpu": 46.0
+     },
+     "after": {
+      "clocks.sm": 2797.0,
+      "clocks.max.sm": 3090.0,
+      "clocks.mem": 13365.0,
+      "clocks.max.mem": 14001.0,
+      "power.draw": 274.76,
+      "power.limit": 600.0,
+      "power.default_limit": 600.0,
+      "temperature.gpu": 49.0
+     }
+    }
+   },
+   {
+    "model": "pq2",
+    "kind": "verify",
+    "width": 3,
+    "depth": 512,
+    "tok_s": 309.370579,
+    "stddev": 81.007999,
+    "ms_per_batch": 9.697108269626375,
+    "n_gen": 0,
+    "smi": {
+     "n": 1,
+     "sm_mhz_med": 2655.0,
+     "sm_mhz_min": 2655.0,
+     "sm_mhz_max": 3090.0,
+     "mem_mhz_med": 13365.0,
+     "mem_mhz_max": 14001.0,
+     "power_w_med": 157.43,
+     "power_w_max": 157.43,
+     "power_cap_w": 600.0,
+     "power_default_w": 600.0,
+     "temp_c_max": 49.0,
+     "before": {
+      "clocks.sm": 2617.0,
+      "clocks.max.sm": 3090.0,
+      "clocks.mem": 14001.0,
+      "clocks.max.mem": 14001.0,
+      "power.draw": 99.62,
+      "power.limit": 600.0,
+      "power.default_limit": 600.0,
+      "temperature.gpu": 46.0
+     },
+     "after": {
+      "clocks.sm": 2797.0,
+      "clocks.max.sm": 3090.0,
+      "clocks.mem": 13365.0,
+      "clocks.max.mem": 14001.0,
+      "power.draw": 274.76,
+      "power.limit": 600.0,
+      "power.default_limit": 600.0,
+      "temperature.gpu": 49.0
+     }
+    }
+   },
+   {
+    "model": "pq2",
+    "kind": "verify",
+    "width": 4,
+    "depth": 512,
+    "tok_s": 373.318711,
+    "stddev": 83.754649,
+    "ms_per_batch": 10.714705376768539,
+    "n_gen": 0,
+    "smi": {
+     "n": 1,
+     "sm_mhz_med": 2655.0,
+     "sm_mhz_min": 2655.0,
+     "sm_mhz_max": 3090.0,
+     "mem_mhz_med": 13365.0,
+     "mem_mhz_max": 14001.0,
+     "power_w_med": 157.43,
+     "power_w_max": 157.43,
+     "power_cap_w": 600.0,
+     "power_default_w": 600.0,
+     "temp_c_max": 49.0,
+     "before": {
+      "clocks.sm": 2617.0,
+      "clocks.max.sm": 3090.0,
+      "clocks.mem": 14001.0,
+      "clocks.max.mem": 14001.0,
+      "power.draw": 99.62,
+      "power.limit": 600.0,
+      "power.default_limit": 600.0,
+      "temperature.gpu": 46.0
+     },
+     "after": {
+      "clocks.sm": 2797.0,
+      "clocks.max.sm": 3090.0,
+      "clocks.mem": 13365.0,
+      "clocks.max.mem": 14001.0,
+      "power.draw": 274.76,
+      "power.limit": 600.0,
+      "power.default_limit": 600.0,
+      "temperature.gpu": 49.0
+     }
+    }
+   },
+   {
+    "model": "pq2",
+    "kind": "verify",
+    "width": 5,
+    "depth": 512,
+    "tok_s": 448.83094,
+    "stddev": 93.873857,
+    "ms_per_batch": 11.140051975917704,
+    "n_gen": 0,
+    "smi": {
+     "n": 1,
+     "sm_mhz_med": 2655.0,
+     "sm_mhz_min": 2655.0,
+     "sm_mhz_max": 3090.0,
+     "mem_mhz_med": 13365.0,
+     "mem_mhz_max": 14001.0,
+     "power_w_med": 157.43,
+     "power_w_max": 157.43,
+     "power_cap_w": 600.0,
+     "power_default_w": 600.0,
+     "temp_c_max": 49.0,
+     "before": {
+      "clocks.sm": 2617.0,
+      "clocks.max.sm": 3090.0,
+      "clocks.mem": 14001.0,
+      "clocks.max.mem": 14001.0,
+      "power.draw": 99.62,
+      "power.limit": 600.0,
+      "power.default_limit": 600.0,
+      "temperature.gpu": 46.0
+     },
+     "after": {
+      "clocks.sm": 2797.0,
+      "clocks.max.sm": 3090.0,
+      "clocks.mem": 13365.0,
+      "clocks.max.mem": 14001.0,
+      "power.draw": 274.76,
+      "power.limit": 600.0,
+      "power.default_limit": 600.0,
+      "temperature.gpu": 49.0
+     }
+    }
+   },
+   {
+    "model": "pq2",
+    "kind": "verify",
+    "width": 6,
+    "depth": 512,
+    "tok_s": 501.753867,
+    "stddev": 97.096047,
+    "ms_per_batch": 11.95805432626591,
+    "n_gen": 0,
+    "smi": {
+     "n": 1,
+     "sm_mhz_med": 2655.0,
+     "sm_mhz_min": 2655.0,
+     "sm_mhz_max": 3090.0,
+     "mem_mhz_med": 13365.0,
+     "mem_mhz_max": 14001.0,
+     "power_w_med": 157.43,
+     "power_w_max": 157.43,
+     "power_cap_w": 600.0,
+     "power_default_w": 600.0,
+     "temp_c_max": 49.0,
+     "before": {
+      "clocks.sm": 2617.0,
+      "clocks.max.sm": 3090.0,
+      "clocks.mem": 14001.0,
+      "clocks.max.mem": 14001.0,
+      "power.draw": 99.62,
+      "power.limit": 600.0,
+      "power.default_limit": 600.0,
+      "temperature.gpu": 46.0
+     },
+     "after": {
+      "clocks.sm": 2797.0,
+      "clocks.max.sm": 3090.0,
+      "clocks.mem": 13365.0,
+      "clocks.max.mem": 14001.0,
+      "power.draw": 274.76,
+      "power.limit": 600.0,
+      "power.default_limit": 600.0,
+      "temperature.gpu": 49.0
+     }
+    }
+   },
+   {
+    "model": "pq2",
+    "kind": "verify",
+    "width": 7,
+    "depth": 512,
+    "tok_s": 532.144713,
+    "stddev": 97.864758,
+    "ms_per_batch": 13.154316540207738,
+    "n_gen": 0,
+    "smi": {
+     "n": 1,
+     "sm_mhz_med": 2655.0,
+     "sm_mhz_min": 2655.0,
+     "sm_mhz_max": 3090.0,
+     "mem_mhz_med": 13365.0,
+     "mem_mhz_max": 14001.0,
+     "power_w_med": 157.43,
+     "power_w_max": 157.43,
+     "power_cap_w": 600.0,
+     "power_default_w": 600.0,
+     "temp_c_max": 49.0,
+     "before": {
+      "clocks.sm": 2617.0,
+      "clocks.max.sm": 3090.0,
+      "clocks.mem": 14001.0,
+      "clocks.max.mem": 14001.0,
+      "power.draw": 99.62,
+      "power.limit": 600.0,
+      "power.default_limit": 600.0,
+      "temperature.gpu": 46.0
+     },
+     "after": {
+      "clocks.sm": 2797.0,
+      "clocks.max.sm": 3090.0,
+      "clocks.mem": 13365.0,
+      "clocks.max.mem": 14001.0,
+      "power.draw": 274.76,
+      "power.limit": 600.0,
+      "power.default_limit": 600.0,
+      "temperature.gpu": 49.0
+     }
+    }
+   },
+   {
+    "model": "pq2",
+    "kind": "verify",
+    "width": 8,
+    "depth": 512,
+    "tok_s": 542.936497,
+    "stddev": 95.364626,
+    "ms_per_batch": 14.73468820792867,
+    "n_gen": 0,
+    "smi": {
+     "n": 1,
+     "sm_mhz_med": 2655.0,
+     "sm_mhz_min": 2655.0,
+     "sm_mhz_max": 3090.0,
+     "mem_mhz_med": 13365.0,
+     "mem_mhz_max": 14001.0,
+     "power_w_med": 157.43,
+     "power_w_max": 157.43,
+     "power_cap_w": 600.0,
+     "power_default_w": 600.0,
+     "temp_c_max": 49.0,
+     "before": {
+      "clocks.sm": 2617.0,
+      "clocks.max.sm": 3090.0,
+      "clocks.mem": 14001.0,
+      "clocks.max.mem": 14001.0,
+      "power.draw": 99.62,
+      "power.limit": 600.0,
+      "power.default_limit": 600.0,
+      "temperature.gpu": 46.0
+     },
+     "after": {
+      "clocks.sm": 2797.0,
+      "clocks.max.sm": 3090.0,
+      "clocks.mem": 13365.0,
+      "clocks.max.mem": 14001.0,
+      "power.draw": 274.76,
+      "power.limit": 600.0,
+      "power.default_limit": 600.0,
+      "temperature.gpu": 49.0
+     }
+    }
+   },
+   {
+    "model": "pq2",
+    "kind": "verify",
+    "width": 9,
+    "depth": 512,
+    "tok_s": 575.750459,
+    "stddev": 140.527303,
+    "ms_per_batch": 15.631772166767826,
+    "n_gen": 0,
+    "smi": {
+     "n": 1,
+     "sm_mhz_med": 2655.0,
+     "sm_mhz_min": 2655.0,
+     "sm_mhz_max": 3090.0,
+     "mem_mhz_med": 13365.0,
+     "mem_mhz_max": 14001.0,
+     "power_w_med": 157.43,
+     "power_w_max": 157.43,
+     "power_cap_w": 600.0,
+     "power_default_w": 600.0,
+     "temp_c_max": 49.0,
+     "before": {
+      "clocks.sm": 2617.0,
+      "clocks.max.sm": 3090.0,
+      "clocks.mem": 14001.0,
+      "clocks.max.mem": 14001.0,
+      "power.draw": 99.62,
+      "power.limit": 600.0,
+      "power.default_limit": 600.0,
+      "temperature.gpu": 46.0
+     },
+     "after": {
+      "clocks.sm": 2797.0,
+      "clocks.max.sm": 3090.0,
+      "clocks.mem": 13365.0,
+      "clocks.max.mem": 14001.0,
+      "power.draw": 274.76,
+      "power.limit": 600.0,
+      "power.default_limit": 600.0,
+      "temperature.gpu": 49.0
+     }
+    }
+   },
+   {
+    "model": "draft_bf16",
+    "kind": "decode",
+    "width": 1,
+    "depth": 512,
+    "tok_s": 625.605627,
+    "stddev": 5.310696,
+    "ms_per_batch": 1.5984510957731521,
+    "n_gen": 128,
+    "smi": {
+     "n": 1,
+     "sm_mhz_med": 2812.0,
+     "sm_mhz_min": 2812.0,
+     "sm_mhz_max": 3090.0,
+     "mem_mhz_med": 13365.0,
+     "mem_mhz_max": 14001.0,
+     "power_w_med": 403.78,
+     "power_w_max": 403.78,
+     "power_cap_w": 600.0,
+     "power_default_w": 600.0,
+     "temp_c_max": 53.0,
+     "before": {
+      "clocks.sm": 2850.0,
+      "clocks.max.sm": 3090.0,
+      "clocks.mem": 14001.0,
+      "clocks.max.mem": 14001.0,
+      "power.draw": 185.01,
+      "power.limit": 600.0,
+      "power.default_limit": 600.0,
+      "temperature.gpu": 46.0
+     },
+     "after": {
+      "clocks.sm": 2812.0,
+      "clocks.max.sm": 3090.0,
+      "clocks.mem": 13365.0,
+      "clocks.max.mem": 14001.0,
+      "power.draw": 403.78,
+      "power.limit": 600.0,
+      "power.default_limit": 600.0,
+      "temperature.gpu": 53.0
+     }
+    }
+   },
+   {
+    "model": "draft_q8_0",
+    "kind": "decode",
+    "width": 1,
+    "depth": 512,
+    "tok_s": 783.013039,
+    "stddev": 10.648254,
+    "ms_per_batch": 1.2771179408163087,
+    "n_gen": 128,
+    "smi": {
+     "n": 0,
+     "sm_mhz_med": 2827.5,
+     "sm_mhz_min": 2805.0,
+     "sm_mhz_max": 3090.0,
+     "mem_mhz_med": 13683.0,
+     "mem_mhz_max": 14001.0,
+     "power_w_med": 268.955,
+     "power_w_max": 291.7,
+     "power_cap_w": 600.0,
+     "power_default_w": 600.0,
+     "temp_c_max": 47.0,
+     "before": {
+      "clocks.sm": 2850.0,
+      "clocks.max.sm": 3090.0,
+      "clocks.mem": 14001.0,
+      "clocks.max.mem": 14001.0,
+      "power.draw": 246.21,
+      "power.limit": 600.0,
+      "power.default_limit": 600.0,
+      "temperature.gpu": 46.0
+     },
+     "after": {
+      "clocks.sm": 2805.0,
+      "clocks.max.sm": 3090.0,
+      "clocks.mem": 13365.0,
+      "clocks.max.mem": 14001.0,
+      "power.draw": 291.7,
+      "power.limit": 600.0,
+      "power.default_limit": 600.0,
+      "temperature.gpu": 47.0
+     }
+    }
+   }
+  ],
+  "notes": [
+   "resummary of 20261013T183456Z.json: per-rep samples were not saved by that run, so tok_s there is llama-bench avg_ts (mean of 5 reps), not a median",
+   "baseline is not from this host's llama-bench tg run: depth differs (E5 prompts are short, rows here are at depth 512) and it is a server run"
+  ],
+  "summary": {
+   "baseline": {
+    "plain_ms": 7.194200663889612,
+    "tok_s": 139.00084897817413,
+    "source": "E5 target-alone server run 20261013T183917Z.json (120 prompts, tok_s_weighted 139.00)"
+   },
+   "target_verify_ms": {
+    "1": 8.641960499949167,
+    "2": 9.243958069276783,
+    "3": 9.697108269626375,
+    "4": 10.714705376768539,
+    "5": 11.140051975917704,
+    "6": 11.95805432626591,
+    "7": 13.154316540207738,
+    "8": 14.73468820792867,
+    "9": 15.631772166767826
+   },
+   "target_verify_w1_prompt_path_ms": 8.641960499949167,
+   "drafts": {
+    "draft_bf16": {
+     "t_draft_ms": 1.5984510957731521,
+     "break_even": {
+      "2": {
+       "alpha": 0.521,
+       "r": 0.39622050000000003
+      },
+      "3": {
+       "alpha": 0.594,
+       "r": 0.38547352799999995
+      },
+      "4": {
+       "alpha": 0.631,
+       "r": 0.35973319323025
+      },
+      "6": {
+       "alpha": 0.714,
+       "r": 0.3609561747789691
+      },
+      "8": {
+       "alpha": 0.772,
+       "r": 0.3698468913078901
+      }
+     },
+     "t_step_ms": {
+      "2": 12.894010461172678,
+      "3": 15.510058664087996,
+      "4": 17.53385635901031,
+      "6": 22.745023114846653,
+      "8": 28.419380932953043
+     }
+    },
+    "draft_q8_0": {
+     "t_draft_ms": 1.2771179408163087,
+     "break_even": {
+      "2": {
+       "alpha": 0.477,
+       "r": 0.3522645
+      },
+      "3": {
+       "alpha": 0.552,
+       "r": 0.341633536
+      },
+      "4": {
+       "alpha": 0.589,
+       "r": 0.31515291231025
+      },
+      "6": {
+       "alpha": 0.677,
+       "r": 0.3156961046291504
+      },
+      "8": {
+       "alpha": 0.741,
+       "r": 0.32511868999830906
+      }
+     },
+     "t_step_ms": {
+      "2": 12.251344151258992,
+      "3": 14.546059199217463,
+      "4": 16.24852373918294,
+      "6": 20.817024185105588,
+      "8": 25.848715693298296
+     }
+    }
+   },
+   "conversion": "r = A(alpha, K) / K with A = alpha (1 - alpha^K) / (1 - alpha); steps emit 1 + A tokens",
+   "free_draft_break_even": {
+    "2": {
+     "alpha": 0.274,
+     "r": 0.17453800000000003
+    },
+    "3": {
+     "alpha": 0.338,
+     "r": 0.1636194906666667
+    },
+    "4": {
+     "alpha": 0.359,
+     "r": 0.13768989779025
+    },
+    "6": {
+     "alpha": 0.456,
+     "r": 0.138449841547903
+    },
+    "8": {
+     "alpha": 0.542,
+     "r": 0.14682412820684557
+    }
+   }
+  }
+ }
+}

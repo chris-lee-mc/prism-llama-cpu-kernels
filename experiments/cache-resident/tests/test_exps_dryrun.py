@@ -17,6 +17,7 @@ DRIVERS = [
     ("exps.e4_pdl", []),
     ("exps.e5_spec", ["--k", "0"]),
     ("exps.e5_spec", ["--k", "6"]),
+    ("exps.r1", []),
 ]
 
 

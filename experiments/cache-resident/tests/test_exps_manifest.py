@@ -11,8 +11,8 @@ from infra import gpus
 EXP = pathlib.Path(__file__).resolve().parent.parent
 MAN = json.loads((EXP / "exps" / "manifest.json").read_text())
 KEYS = {"cmd", "gpus", "est_min", "failsafe_min", "build_llama", "disk_gb", "desc"}
-LONG_FAILSAFE = {"e4_pdl": 70}  # clone + cold build + downloads + 40 benches; launch needs --allow-long
-EXPECTED = {"p0_smoke", "p0_l2", "e1", "e2_08b", "e2_2b", "e3", "e3d", "e4_pq2", "e4_ptq1", "e4_pdl", "e5_base", "e5_k4", "e5_k6", "e5_k8", "e5_cost"}
+LONG_FAILSAFE = {"e4_pdl": 70, "r1": 65}  # clone + cold build + downloads + 40 benches; launch needs --allow-long
+EXPECTED = {"p0_smoke", "p0_l2", "e1", "e2_08b", "e2_2b", "e3", "e3d", "e4_pq2", "e4_ptq1", "e4_pdl", "e5_base", "e5_k4", "e5_k6", "e5_k8", "e5_cost", "r1"}
 
 
 def test_manifest_has_all_experiments():
@@ -55,8 +55,8 @@ def test_result_dirs_match_manifest_keys():
     from exps import e4_pdl
     assert e4_pdl.EXP in MAN
     assert set(e5_spec.EXP_NAMES.values()) <= set(MAN)
-    from exps import e5_cost
-    assert e5_cost.EXP in MAN
+    from exps import e5_cost, r1
+    assert e5_cost.EXP in MAN and r1.EXP in MAN
     from exps import e1_sweep, e3_residency, e3d_resident_draft
     assert e1_sweep.EXP in MAN and e3_residency.EXP in MAN and e3d_resident_draft.EXP in MAN
 
@@ -95,3 +95,15 @@ def test_run_p0_mirrors_each_step_and_skips_slow_gpu_tests(tmp_path):
     assert (tmp_path / "results" / "p0_smoke" / "rtx5090" / "logs" / "pytest_gpu.log").exists()
     # the pytest step runs last, after all copies were made
     assert r.stdout.index("=== p0_toy exit 3") < r.stdout.index("=== pytest_gpu:")
+
+
+def test_r1_entry_fits_one_session():
+    from infra import runpod
+    e = MAN["r1"]
+    assert e["gpus"] == ["pro6000"] and e["build_llama"] is True
+    # command + bootstrap + cold llama build must fit the failsafe, and the whole session stays near 55 min
+    assert e["est_min"] + runpod.BOOTSTRAP_MIN + runpod.LLAMA_BUILD_MIN <= e["failsafe_min"] - 5
+    assert e["est_min"] + runpod.BOOTSTRAP_MIN + runpod.LLAMA_BUILD_MIN <= 56
+    assert e["cmd"].startswith("python3 -m exps.fetch_models --models pq2,draft_bf16,draft_q8_0 && python3 -m exps.r1")
+    from exps import r1
+    assert r1.DEFAULT_TOTAL_MIN <= e["est_min"]

@@ -230,6 +230,25 @@ def load(path=DEFAULT_OUT, limit: int | None = None) -> list[dict]:
     return rows[:limit] if limit else rows
 
 
+def shuffled(rows: list[dict], seed: int, stratify: bool = False) -> list[dict]:
+    """Fixed-seed permutation. load(limit) keeps file order, which is category blocks of 25: a prefix is not a sample.
+
+    stratify: shuffle inside each category, then deal one prompt per category in turn, so that every prefix is
+    category balanced (a run cut by a time budget still covers all categories).
+    """
+    rng = random.Random(seed)
+    if not stratify:
+        return rng.sample(rows, len(rows))
+    by_cat: dict[str, list[dict]] = {}
+    for r in rows:
+        by_cat.setdefault(r["category"], []).append(r)
+    decks = [rng.sample(v, len(v)) for _, v in sorted(by_cat.items())]
+    out = []
+    for i in range(max((len(d) for d in decks), default=0)):
+        out += [d[i] for d in decks if i < len(d)]
+    return out
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(prog="exps.make_prompts", description=__doc__.split("\n")[0])
     ap.add_argument("--out", default=str(DEFAULT_OUT))
