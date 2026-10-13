@@ -10,10 +10,7 @@
 // CR_FP4_MMA is reserved: no MMA path exists, see FP4.md.
 #include "ternary_gemv.h"
 
-#include <cooperative_groups.h>
 #include <stdlib.h>
-
-namespace cg = cooperative_groups;
 
 namespace {
 
@@ -23,7 +20,7 @@ constexpr int kSlot = 32;        // LUT floats per slot: pair j (h = 0) then pai
 constexpr int kLutGroup = 32 * kSlot;
 constexpr int kXHalf = 68;       // fp4 x tile: 64 floats + 4 pad so the two halves use different banks
 constexpr int kXGroup = 2 * kXHalf;
-constexpr int kStages = 4;       // cp.async ring depth
+constexpr int kStages = 3;       // cp.async ring depth
 constexpr int kTileBytes = kTile * 32;
 constexpr unsigned kFull = 0xffffffffu;
 
@@ -37,6 +34,40 @@ __device__ __forceinline__ uint4 ld_stream(const uint4* p) {
 __device__ __forceinline__ void cp_async16(void* smem, const void* g) {
   const unsigned sa = (unsigned)__cvta_generic_to_shared(smem);
   asm volatile("cp.async.cg.shared.global [%0], [%1], 16;" ::"r"(sa), "l"(g) : "memory");
+}
+
+__device__ __forceinline__ void cp_async8(void* smem, const void* g) {
+  const unsigned sa = (unsigned)__cvta_generic_to_shared(smem);
+  asm volatile("cp.async.ca.shared.global [%0], [%1], 8;" ::"r"(sa), "l"(g) : "memory");
+}
+
+// Cluster barrier halves (sm_90+). Arrive early, wait late: the wait then costs nothing.
+__device__ __forceinline__ void cluster_arrive_relaxed() {
+#if defined(__CUDA_ARCH__) && __CUDA_ARCH__ >= 900
+  asm volatile("barrier.cluster.arrive.relaxed.aligned;" ::: "memory");
+#endif
+}
+
+__device__ __forceinline__ __attribute__((unused)) void cluster_arrive_release() {
+#if defined(__CUDA_ARCH__) && __CUDA_ARCH__ >= 900
+  asm volatile("barrier.cluster.arrive.release.aligned;" ::: "memory");
+#endif
+}
+
+__device__ __forceinline__ __attribute__((unused)) void cluster_wait() {
+#if defined(__CUDA_ARCH__) && __CUDA_ARCH__ >= 900
+  asm volatile("barrier.cluster.wait.acquire.aligned;" ::: "memory");
+#endif
+}
+
+// Store v to the same shared variable in cluster block `rank`.
+__device__ __forceinline__ __attribute__((unused)) void st_cluster(float* p, int rank, float v) {
+#if defined(__CUDA_ARCH__) && __CUDA_ARCH__ >= 900
+  const unsigned la = (unsigned)__cvta_generic_to_shared(p);
+  unsigned ra;
+  asm volatile("mapa.shared::cluster.u32 %0, %1, %2;" : "=r"(ra) : "r"(la), "r"(rank));
+  asm volatile("st.shared::cluster.f32 [%0], %1;" ::"r"(ra), "f"(v) : "memory");
+#endif
 }
 
 __device__ __forceinline__ void cp_async_commit() { asm volatile("cp.async.commit_group;" ::: "memory"); }
@@ -198,9 +229,10 @@ __host__ __device__ __forceinline__ int ring_slots(int K, int S) {
   return min(kStages, (T + S - 1) / S);
 }
 
+// Dynamic shared memory: [q ring][scale ring][table].
 template <int W, bool FP4>
 __host__ __device__ constexpr int smem_bytes(int slots) {
-  return slots * 16 * W * kTileBytes + (FP4 ? kTile * kXGroup : kTile * kLutGroup) * 4;
+  return slots * 16 * W * (kTileBytes + 2 * kTile) + (FP4 ? kTile * kXGroup : kTile * kLutGroup) * 4;
 }
 
 template <int W, bool FP4>
@@ -210,8 +242,10 @@ __device__ __forceinline__ void gemv_body(const uint32_t* __restrict__ q, const 
   constexpr int RB = 16 * W;
   constexpr int kQStage = RB * kTileBytes;  // bytes
   extern __shared__ __align__(16) unsigned char dsm[];
-  unsigned char* qs = dsm;  // [kStages][RB * 8] uint4, swizzled
-  float* table = reinterpret_cast<float*>(dsm + ring_slots(K, S) * kQStage);
+  const int slots = ring_slots(K, S);
+  unsigned char* qs = dsm;                                // [slots][RB * 8] uint4, swizzled
+  unsigned short* ss = reinterpret_cast<unsigned short*>(dsm + slots * kQStage);  // [slots][RB][kTile]
+  float* table = reinterpret_cast<float*>(dsm + slots * (kQStage + RB * 2 * kTile));
   __shared__ __align__(16) uint32_t stage[FP4 ? W * 256 : 1];
   __shared__ float tab[16];
 
@@ -266,6 +300,14 @@ __device__ __forceinline__ void gemv_body(const uint32_t* __restrict__ q, const 
       }
     }
   };
+  // scales ride in the ring when 8 B copies are legal, else they are loaded one tile ahead into registers
+  const bool s8 = !(dbg & 256) && ((reinterpret_cast<uintptr_t>(s) & 7u) == 0) && ((G & 3) == 0);
+  auto issue_s = [&](int tt, int sl) {
+    for (int r = tid; r < RB; r += NT) {
+      const int gr = min(rblk * RB + r, N - 1);
+      cp_async8(ss + (sl * RB + r) * kTile, reinterpret_cast<const unsigned short*>(s) + (size_t)gr * G + tt * kTile);
+    }
+  };
   const unsigned short* srow = reinterpret_cast<const unsigned short*>(s) + (size_t)(row < N ? row : N - 1) * (size_t)G;
   auto load_s = [&](int tt, unsigned short* v) {
 #pragma unroll
@@ -276,13 +318,17 @@ __device__ __forceinline__ void gemv_body(const uint32_t* __restrict__ q, const 
   };
 
   grid_dep_launch();
+  if (S > 1) cluster_arrive_relaxed();  // phase 1: this block has started (DSMEM target is live)
 #pragma unroll
   for (int p = 0; p < kStages - 1; ++p) {
-    if (p < nt) issue_q(split + p * S, p);
+    if (p < nt) {
+      issue_q(split + p * S, p);
+      if (s8) issue_s(split + p * S, p);
+    }
     cp_async_commit();
   }
   unsigned short sc[kTile], sn[kTile];
-  load_s(split, sc);
+  if (!s8) load_s(split, sc);
   grid_dep_wait();
   XTile<NT, FP4> xc, xn;
   x_load(xc, x, split * kTile, min(kTile, G - split * kTile));
@@ -295,10 +341,17 @@ __device__ __forceinline__ void gemv_body(const uint32_t* __restrict__ q, const 
     const int sl = i % kStages;
     cp_async_wait<kStages - 2>();  // one group per tile: tile i has landed
     __syncthreads();               // tile i visible; everyone is done with tile i - 1 and the table
-    if (i + kStages - 1 < nt) issue_q(split + (i + kStages - 1) * S, (i + kStages - 1) % kStages);
+    if (i + kStages - 1 < nt) {
+      issue_q(split + (i + kStages - 1) * S, (i + kStages - 1) % kStages);
+      if (s8) issue_s(split + (i + kStages - 1) * S, (i + kStages - 1) % kStages);
+    }
     cp_async_commit();
+    if (s8) {
+#pragma unroll
+      for (int u = 0; u < kTile; ++u) sc[u] = ss[(sl * RB + rl) * kTile + u];
+    }
     if (i + 1 < nt) {
-      load_s(tt + S, sn);
+      if (!s8) load_s(tt + S, sn);
       x_load(xn, x, (tt + S) * kTile, min(kTile, G - (tt + S) * kTile));
     }
     const int ng = min(kTile, G - tt * kTile);
@@ -326,24 +379,23 @@ __device__ __forceinline__ void gemv_body(const uint32_t* __restrict__ q, const 
   }
   acc += __shfl_xor_sync(kFull, acc, 1);
 
-  if (S == 1 || (dbg & 32)) {
-    if (h == 0 && row < N && split == 0) y[row] = __float2half(acc);
+  if (S == 1) {
+    if (h == 0 && row < N) y[row] = __float2half(acc);
     return;
   }
 #if defined(__CUDA_ARCH__) && __CUDA_ARCH__ >= 900
-  __shared__ float red[RB];
-  if (h == 0) red[rl] = acc;
-  cg::cluster_group cl = cg::this_cluster();
-  cl.sync();
-  const int per = RB / S;
-  if (tid < per) {
-    const int lr = split * per + tid;
+  // split-K: every block stores its partials into block 0 of the cluster, block 0 sums in a fixed order
+  __shared__ float red[kMaxSplit][RB];
+  cluster_wait();  // phase 1 done: all blocks of the cluster run
+  if (h == 0) st_cluster(&red[split][rl], 0, acc);
+  cluster_arrive_release();
+  if (split != 0) return;
+  cluster_wait();
+  for (int r = tid; r < RB; r += NT) {
     float t = 0.f;
-    for (int k = 0; k < S; ++k) t += cl.map_shared_rank(red, k)[lr];
-    const int gr = rblk * RB + lr;
-    if (gr < N) y[gr] = __float2half(t);
+    for (int k = 0; k < S; ++k) t += red[k][r];
+    if (rblk * RB + r < N) y[rblk * RB + r] = __float2half(t);
   }
-  cl.sync();
 #endif
 }
 
@@ -397,7 +449,7 @@ bool pdl_on() {
   return v != 0;
 }
 
-// debug only: 1 skip dot, 8 skip table build, 16 coalesced read floor, 32 skip split-K reduce, 64 q via registers, 128 no s
+// debug only: 1 skip dot, 8 skip table build, 16 coalesced read floor, 64 q via registers, 128 no s, 256 s via registers
 int dbg_bits() {
   static const int v = env_int("CR_GEMV_DBG", 0);
   return v;
@@ -465,7 +517,7 @@ cudaError_t launch(const uint32_t* q, const __half* s, const __half* x, __half* 
   // without clusters, use smaller row blocks when 64-row blocks cannot fill the GPU
   static const int wenv = env_int("CR_GEMV_W", 0);
   int w = wenv;
-  if (w == 0) w = (di.major < 9 && (N + 63) / 64 < di.sms) ? 2 : 4;
+  if (w == 0) w = di.major >= 9 ? 8 : ((N + 63) / 64 < di.sms ? 2 : 4);
   if (w == 2) return launch_w<2, FP4>(q, s, x, y, N, K, st, di);
   if (w == 8) return launch_w<8, FP4>(q, s, x, y, N, K, st, di);
   return launch_w<4, FP4>(q, s, x, y, N, K, st, di);
