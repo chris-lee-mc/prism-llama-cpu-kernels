@@ -263,6 +263,7 @@ Common driver flags (`exps/common.py` helpers): `--dry-run` (no CUDA; print plan
 | e2_08b / e2_2b | `python -m exps.e2_hybrid_bf16 --model 0.8B` / `--model 2B` | rtx5090 | 30 | no | 60 |
 | e3 | `python -m exps.e3_residency` | rtx5090 | 30 | no | 60 |
 | e4_pq2 / e4_ptq1 | `python -m exps.e4_bonsai --quant PQ2_0` / `PTQ1_0` | pro6000, rtx5090 | 35 | yes | 80 |
+| e4_pdl | `python -m exps.e4_pdl` (PDL 0/1 and pre-wait L2 prefetch A/B, test-backend-ops check) | pro6000, rtx5090 | 35 | yes | 80 |
 | e5_base, e5_k4, e5_k6, e5_k8 | `python -m exps.e5_spec --k 0|4|6|8` | pro6000 | 30 | yes | 80 |
 
 ### 5.2 E1 working-set sweep (exps/e1_sweep.py)

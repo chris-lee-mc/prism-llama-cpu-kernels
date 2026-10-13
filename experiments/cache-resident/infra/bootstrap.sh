@@ -134,7 +134,7 @@ if [ "${CR_BUILD_LLAMA:-0}" = "1" ]; then
       -DCMAKE_BUILD_TYPE=Release -DLLAMA_CURL=OFF -DCMAKE_CUDA_COMPILER_LAUNCHER=ccache \
       -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache || MISSING+=("llama-cmake")
     TARGETS=()
-    for t in llama-bench llama-cli llama-server llama-speculative-simple; do
+    for t in llama-bench llama-cli llama-server llama-speculative-simple test-backend-ops; do
       if cmake --build "$BUILD" --target help 2>/dev/null | grep -Eq "(^|[. ])$t(:| |\$)"; then TARGETS+=("$t"); else say "target $t not found"; fi
     done
     if [ "${#TARGETS[@]}" -gt 0 ]; then

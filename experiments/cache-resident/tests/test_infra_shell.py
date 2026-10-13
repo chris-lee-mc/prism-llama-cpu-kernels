@@ -19,7 +19,7 @@ def test_bootstrap_pinned_content():
     s = (INFRA / "bootstrap.sh").read_text()
     for needle in ("https://download.pytorch.org/whl/cu128", "cuda-nsight-compute-12-8", "/usr/local/bin/ncu",
                    ".cr_bootstrap_ok", "-DGGML_CUDA=ON", "-DCMAKE_CUDA_ARCHITECTURES", "compute_cap", "bootstrap.log",
-                   "llama-bench", "llama-server", "llama-cli", "llama-speculative-simple", "CR_BUILD_LLAMA",
+                   "llama-bench", "llama-server", "llama-cli", "llama-speculative-simple", "test-backend-ops", "CR_BUILD_LLAMA",
                    "ccache", "/opt/nvidia/nsight-compute"):
         assert needle in s, needle
     # llama build must be opt-in

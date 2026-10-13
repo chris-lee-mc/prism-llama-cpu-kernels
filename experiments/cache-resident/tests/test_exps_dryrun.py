@@ -14,6 +14,7 @@ DRIVERS = [
     ("exps.e3d_resident_draft", []),
     ("exps.e4_bonsai", ["--quant", "PQ2_0"]),
     ("exps.e4_bonsai", ["--quant", "PTQ1_0"]),
+    ("exps.e4_pdl", []),
     ("exps.e5_spec", ["--k", "0"]),
     ("exps.e5_spec", ["--k", "6"]),
 ]
