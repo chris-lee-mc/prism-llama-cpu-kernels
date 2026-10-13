@@ -4,8 +4,12 @@
                         [--rounds 2] [--no-tbo]
 
 Configs (environment of each llama-bench process): pdl0 = GGML_CUDA_PDL=0, pdl1 = GGML_CUDA_PDL=1,
-pf<N> = GGML_CUDA_PDL=1 GGML_CUDA_PDL_PREFETCH=N (mmvq.cu / mmvq-ptq1_0.cuh issue prefetch.global.L2 of the
-first N K iterations of their weight rows before cudaGridDependencySynchronize). One llama-bench per
+pf<N> = GGML_CUDA_PDL=1 GGML_CUDA_PDL_PREFETCH=N (mul_mat_vec_q in mmvq.cu issues prefetch.global.L2 of the
+first N K iterations of its weight rows before cudaGridDependencySynchronize),
+pdl0_pf<N> = GGML_CUDA_PDL=0 GGML_CUDA_PDL_PREFETCH=N for the largest N (control). The prefetch kernels are separate
+instantiations, so their code generation (registers, occupancy) differs from the knob-off kernels even where nothing
+overlaps. pdl0_pf<N> vs pdl0 is that codegen plus prefetch cost with no previous kernel to overlap; read the overlap
+gain as pf<N> vs pdl1 next to pdl0_pf<N> vs pdl0. One llama-bench per
 (model, config) covers all depths: -p 0 -n 128 -d 0,32768 -r 5, f16 KV, -fa on, -ub 2048.
 Models: Bonsai 2 27B PQ2_0 and PTQ1_0 (targets) and the E5 draft Qwen3.5-0.8B alone, as Q8_0 (mmvq, prefetch active)
 and BF16 (mul_mat_vec_f: the prefetch is not there, so pf rows are a control).
@@ -17,7 +21,8 @@ cannot show that prefetch addresses are in range: prefetch.global.L2 returns no 
 Prefetch kernels are separate template instantiations (pdl_pf), picked on the host when the knob is > 0; the knob-off
 kernels have the same registers and shared memory as before the prefetch (nvcc -Xptxas -v, sm_86 and sm_120).
 Not covered by the prefetch: more than one column (so PQ2_0 verify widths 3-8, mul_mat_vec_pq2_0_mc), all other quant
-types, ids (MoE) mat-vecs, and the tail bytes of blocks that cross a 128 B line (first byte only).
+types, ids (MoE) mat-vecs, mul_mat_vec_ptq1_0_pt (GGML_CUDA_BATCH_INVARIANT=1 or no PDL; PTQ1_0 decode on sm_90+ runs
+the y_soa kernel of mul_mat_vec_q), and the tail bytes of blocks that cross a 128 B line (first byte only).
 Host health: nvidia-smi is sampled during every llama-bench call (SM/mem clocks, power draw and cap, temperature);
 a degraded host (SM clock < 40% of max, mem clock < 50%, power cap < 75% of default) on the first call stops the run.
 Needs CR_LLAMA_BIN with llama-bench and test-backend-ops built (CR_BUILD_LLAMA=1).
@@ -51,6 +56,9 @@ def configs(prefetch: list[int]) -> list[tuple[str, dict]]:
     out = [("pdl0", {"GGML_CUDA_PDL": "0"}), ("pdl1", {"GGML_CUDA_PDL": "1"})]
     for n in prefetch:
         out.append((f"pf{n}", {"GGML_CUDA_PDL": "1", "GGML_CUDA_PDL_PREFETCH": str(n)}))
+    if prefetch:
+        n = max(prefetch)
+        out.append((f"pdl0_pf{n}", {"GGML_CUDA_PDL": "0", "GGML_CUDA_PDL_PREFETCH": str(n)}))
     return out
 
 
@@ -92,7 +100,7 @@ def _median(xs):
 
 
 def summarize(rows: list[dict], cfg_names: list[str]) -> dict:
-    """Per model and depth: median tok/s per config and the gains pdl1 vs pdl0 and pf<N> vs pdl1 (percent).
+    """Per model and depth: median tok/s per config and the gains pdl1 vs pdl0, pf<N> vs pdl1 and the control pdl0_pf<N> vs pdl0 (percent).
 
     Only rounds in which every config has a result count, so a budget cut cannot leave half a reverse-order pair.
     """
@@ -114,6 +122,8 @@ def summarize(rows: list[dict], cfg_names: list[str]) -> dict:
             for c in cfg_names:
                 if c.startswith("pf") and med.get(c) and med.get("pdl1"):
                     gains[f"{c}_vs_pdl1_pct"] = 100.0 * (med[c] / med["pdl1"] - 1.0)
+                if c.startswith("pdl0_pf") and med.get(c) and med.get("pdl0"):
+                    gains[f"{c}_vs_pdl0_pct"] = 100.0 * (med[c] / med["pdl0"] - 1.0)
         summ.setdefault(model, {})[d] = {"tok_s": med, "n": {c: len(vals[c]) for c in cfg_names}, "rounds": rounds, **gains}
     return summ
 
@@ -269,7 +279,7 @@ def run(args) -> int:
         print(f"error: {bin_dir / 'llama-bench'} not found; build llama.cpp (CR_BUILD_LLAMA=1) or set CR_LLAMA_BIN",
               file=sys.stderr)
         return 2
-    budget = common.Budget(args.budget_min or (6 if args.quick else 45))
+    budget = common.Budget(args.budget_min or (6 if args.quick else 55))
     cfgs = configs(args.prefetch)
     names = [c for c, _ in cfgs]
     config = {"models": args.models, "depths": args.depths, "reps": args.reps, "rounds": args.rounds, "configs": dict(cfgs),
@@ -328,6 +338,7 @@ def run(args) -> int:
     extra["summary"] = summarize(rows, names)
     notes.extend(verdict_lines(extra["summary"]))
     notes.append("draft_bf16 runs mul_mat_vec_f, which has no pre-wait prefetch: its pf rows are a control")
+    notes.append("pdl0_pf<N> vs pdl0 = codegen plus prefetch cost without overlap; compare it with pf<N> vs pdl1 for the overlap gain")
     notes.append("test-backend-ops checks that results are unchanged, not that prefetch addresses are in range")
     notes.append("not covered by the prefetch: more than one column (PQ2_0 verify widths 3-8), ids mat-vecs, other quant types")
     if extra["tbo"] and not all(t.get("ok") for t in extra["tbo"]):

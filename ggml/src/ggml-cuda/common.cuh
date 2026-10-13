@@ -190,7 +190,7 @@ static inline bool ggml_cuda_batch_invariant() {
     return enabled;
 }
 
-// GGML_CUDA_PDL_PREFETCH=N: one-column mat-vec kernels (PQ2_0, PTQ1_0, Q8_0, no ids) prefetch the weights of their first N K iterations
+// GGML_CUDA_PDL_PREFETCH=N: mul_mat_vec_q (one column, PQ2_0, PTQ1_0, Q8_0, no ids) prefetches the weights of its first N K iterations
 // to L2 before the PDL wait, so the DRAM fetch overlaps the tail of the previous kernel. 0 (default) = off. Needs PDL (sm_90+, GGML_CUDA_PDL).
 static inline int ggml_cuda_pdl_prefetch() {
     static const int n = [] {
