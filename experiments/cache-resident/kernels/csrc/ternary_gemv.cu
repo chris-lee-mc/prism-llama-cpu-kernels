@@ -1,11 +1,12 @@
 // Ternary GEMV kernels, see ternary_gemv.h and SPEC.md section 4.
 //
-// Mapping (both variants): block = W warps = 16 * W rows. Lane l = row (l >> 1) of its warp, half h = l & 1.
-// Per group (128 weights, 32 B of a row) a lane holds one uint4: weights 64h .. 64h + 63. Lane pairs read full 32 B sectors.
-// All lanes of a block walk the same K range in tiles of kTile groups, so one shared table per tile serves 16 * W rows.
-// The q loads of the next tile are in flight while the current tile is decoded.
-// Split-K (sm_90+): S blocks of one cluster share a row block and split its groups; partial sums meet over DSMEM.
-// PDL (sm_90+, opt-in with CR_GEMV_PDL=1): weights are loaded before griddepcontrol.wait, x and y only after it.
+// Block = W warps = RB = 16 * W rows. Lane l works on row (l >> 1) of its warp, half h = l & 1 of each group (64 weights).
+// K is cut in tiles of kTile groups (128 B of a row). Tiles stream through a kStages ring in shared memory with cp.async:
+// each warp copy instruction reads 4 full 128 B lines, so DRAM sees long contiguous runs. x tiles ride in the same ring.
+// Per tile the block builds one table (LUT: pair sums of x, FP4: x as float) that all RB rows share.
+// Split-K (sm_90+): S blocks of one cluster share a row block and take tiles split, split + S, ...; at any time a
+// cluster reads S neighbouring tiles of each row. Partial sums meet over DSMEM.
+// PDL (sm_90+, opt-in with CR_GEMV_PDL=1): weight copies start before griddepcontrol.wait, x and y only after it.
 // CR_FP4_MMA is reserved: no MMA path exists, see FP4.md.
 #include "ternary_gemv.h"
 
@@ -22,12 +23,9 @@ constexpr int kSlot = 32;        // LUT floats per slot: pair j (h = 0) then pai
 constexpr int kLutGroup = 32 * kSlot;
 constexpr int kXHalf = 68;       // fp4 x tile: 64 floats + 4 pad so the two halves use different banks
 constexpr int kXGroup = 2 * kXHalf;
+constexpr int kStages = 4;       // cp.async ring depth
+constexpr int kTileBytes = kTile * 32;
 constexpr unsigned kFull = 0xffffffffu;
-
-struct Tile {
-  uint4 q[kTile];
-  unsigned short s[kTile];
-};
 
 // Weights are read once: skip L1, keep the default L2 policy (L2 persistence experiments rely on it).
 __device__ __forceinline__ uint4 ld_stream(const uint4* p) {
@@ -36,18 +34,20 @@ __device__ __forceinline__ uint4 ld_stream(const uint4* p) {
   return v;
 }
 
-__device__ __forceinline__ void load_tile(Tile& t, const uint4* qrow, const unsigned short* srow, int g0, int ge, int dbg) {
-#pragma unroll
-  for (int u = 0; u < kTile; ++u) {
-    const int g = g0 + u;
-    t.q[u] = make_uint4(0u, 0u, 0u, 0u);
-    t.s[u] = 0;
-    if (g < ge) {
-      t.q[u] = (dbg & 2) ? __ldg(qrow + 2 * g) : ld_stream(qrow + 2 * g);
-      t.s[u] = __ldg(srow + g);
-    }
-  }
+__device__ __forceinline__ void cp_async16(void* smem, const void* g) {
+  const unsigned sa = (unsigned)__cvta_generic_to_shared(smem);
+  asm volatile("cp.async.cg.shared.global [%0], [%1], 16;" ::"r"(sa), "l"(g) : "memory");
 }
+
+__device__ __forceinline__ void cp_async_commit() { asm volatile("cp.async.commit_group;" ::: "memory"); }
+
+template <int N>
+__device__ __forceinline__ void cp_async_wait() {
+  asm volatile("cp.async.wait_group %0;" ::"n"(N) : "memory");
+}
+
+// 16 B chunk c (0..7) of tile row r sits at chunk c ^ ((r & 3) << 1): the 8 lanes of a 128-bit read phase hit 8 bank groups.
+__device__ __forceinline__ int q_chunk(int r, int c) { return r * 8 + (c ^ ((r & 3) << 1)); }
 
 __device__ __forceinline__ float2 h2f2(uint32_t v) { return __half22float2(*reinterpret_cast<const __half2*>(&v)); }
 
@@ -70,7 +70,7 @@ __device__ __forceinline__ uint32_t byte_of(uint32_t v, int b) { return __byte_p
 
 __device__ __forceinline__ float lds_at(const char* base, uint32_t off) { return *reinterpret_cast<const float*>(base + off); }
 
-// x of one tile in registers, loaded one tile ahead. LUT: one half2 pair per table chunk. FP4: 4 halves per uint2.
+// x of one tile in registers, loaded one tile ahead. LUT: one half2 pair per table chunk. FP4: one half2 per item.
 template <int NT, bool FP4>
 struct XTile {
   static constexpr int kN = FP4 ? kTile * 64 / NT : kTile * 256 / NT;
@@ -81,13 +81,10 @@ template <int NT, bool FP4>
 __device__ __forceinline__ void x_load(XTile<NT, FP4>& t, const __half* x, int g0, int ng) {
   if (FP4) {
 #pragma unroll
-    for (int it = 0; it < XTile<NT, FP4>::kN / 2; ++it) {
+    for (int it = 0; it < XTile<NT, FP4>::kN; ++it) {
       const int idx = it * NT + threadIdx.x;
-      const int u = idx >> 5;
-      uint2 v = make_uint2(0u, 0u);
-      if (u < ng) v = reinterpret_cast<const uint2*>(x)[(g0 + u) * 32 + (idx & 31)];
-      t.v[2 * it] = v.x;
-      t.v[2 * it + 1] = v.y;
+      const int u = idx >> 6;
+      t.v[it] = u < ng ? reinterpret_cast<const uint32_t*>(x)[(g0 + u) * 64 + (idx & 63)] : 0u;
     }
   } else {
 #pragma unroll
@@ -106,13 +103,10 @@ template <int NT, bool FP4>
 __device__ __forceinline__ void x_store(float* sm, const XTile<NT, FP4>& t, int ng) {
   if (FP4) {
 #pragma unroll
-    for (int it = 0; it < XTile<NT, FP4>::kN / 2; ++it) {
+    for (int it = 0; it < XTile<NT, FP4>::kN; ++it) {
       const int idx = it * NT + threadIdx.x;
-      const int u = idx >> 5, k = (idx & 31) * 4;
-      if (u < ng) {
-        const float2 a = h2f2(t.v[2 * it]), b = h2f2(t.v[2 * it + 1]);
-        *reinterpret_cast<float4*>(sm + u * kXGroup + (k >> 6) * kXHalf + (k & 63)) = make_float4(a.x, a.y, b.x, b.y);
-      }
+      const int u = idx >> 6, k = (idx & 63) * 2;
+      if (u < ng) *reinterpret_cast<float2*>(sm + u * kXGroup + (k >> 6) * kXHalf + (k & 63)) = h2f2(t.v[it]);
     }
   } else {
 #pragma unroll
@@ -198,13 +192,26 @@ __device__ __forceinline__ float fp4_dot(const float* xh, const char* tabb, uint
   return (a[0] + a[1]) + (a[2] + a[3]);
 }
 
+// Ring slots actually used: a block never holds more than its tile count.
+__host__ __device__ __forceinline__ int ring_slots(int K, int S) {
+  const int T = ((K >> 7) + kTile - 1) / kTile;
+  return min(kStages, (T + S - 1) / S);
+}
+
+template <int W, bool FP4>
+__host__ __device__ constexpr int smem_bytes(int slots) {
+  return slots * 16 * W * kTileBytes + (FP4 ? kTile * kXGroup : kTile * kLutGroup) * 4;
+}
+
 template <int W, bool FP4>
 __device__ __forceinline__ void gemv_body(const uint32_t* __restrict__ q, const __half* __restrict__ s, const __half* __restrict__ x,
                                           __half* __restrict__ y, int N, int K, int S, int dbg) {
   constexpr int NT = W * 32;
   constexpr int RB = 16 * W;
-  constexpr int kSmem = FP4 ? kTile * kXGroup : kTile * kLutGroup;
-  __shared__ __align__(16) float tile_smem[kSmem];
+  constexpr int kQStage = RB * kTileBytes;  // bytes
+  extern __shared__ __align__(16) unsigned char dsm[];
+  unsigned char* qs = dsm;  // [kStages][RB * 8] uint4, swizzled
+  float* table = reinterpret_cast<float*>(dsm + ring_slots(K, S) * kQStage);
   __shared__ __align__(16) uint32_t stage[FP4 ? W * 256 : 1];
   __shared__ float tab[16];
 
@@ -214,14 +221,12 @@ __device__ __forceinline__ void gemv_body(const uint32_t* __restrict__ q, const 
   const int h = lane & 1;
   const int rblk = blockIdx.x / S;
   const int split = blockIdx.x - rblk * S;
-  const int row = rblk * RB + warp * 16 + (lane >> 1);
-  const int rowc = row < N ? row : N - 1;
+  const int rl = warp * 16 + (lane >> 1);  // row inside the block
+  const int row = rblk * RB + rl;
   const int G = K >> 7;
-  const int gb = (int)((long long)G * split / S);
-  const int ge = (int)((long long)G * (split + 1) / S);
-
-  const uint4* qrow = reinterpret_cast<const uint4*>(q) + (size_t)rowc * (size_t)(K >> 6) + h;
-  const unsigned short* srow = reinterpret_cast<const unsigned short*>(s) + (size_t)rowc * (size_t)G;
+  const int T = (G + kTile - 1) / kTile;
+  const int nt = (T - split + S - 1) / S;  // tiles of this block: split, split + S, ...
+  const size_t qpitch = (size_t)(K >> 2);  // bytes per row
 
   if (dbg & 16) {  // debug: coalesced streaming read of all q, the bandwidth floor of this launch shape
     const size_t n4 = (size_t)N * (size_t)(K >> 6);
@@ -240,47 +245,75 @@ __device__ __forceinline__ void gemv_body(const uint32_t* __restrict__ q, const 
     if (v == 0x12345678u) y[0] = __float2half(1.f);
     return;
   }
-  grid_dep_launch();
-  Tile cur;
-  load_tile(cur, qrow, srow, gb, ge, dbg);
-  grid_dep_wait();
-  if (FP4 && tid < 16) tab[tid] = e2m1_value(tid);
 
-  XTile<NT, FP4> xc;
-  x_load(xc, x, gb, min(kTile, ge - gb));
+  const unsigned char* qb = reinterpret_cast<const unsigned char*>(q);
+  // copy tile number tt of the row block into ring slot sl
+  auto issue_q = [&](int tt, int sl) {
+    const int nc = min(kTile, G - tt * kTile) * 2;  // valid 16 B chunks per row
+#pragma unroll
+    for (int it = 0; it < RB * 8 / NT; ++it) {
+      const int i = it * NT + tid;
+      const int r = i >> 3, c = i & 7;
+      const int gr = min(rblk * RB + r, N - 1);
+      if (c < nc) cp_async16(qs + sl * kQStage + q_chunk(r, c) * 16, qb + (size_t)gr * qpitch + (size_t)tt * kTileBytes + c * 16);
+    }
+  };
+  const unsigned short* srow = reinterpret_cast<const unsigned short*>(s) + (size_t)(row < N ? row : N - 1) * (size_t)G;
+  auto load_s = [&](int tt, unsigned short* v) {
+#pragma unroll
+    for (int u = 0; u < kTile; ++u) {
+      const int g = tt * kTile + u;
+      v[u] = g < G ? __ldg(srow + g) : (unsigned short)0;
+    }
+  };
+
+  grid_dep_launch();
+#pragma unroll
+  for (int p = 0; p < kStages - 1; ++p) {
+    if (p < nt) issue_q(split + p * S, p);
+    cp_async_commit();
+  }
+  unsigned short sc[kTile], sn[kTile];
+  load_s(split, sc);
+  grid_dep_wait();
+  XTile<NT, FP4> xc, xn;
+  x_load(xc, x, split * kTile, min(kTile, G - split * kTile));
+  if (FP4 && tid < 16) tab[tid] = e2m1_value(tid);
 
   const uint32_t hb = h ? 0x40404040u : 0u;
   float acc = 0.f;
-  for (int g0 = gb; g0 < ge; g0 += kTile) {
-    const int ng = min(kTile, ge - g0);
-    const bool more = g0 + kTile < ge;
-    Tile nxt;
-    XTile<NT, FP4> xn;
-    if (more) {
-      load_tile(nxt, qrow, srow, g0 + kTile, ge, dbg);
-      x_load(xn, x, g0 + kTile, min(kTile, ge - g0 - kTile));
+  for (int i = 0; i < nt; ++i) {
+    const int tt = split + i * S;
+    const int sl = i % kStages;
+    cp_async_wait<kStages - 2>();  // one group per tile: tile i has landed
+    __syncthreads();               // tile i visible; everyone is done with tile i - 1 and the table
+    if (i + kStages - 1 < nt) issue_q(split + (i + kStages - 1) * S, (i + kStages - 1) % kStages);
+    cp_async_commit();
+    if (i + 1 < nt) {
+      load_s(tt + S, sn);
+      x_load(xn, x, (tt + S) * kTile, min(kTile, G - (tt + S) * kTile));
     }
-    if (!(dbg & 8)) {
-      if (g0 != gb) __syncthreads();
-      x_store(tile_smem, xc, ng);
-      __syncthreads();
-    }
+    const int ng = min(kTile, G - tt * kTile);
+    if (!(dbg & 8)) x_store(table, xc, ng);
+    __syncthreads();
+    const uint4* qt = reinterpret_cast<const uint4*>(qs + sl * kQStage);
 #pragma unroll
     for (int u = 0; u < kTile; ++u) {
       if (u < ng) {
+        const uint4 w = qt[q_chunk(rl, 2 * u + h)];
         float d;
         if (dbg & 1) {
-          d = __uint_as_float((cur.q[u].x ^ cur.q[u].y ^ cur.q[u].z ^ cur.q[u].w) & 0x3fffffffu) * 1e-30f;
+          d = __uint_as_float((w.x ^ w.y ^ w.z ^ w.w) & 0x3fffffffu) * 1e-30f;
         } else if (FP4) {
-          d = fp4_dot(tile_smem + u * kXGroup + h * kXHalf, reinterpret_cast<const char*>(tab), stage + warp * 256, lane, cur.q[u]);
+          d = fp4_dot(table + u * kXGroup + h * kXHalf, reinterpret_cast<const char*>(tab), stage + warp * 256, lane, w);
         } else {
-          d = lut_dot(tile_smem + u * kLutGroup, cur.q[u], hb);
+          d = lut_dot(table + u * kLutGroup, w, hb);
         }
-        acc = fmaf(h2f(cur.s[u]), d, acc);
+        acc = fmaf(h2f(sc[u]), d, acc);
       }
     }
-    if (!more) break;
-    cur = nxt;
+#pragma unroll
+    for (int u = 0; u < kTile; ++u) sc[u] = sn[u];
     xc = xn;
   }
   acc += __shfl_xor_sync(kFull, acc, 1);
@@ -291,7 +324,7 @@ __device__ __forceinline__ void gemv_body(const uint32_t* __restrict__ q, const 
   }
 #if defined(__CUDA_ARCH__) && __CUDA_ARCH__ >= 900
   __shared__ float red[RB];
-  if (h == 0) red[warp * 16 + (lane >> 1)] = acc;
+  if (h == 0) red[rl] = acc;
   cg::cluster_group cl = cg::this_cluster();
   cl.sync();
   const int per = RB / S;
@@ -350,7 +383,7 @@ int env_int(const char* name, int def) {
   return e && *e ? atoi(e) : def;
 }
 
-// Tuning knobs, read once: CR_GEMV_PDL=1 enables PDL, CR_GEMV_BPS = target blocks per SM for split-K (default 2).
+// Tuning knobs, read once: CR_GEMV_PDL=1 enables PDL, CR_GEMV_BPS = target blocks per SM for split-K (default 3), CR_GEMV_W = warps per block.
 bool pdl_on() {
   static const int v = env_int("CR_GEMV_PDL", 0);
   return v != 0;
@@ -363,7 +396,7 @@ int dbg_bits() {
 }
 
 int blocks_per_sm() {
-  static const int v = env_int("CR_GEMV_BPS", 2);
+  static const int v = env_int("CR_GEMV_BPS", 3);
   return v;
 }
 
@@ -371,16 +404,27 @@ template <int W, bool FP4>
 cudaError_t launch_w(const uint32_t* q, const __half* s, const __half* x, __half* y, int N, int K, cudaStream_t st, const DevInfo& di) {
   constexpr int RB = 16 * W;
   const int rblocks = (N + RB - 1) / RB;
-  const int G = K >> 7;
+  const int T = ((K >> 7) + kTile - 1) / kTile;
   int S = 1;
-  // split K over a cluster until there are about 2 blocks per SM
+  // split K over a cluster until there are about blocks_per_sm() blocks per SM
   if (di.major >= 9) {
-    while (S < kMaxSplit && 2 * S <= G && rblocks * S < blocks_per_sm() * di.sms) S *= 2;
+    while (S < kMaxSplit && 2 * S <= T && rblocks * S < blocks_per_sm() * di.sms) S *= 2;
+  }
+  const int smem = smem_bytes<W, FP4>(ring_slots(K, S));
+  static bool attr_done = false;
+  if (!attr_done) {
+    constexpr int smax = smem_bytes<W, FP4>(kStages);
+    if (FP4) {
+      cudaFuncSetAttribute(cr_gemv_fp4_kernel<W>, cudaFuncAttributeMaxDynamicSharedMemorySize, smax);
+    } else {
+      cudaFuncSetAttribute(cr_gemv_lut_kernel<W>, cudaFuncAttributeMaxDynamicSharedMemorySize, smax);
+    }
+    attr_done = true;
   }
   cudaLaunchConfig_t cfg = {};
   cfg.gridDim = dim3((unsigned)(rblocks * S));
   cfg.blockDim = dim3(W * 32);
-  cfg.dynamicSmemBytes = 0;
+  cfg.dynamicSmemBytes = smem;
   cfg.stream = st;
   cudaLaunchAttribute at[2];
   int na = 0;
@@ -411,7 +455,11 @@ cudaError_t launch(const uint32_t* q, const __half* s, const __half* x, __half* 
   if (!args_ok(q, s, x, y, N, K)) return cudaErrorInvalidValue;
   const DevInfo di = dev_info();
   // without clusters, use smaller row blocks when 64-row blocks cannot fill the GPU
-  if (di.major < 9 && (N + 63) / 64 < di.sms) return launch_w<2, FP4>(q, s, x, y, N, K, st, di);
+  static const int wenv = env_int("CR_GEMV_W", 0);
+  int w = wenv;
+  if (w == 0) w = (di.major < 9 && (N + 63) / 64 < di.sms) ? 2 : 4;
+  if (w == 2) return launch_w<2, FP4>(q, s, x, y, N, K, st, di);
+  if (w == 8) return launch_w<8, FP4>(q, s, x, y, N, K, st, di);
   return launch_w<4, FP4>(q, s, x, y, N, K, st, di);
 }
 

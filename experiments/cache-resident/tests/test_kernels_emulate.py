@@ -30,7 +30,14 @@ def _byte(v, b):
 
 
 def _splits(G, S):
-    return [(G * k // S, G * (k + 1) // S) for k in range(S)]
+    """Tile starts per split: block `split` takes tiles split, split + S, ... (tile = TILE groups)."""
+    T = -(-G // TILE)
+    return [[t * TILE for t in range(k, T, S)] for k in range(S)]
+
+
+def q_chunk(r, c):
+    """Mirror of q_chunk: swizzled 16 B slot of chunk c of tile row r."""
+    return r * 8 + (c ^ ((r & 3) << 1))
 
 
 # ---------- variant (a): LUT ----------
@@ -75,10 +82,10 @@ def emulate_lut(q, s, x, warps=4, S=1, check_banks=False):
     max_ways = 1
     for rblk in range((N + RB - 1) // RB):
         red = np.zeros((S, RB), dtype=np.float32)
-        for split, (gb, ge) in enumerate(_splits(G, S)):
+        for split, starts in enumerate(_splits(G, S)):
             acc = np.zeros((warps, 32), dtype=np.float32)
-            for g0 in range(gb, ge, TILE):
-                ng = min(TILE, ge - g0)
+            for g0 in starts:
+                ng = min(TILE, G - g0)
                 lut = np.zeros(TILE * LUT_GROUP, dtype=np.float32)
                 phases = lut_build(lut, xf, g0, ng)
                 if check_banks:
@@ -146,10 +153,10 @@ def emulate_fp4(q, s, x, warps=4, S=1):
     y = np.zeros(N, dtype=np.float32)
     for rblk in range((N + RB - 1) // RB):
         red = np.zeros((S, RB), dtype=np.float32)
-        for split, (gb, ge) in enumerate(_splits(G, S)):
+        for split, starts in enumerate(_splits(G, S)):
             acc = np.zeros((warps, 32), dtype=np.float32)
-            for g0 in range(gb, ge, TILE):
-                ng = min(TILE, ge - g0)
+            for g0 in starts:
+                ng = min(TILE, G - g0)
                 xs = np.zeros(TILE * X_GROUP, dtype=np.float32)
                 for e in range(ng * 128):
                     u, k = e >> 7, e & 127
@@ -290,3 +297,13 @@ def test_attn_split_math_matches_reference(T_, Hq, Hkv, D):
     assert 1 <= nsplit <= 128
     ref = ref_attn_decode(q, Kc, Vc, Hq, Hkv, D, scale).numpy()
     np.testing.assert_allclose(o, ref, rtol=1e-4, atol=1e-5)
+
+
+def test_q_tile_swizzle_is_conflict_free():
+    # copy: 8 lanes of a phase write the 8 chunks of one row; read: lanes (row r, half h) read chunk 2u + h
+    for r in range(64):
+        assert sorted(q_chunk(r, c) % 8 for c in range(8)) == list(range(8))
+    for base in range(0, 64, 4):
+        for u in range(4):
+            slots = [q_chunk(base + i, 2 * u + h) % 8 for i in range(4) for h in range(2)]
+            assert len(set(slots)) == 8
