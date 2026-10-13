@@ -225,3 +225,20 @@ def test_all_error_rows_do_not_flag_draft(monkeypatch):
     rows, info = e5.run_prompts(prompts, 8, common.Budget(None), [], 4, "draft-simple")
     srv.shutdown()
     assert len(rows) == 4 and all("error" in r for r in rows) and info["draft_not_used"] is False
+
+
+def test_e5_cost_cmds_rows_and_break_even():
+    from exps import e5_cost as ec
+    c = ec.target_cmd("/b", "/m.gguf", [1, 5, 9], 512, 5)
+    assert c[c.index("-p") + 1] == "1,5,9" and c[c.index("-n") + 1] == "0" and c[c.index("-d") + 1] == "512"
+    d = ec.draft_cmd("/b", "/d.gguf", 512, 5)
+    assert d[d.index("-p") + 1] == "0" and d[d.index("-n") + 1] == "128"
+    rows = ec.rows_from([{"n_prompt": 5, "n_gen": 0, "avg_ts": 500.0}, {"n_prompt": 0, "n_gen": 128, "avg_ts": 400.0}], "x", 512)
+    assert rows[0]["kind"] == "verify" and rows[0]["ms_per_batch"] == pytest.approx(10.0)
+    assert rows[1]["kind"] == "decode" and rows[1]["ms_per_batch"] == pytest.approx(2.5)
+    # verify of 5 costs 2x one decode, free draft: need E = 2 -> (1 - a^5) / (1 - a) = 2 -> a ~ 0.519
+    assert ec.break_even(0.0, {1: 8.0, 5: 16.0}, 8.0, 4) == pytest.approx(0.519, abs=0.003)
+    assert ec.break_even(100.0, {1: 8.0, 5: 16.0}, 8.0, 4) is None
+    s = ec.summarize([{"model": "pq2", "kind": "verify", "width": w, "ms_per_batch": 8.0 + w} for w in range(1, 10)]
+                     + [{"model": "draft_bf16", "kind": "decode", "width": 1, "ms_per_batch": 2.0}])
+    assert s["drafts"]["draft_bf16"]["t_step_ms"][4] == pytest.approx(4 * 2.0 + 13.0) and "draft_q8_0" not in s["drafts"]

@@ -12,7 +12,7 @@ EXP = pathlib.Path(__file__).resolve().parent.parent
 MAN = json.loads((EXP / "exps" / "manifest.json").read_text())
 KEYS = {"cmd", "gpus", "est_min", "failsafe_min", "build_llama", "disk_gb", "desc"}
 LONG_FAILSAFE = {"e4_pdl": 70}  # clone + cold build + downloads + 40 benches; launch needs --allow-long
-EXPECTED = {"p0_smoke", "p0_l2", "e1", "e2_08b", "e2_2b", "e3", "e3d", "e4_pq2", "e4_ptq1", "e4_pdl", "e5_base", "e5_k4", "e5_k6", "e5_k8"}
+EXPECTED = {"p0_smoke", "p0_l2", "e1", "e2_08b", "e2_2b", "e3", "e3d", "e4_pq2", "e4_ptq1", "e4_pdl", "e5_base", "e5_k4", "e5_k6", "e5_k8", "e5_cost"}
 
 
 def test_manifest_has_all_experiments():
@@ -55,6 +55,8 @@ def test_result_dirs_match_manifest_keys():
     from exps import e4_pdl
     assert e4_pdl.EXP in MAN
     assert set(e5_spec.EXP_NAMES.values()) <= set(MAN)
+    from exps import e5_cost
+    assert e5_cost.EXP in MAN
     from exps import e1_sweep, e3_residency, e3d_resident_draft
     assert e1_sweep.EXP in MAN and e3_residency.EXP in MAN and e3d_resident_draft.EXP in MAN
 

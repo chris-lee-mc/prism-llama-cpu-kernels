@@ -221,6 +221,18 @@ def build_prof_tool(bin_dir: pathlib.Path, notes: list) -> pathlib.Path | None:
     return out
 
 
+def run_bench_entries(cmd: list[str], timeout: float) -> tuple[list[dict], str | None]:
+    """All llama-bench JSON entries of one run, or ([], error)."""
+    try:
+        p = subprocess.run(cmd, capture_output=True, text=True, timeout=max(1.0, timeout))
+    except subprocess.TimeoutExpired:
+        return [], "timeout"
+    if p.returncode != 0:
+        return [], f"exit {p.returncode}: {(p.stderr or '')[-300:].strip()}"
+    got = parse_bench_json(p.stdout)
+    return got, None if got else "no entries in llama-bench output"
+
+
 def run_bench(cmd: list[str], timeout: float) -> tuple[dict | None, str | None]:
     try:
         p = subprocess.run(cmd, capture_output=True, text=True, timeout=max(1.0, timeout))

@@ -162,5 +162,16 @@
   "build_llama": true,
   "disk_gb": 80,
   "desc": "E5 speculative decoding K=8 with Qwen3.5-0.8B BF16 draft"
+ },
+ "e5_cost": {
+  "cmd": "python3 -m exps.e5_cost",
+  "gpus": [
+   "pro6000"
+  ],
+  "est_min": 10,
+  "failsafe_min": 40,
+  "build_llama": true,
+  "disk_gb": 80,
+  "desc": "E5 step cost: Bonsai 2 27B PQ2_0 verify batch cost for widths 1-9 (llama-bench -p W -n 0 -d 512) and the Qwen3.5-0.8B draft decode cost (BF16, Q8_0); break-even acceptance per K"
  }
 }

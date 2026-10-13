@@ -14,6 +14,7 @@ import argparse
 import json
 import os
 import pathlib
+import shlex
 import signal
 import statistics
 import subprocess
@@ -241,7 +242,7 @@ def run(args) -> int:
                              extra={"summary": summarize(done, args.k, time.monotonic() - run_t0)})
 
     for attempt in range(2):
-        cmd = server_cmd(bin_dir, target, args.k, draft, spec_type=spec_type)
+        cmd = server_cmd(bin_dir, target, args.k, draft, spec_type=spec_type) + shlex.split(args.server_args)
         log_path = str(artifact_path(exp, f"server-{spec_type}.log", args.gpu))
         srv = Server(cmd, log_path)
         t0 = time.monotonic()
@@ -271,7 +272,7 @@ def run(args) -> int:
     summary["draft_incompatible"] = any(a.get("draft_rejected") for a in attempts)
     if summary["draft_incompatible"]:
         summary["label"] = "ngram-simple fallback, not the draft model"
-    config = {"k": args.k, "limit": args.limit, "n_predict": args.n_predict, "ctx": CTX, "prompts_file": str(args.prompts),
+    config = {"k": args.k, "limit": args.limit, "server_args": args.server_args, "n_predict": args.n_predict, "ctx": CTX, "prompts_file": str(args.prompts),
               "target": tinfo, "draft": dinfo, "attempts": attempts, "chat": info, "sampling": completion_body("", args.n_predict),
               "quick": args.quick}
     if not rows:
@@ -289,6 +290,7 @@ def parse_args(argv=None):
     ap.add_argument("--limit", type=int, default=200)
     ap.add_argument("--n-predict", type=int, default=192)
     ap.add_argument("--prompts", default=str(make_prompts.DEFAULT_OUT))
+    ap.add_argument("--server-args", default="", help="extra llama-server flags, e.g. --server-args=--spec-draft-backend-sampling")
     a = ap.parse_args(argv)
     if a.quick:
         a.limit, a.n_predict = min(a.limit, 6), min(a.n_predict, 48)
