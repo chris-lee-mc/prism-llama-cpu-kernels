@@ -11,6 +11,7 @@ DRIVERS = [
     ("exps.e2_hybrid_bf16", ["--model", "0.8B"]),
     ("exps.e2_hybrid_bf16", ["--model", "2B"]),
     ("exps.e3_residency", []),
+    ("exps.e3d_resident_draft", []),
     ("exps.e4_bonsai", ["--quant", "PQ2_0"]),
     ("exps.e4_bonsai", ["--quant", "PTQ1_0"]),
     ("exps.e5_spec", ["--k", "0"]),

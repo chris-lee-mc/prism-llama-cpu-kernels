@@ -317,19 +317,20 @@ def set_limit(nbytes: int | None = None) -> int:
     return be.get_limit()
 
 
-def _window_info(base, nbytes, hit_ratio, clamped):
+def _window_info(base, nbytes, hit_ratio, clamped, hit_prop=ACCESS_PERSISTING, miss_prop=ACCESS_STREAMING):
     return {"base_ptr": int(base), "num_bytes": int(nbytes), "hit_ratio": float(hit_ratio),
-            "hit_prop": "persisting", "miss_prop": "streaming", "clamped": bool(clamped)}
+            "hit_prop": _PROP_NAMES[hit_prop], "miss_prop": _PROP_NAMES[miss_prop], "clamped": bool(clamped)}
 
 
-def set_stream_window(ptr, nbytes: int | None = None, hit_ratio: float = 1.0, stream=None) -> dict:
-    """Access policy window on a stream: hitProp Persisting, missProp Streaming. nbytes clamped to the window max."""
+def set_stream_window(ptr, nbytes: int | None = None, hit_ratio: float = 1.0, stream=None,
+                      hit_prop: int = ACCESS_PERSISTING, miss_prop: int = ACCESS_STREAMING) -> dict:
+    """Access policy window on a stream (default hitProp Persisting, missProp Streaming). nbytes clamped to the window max."""
     be = _be()
     hit_ratio = _check_ratio(hit_ratio)
     base, size = _resolve_ptr(ptr, nbytes)
     size, clamped = _clamp_window(size, be.max_window_bytes(torch.cuda.current_device()))
-    be.set_stream_window(_stream_handle(stream), base, size, hit_ratio, ACCESS_PERSISTING, ACCESS_STREAMING)
-    return _window_info(base, size, hit_ratio, clamped)
+    be.set_stream_window(_stream_handle(stream), base, size, hit_ratio, hit_prop, miss_prop)
+    return _window_info(base, size, hit_ratio, clamped, hit_prop, miss_prop)
 
 
 def get_stream_window(stream=None) -> dict:

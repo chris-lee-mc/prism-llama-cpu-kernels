@@ -71,6 +71,18 @@
   "disk_gb": 60,
   "desc": "E3 GDN state and LM head residency (bf16/int8/48k heads)"
  },
+ "e3d": {
+  "cmd": "python3 -m exps.e3d_resident_draft",
+  "gpus": [
+   "rtx5090",
+   "pro6000"
+  ],
+  "est_min": 20,
+  "failsafe_min": 40,
+  "build_llama": false,
+  "disk_gb": 40,
+  "desc": "E3d fully resident ternary draft step (D 16-160 MiB) off/on persisting, steady and after a 6 GiB verify pass, PDL 0/1"
+ },
  "e4_pq2": {
   "cmd": "python3 -m exps.e4_bonsai --quant PQ2_0",
   "gpus": [
