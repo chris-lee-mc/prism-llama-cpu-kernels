@@ -33,8 +33,8 @@ def test_dry_run_subprocess_e1():
     r = subprocess.run([sys.executable, "-m", "exps.e1_sweep", "--dry-run"], cwd=EXP, capture_output=True, text=True, timeout=120)
     assert r.returncode == 0, r.stderr
     plan = json.loads(r.stdout)
-    assert [x["W_mib"] for x in plan["layers"]] == [16, 32, 48, 64, 80, 96, 128, 192, 256, 512, 1024]
-    assert plan["modes"] == ["off", "0.5", "0.75", "1.0"]
+    assert [x["W_mib"] for x in plan["layers"]] == [8, 16, 24, 32, 48, 56, 64, 80, 96, 128, 192, 256, 512, 1024]
+    assert plan["modes"] == ["off", "0.5", "0.75", "1.0", "1.0L"] and plan["C_mib"] == 512
 
 
 def test_proj_runs_offline(capsys):

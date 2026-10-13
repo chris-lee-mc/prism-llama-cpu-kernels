@@ -238,6 +238,10 @@ class RunPod:
                "dockerArgs": docker_args, "containerDiskInGb": int(disk_gb), "volumeInGb": 0,
                "minVcpuCount": int(min_vcpu), "minMemoryInGb": 16, "ports": ports,
                "env": [{"key": k, "value": str(v)} for k, v in env.items()]}
+        # opt-in host filter, e.g. CR_ALLOWED_CUDA=12.8,12.9,13.0 skips driver 590 (CUDA 13.1) hosts where CUDA init fails
+        cuda = [v.strip() for v in os.environ.get("CR_ALLOWED_CUDA", "").split(",") if v.strip()]
+        if cuda:
+            inp["allowedCudaVersions"] = cuda
         d = self._post(q, {"input": inp})
         pod = d.get("podFindAndDeployOnDemand")
         if not pod or not pod.get("id"):

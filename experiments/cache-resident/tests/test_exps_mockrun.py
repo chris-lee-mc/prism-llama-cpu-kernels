@@ -62,102 +62,72 @@ def _result(tmp, exp):
     return json.loads(files[0].read_text())["data"]
 
 
-def _patch_e1(monkeypatch, us=100.0):
-    class FakeChain:
-        def __init__(self, L, variant, **kw):
-            self.L, self.variant, self.pollute_bytes = L, variant, kw.get("pollute_bytes", 0)
-            self.bytes_per_token = L * 4456448
-            self.arena = torch.zeros(4)
-            self.arena_bytes = L * 4456448
+def _patch_e1(monkeypatch, fail=False):
+    class FakeLayers:
+        def __init__(self, shapes, variant, seed=0, **kw):
+            self.shapes = list(shapes)
+            self.arena = types.SimpleNamespace(bytes=e1.set_bytes(self.shapes), nbytes=e1.set_bytes(self.shapes), base=4096)
 
-        def finite(self):
-            return True
+        def launch(self, stream):
+            pass
 
-    monkeypatch.setattr(e1, "Chain", FakeChain)
-    monkeypatch.setattr(e1, "choose_variant", lambda v: ("lut", {"requested": v}))
-    monkeypatch.setattr(e1, "build_graph", lambda chain, method, ratio, notes: (object(), {
-        "window_bytes": 0 if ratio is None else chain.arena_bytes, "persist_limit_bytes": 0 if ratio is None else 72 * MIB,
-        "window_method_used": None if ratio is None else "graph", "clamped": False}))
-    monkeypatch.setattr(e1, "measure", lambda chain, g, tokens, repeats: {"us_per_token": us, "finite": True})
-    monkeypatch.setattr(e1, "measure_pollution", lambda chain, repeats: 10.0)
+        def check(self):
+            return {"finite": True, "ok": True, "max_abs_err": 0.0}
+
+    built, limits = [], []
+
+    def fake_build(fn, ratio, ptr, nb):
+        fn()
+        built.append((ratio, nb))
+        return ("g", ratio), {"kernel_nodes": None if ratio is None else 3, "window_readback": None}
+
+    def fake_time(g, tpg, tokens):
+        if fail:
+            raise RuntimeError("boom")
+        return 100.0 if g[1] is None else 80.0
+
+    monkeypatch.setattr(e1, "Layers", FakeLayers)
+    monkeypatch.setattr(torch.cuda, "current_stream", lambda *a: types.SimpleNamespace(cuda_stream=0))
+    monkeypatch.setattr(l2persist, "max_window_bytes", lambda dev=0: 128 * MIB)
+    monkeypatch.setattr(e1, "build_graph", fake_build)
+    monkeypatch.setattr(e1, "time_graph", fake_time)
+    monkeypatch.setattr(e1, "time_split", lambda h, c, tokens: (20.0 if h[1] is None else 10.0, 300.0, 320.0))
+    monkeypatch.setattr(e1, "set_persist", lambda lim: limits.append(lim) or lim)
+    monkeypatch.setattr(e1, "calibrate", lambda *a: {"copy_gbps": 1.0})
+    monkeypatch.setattr(e1, "diag_chain", lambda *a: {"L": 1})
+    return built, limits
 
 
 def test_e1_run_plumbing(fake_cuda, monkeypatch):
-    tmp, calls = fake_cuda
-    _patch_e1(monkeypatch)   # equal times on and off -> stop rule fires on rtx5090
-    assert e1.main(["--quick"]) == 0
+    tmp, _ = fake_cuda
+    built, limits = _patch_e1(monkeypatch)
+    assert e1.main(["--quick", "--modes", "off,1.0,0.5L"]) == 0
     d = _result(tmp, "e1")
-    assert [(r["W_mib"], r["mode"]) for r in d["rows"]] == [(16, "off"), (16, "1.0"), (64, "off"), (64, "1.0")]
-    r = d["rows"][1]
-    assert r["l2_hit_rate"] == 0.8 and r["dram_bytes_per_token"] == 1.0e9 and r["counters_ok"] and r["window_bytes"] > 0
-    assert r["us_per_token"] == 90.0 and r["us_per_token_gross"] == 100.0 and r["pollute_us_per_token"] == 10.0
-    assert r["pollute_bytes"] == 192 * MIB and d["config"]["pollute_bytes"] == 192 * MIB
-    assert r["gbps_eff"] == pytest.approx(r["bytes_per_token"] / 90.0 / 1e3)
-    assert r["ncu_replay_mode"] == "application" and r["ncu_passes"] == 2
-    assert r["ncu_n_kernels"] == 3 and r["ncu_n_kernels_ok"] is False   # fake reports 3, expected 5*L
-    assert any("5*L" in n for n in d["notes"])
-    assert d["counters_ok"] is True and any("STOP" in n for n in d["notes"])
-    assert not list((tmp / "results" / "e1" / "rtx5090" / "raw").glob("partial.json"))   # dropped after the final write
-    argv, tokens, kw = next(c for c in calls if c[0][c[0].index("--W") + 1] == "16")
-    assert tokens == 5 and kw["kernel_regex"] == "cr_gemv" and kw["launch_skip"] == 12 and kw["launch_count"] == 20
-    assert kw["profile_from_start_off"] is True and kw["kernel_fallback"] is False and "--inner" in argv
-    assert argv[argv.index("--pollute-bytes") + 1] == str(192 * MIB)
+    assert d["config"]["calibration"] == {"copy_gbps": 1.0} and d["config"]["diag"] == {"L": 1}
+    assert [(r["W_mib"], r["C_mib"], r["mode"]) for r in d["rows"][:6]] == [
+        (16, 512, "off"), (16, 0, "off"), (16, 512, "1.0"), (16, 0, "1.0"), (16, 512, "0.5L"), (16, 0, "0.5L")]
+    r = next(r for r in d["rows"] if r["W_mib"] == 16 and r["C_mib"] == 512 and r["mode"] == "1.0")
+    assert r["us_per_token"] == 80.0 and r["hot_us"] == 10.0 and r["cold_us"] == 300.0 and len(r["us_per_token_all"]) == 3
+    assert r["delta_vs_off_us"] == 20.0 and r["hot_gain_vs_off"] == 0.5 and r["finite"] and r["window_bytes"] == r["hot_bytes"]
+    r0 = next(r for r in d["rows"] if r["W_mib"] == 16 and r["C_mib"] == 0 and r["mode"] == "1.0")
+    assert r0["hot_us"] == 80.0 and r0["cold_us"] is None and r0["gain_vs_off"] == pytest.approx(0.2)
+    # limits: off 0, 1.0 -> device max, 0.5L -> min(W, max)
+    w16 = e1.plan_hot(16) * sum(e1.layer_bytes(4096, 4096))
+    assert {0, 72 * MIB, w16} <= set(limits)
+    assert d["config"]["stop_rule_met"] is True and any("stop rule met" in n for n in d["notes"])
+    assert not list((tmp / "results" / "e1" / "rtx5090" / "raw").glob("partial.json"))
 
 
-def test_e1_timing_first_then_ncu_near_knee(fake_cuda, monkeypatch):
-    tmp, calls = fake_cuda
-    _patch_e1(monkeypatch)
-    assert e1.main(["--W", "16,64,128,512", "--modes", "off", "--no-pollute"]) == 0
-    d = _result(tmp, "e1")
-    assert [r["W_mib"] for r in d["rows"]] == [16, 64, 128, 512] and all(r["pollute_bytes"] == 0 for r in d["rows"])
-    # nearest to persisting max (72) and L2 (96) first
-    assert [int(c[0][c[0].index("--W") + 1]) for c in calls] == [64, 128, 16, 512]
-    assert all("--pollute-bytes" not in c[0] for c in calls)
-    assert any("no pollution" in n for n in d["notes"])
-
-
-def test_e1_partial_written_per_row_and_failures_kept(fake_cuda, monkeypatch):
-    tmp, calls = fake_cuda
-    _patch_e1(monkeypatch)
+def test_e1_failures_kept(fake_cuda, monkeypatch):
+    tmp, _ = fake_cuda
+    _patch_e1(monkeypatch, fail=True)
     seen = []
     orig = common.write_partial
     monkeypatch.setattr(common, "write_partial", lambda *a, **k: seen.append(len(a[3])) or orig(*a, **k))
-    monkeypatch.setattr(e1, "measure", lambda chain, g, tokens, repeats: (_ for _ in ()).throw(RuntimeError("boom")))
-    assert e1.main(["--quick", "--no-ncu"]) == 0
+    assert e1.main(["--quick", "--no-calib"]) == 0
     d = _result(tmp, "e1")
-    assert all(r["us_per_token"] is None and "boom" in r["error"] for r in d["rows"])
-    assert seen == [1, 2, 3, 4]
-
-
-def test_e1_inner_argv_path(monkeypatch):
-    """--inner must work with the argv the driver builds (modes arrive as tuples from parse_args)."""
-    built, events = [], []
-
-    class FakeChain:
-        def __init__(self, L, variant, **kw):
-            built.append((L, variant, kw))
-
-    class FakeGraph:
-        def replay(self):
-            events.append("replay")
-
-    graphs = []
-
-    def fake_build(chain, method, ratio, notes):
-        graphs.append((method, ratio))
-        return FakeGraph(), {}
-
-    monkeypatch.setattr(e1, "Chain", FakeChain)
-    monkeypatch.setattr(e1, "build_graph", fake_build)
-    monkeypatch.setattr(torch.cuda, "synchronize", lambda *a, **k: None)
-    monkeypatch.setattr(torch.cuda.profiler, "start", lambda: events.append("start"))
-    monkeypatch.setattr(torch.cuda.profiler, "stop", lambda: events.append("stop"))
-    monkeypatch.setattr(l2persist, "reset", lambda *a, **k: None)
-    assert e1.main(e1.inner_argv(64, "0.75", "lut", "graph", 1 << 20)[3:]) == 0
-    assert built == [(15, "lut", {"pollute_bytes": 1 << 20})] and graphs == [("graph", 0.75)]
-    assert events == ["replay", "start", "replay", "stop"]
-    assert e1.main(e1.inner_argv(16, "off", "fp4", "stream")[3:]) == 0
-    assert graphs[-1] == ("stream", None) and built[-1] == (4, "fp4", {"pollute_bytes": 0})
+    assert len(d["rows"]) == 8 and all(r["us_per_token"] is None and "boom" in r["error"] for r in d["rows"])
+    assert seen == [4, 8] and "calibration" not in d["config"]
 
 
 class _FakeDecoder:
@@ -460,34 +430,6 @@ def _window_log(monkeypatch):
     monkeypatch.setattr(l2persist, "get_limit", lambda: 0)
     monkeypatch.setattr(l2persist, "get_graph_window", lambda g: {"num_bytes": 0})
     return log, state
-
-
-def test_e1_build_graph_clears_stream_window(fake_cuda, monkeypatch):
-    log, state = _window_log(monkeypatch)
-    captured = []
-    monkeypatch.setattr(timing, "capture_graph", lambda fn, warmup=3, stream=None, keep_graph=False: (
-        captured.append(state.get(stream.cuda_stream, 0) if stream else 0), types.SimpleNamespace(instantiate=lambda: None))[1])
-    chain = types.SimpleNamespace(arena=torch.zeros(4), arena_bytes=32 * MIB)
-    g, info = e1.build_graph(chain, "stream", 0.5, [])
-    assert info["window_method_used"] == "stream" and info["window_readback"]["num_bytes"] == 32 * MIB
-    assert captured == [32 * MIB]                      # the window was live during capture
-    st = next(s for k, s in log if k == "set")
-    assert log[-1] == ("clear", st) and not state       # and is gone afterwards
-    # a later off capture on a recycled pool stream must not see a window
-    state[1777] = 5 * MIB
-    monkeypatch.setattr(_FakeStream, "n", 776)
-    captured.clear()
-    e1.build_graph(chain, "stream", None, [])
-    assert captured == [0] and 1777 not in state
-
-
-def test_e1_build_graph_clears_window_when_capture_fails(fake_cuda, monkeypatch):
-    log, state = _window_log(monkeypatch)
-    monkeypatch.setattr(timing, "capture_graph", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("capture failed")))
-    chain = types.SimpleNamespace(arena=torch.zeros(4), arena_bytes=32 * MIB)
-    with pytest.raises(RuntimeError):
-        e1.build_graph(chain, "stream", 1.0, [])
-    assert log[-1][0] == "clear" and not state
 
 
 def test_e3_capture_step_clears_stream_window(fake_cuda, monkeypatch):
