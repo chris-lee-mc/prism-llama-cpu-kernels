@@ -306,7 +306,7 @@ static __host__ size_t ptq1_0_pt_smem_bytes(const int blocks_per_row, const int 
     return (size_t) ncols_dst * rows_per_cta * (blocks_per_row + 1) * sizeof(float) * (has_gate ? 2 : 1);
 }
 
-template <int ncols, int ROWS, bool has_fusion, bool has_gate>
+template <int ncols, int ROWS, bool has_fusion, bool has_gate, bool pdl_pf = false>
 __launch_bounds__(PTQ1_0_PT_THREADS, (ncols <= 2 ? 4 : (ncols <= 4 ? PTQ1_0_PT_MINB_34 : 2)))
 static __global__ void mul_mat_vec_ptq1_0_pt(
         const void * vx_, const void * vy_, const ggml_cuda_mm_fusion_args_device fusion,
@@ -339,19 +339,22 @@ static __global__ void mul_mat_vec_ptq1_0_pt(
 
     const int n_items = (rows_per_cta / ROWS) * bpr;
 
-    for (int it = 0; it < pdl_prefetch; ++it) {
-        const int idx = tid + it*PTQ1_0_PT_THREADS;
-        if (idx >= n_items) {
-            break;
-        }
-        const int rg  = fastdiv((uint32_t) idx, bpr_fd);
-        const int kbx = idx - rg*bpr;
+    if constexpr (pdl_pf) {
+        // L2 prefetch of the weights of the first pdl_prefetch iterations, before the PDL wait
+        for (int it = 0; it < pdl_prefetch; ++it) {
+            const int idx = tid + it*PTQ1_0_PT_THREADS;
+            if (idx >= n_items) {
+                break;
+            }
+            const int rg  = fastdiv((uint32_t) idx, bpr_fd);
+            const int kbx = idx - rg*bpr;
 #pragma unroll
-        for (int i = 0; i < ROWS; ++i) {
-            const int r = min(rg*ROWS + i, n_rows_cta - 1);
-            ggml_cuda_pdl_prefetch_l2((const block_ptq1_0 *) vx + (int64_t) (row0 + r)*stride_row_x + kbx);
-            if constexpr (has_gate) {
-                ggml_cuda_pdl_prefetch_l2((const block_ptq1_0 *) fusion.gate + (int64_t) (row0 + r)*stride_row_x + kbx);
+            for (int i = 0; i < ROWS; ++i) {
+                const int r = min(rg*ROWS + i, n_rows_cta - 1);
+                ggml_cuda_pdl_prefetch_l2((const block_ptq1_0 *) vx + (int64_t) (row0 + r)*stride_row_x + kbx);
+                if constexpr (has_gate) {
+                    ggml_cuda_pdl_prefetch_l2((const block_ptq1_0 *) fusion.gate + (int64_t) (row0 + r)*stride_row_x + kbx);
+                }
             }
         }
     }
@@ -535,10 +538,17 @@ static void mul_mat_vec_ptq1_0_pt_launch(
     const size_t smem = ptq1_0_pt_smem_bytes(bpr, ncols, nrows_x, ROWS, has_gate);
     const ggml_cuda_kernel_launch_params lp = ggml_cuda_kernel_launch_params(block_nums, block_dims, smem, stream);
 
-#define PTQ1_0_PT_LAUNCH(FUS, GATE)                                                                                      \
-    ggml_cuda_kernel_launch(mul_mat_vec_ptq1_0_pt<ncols, ROWS, FUS, GATE>, lp,                                           \
+#define PTQ1_0_PT_LAUNCH_PF(FUS, GATE, PF)                                                                               \
+    ggml_cuda_kernel_launch(mul_mat_vec_ptq1_0_pt<ncols, ROWS, FUS, GATE, PF>, lp,                                       \
         vx, vy, fusion, dst, ncols_x, nrows_x, stride_row_x, stride_col_y, stride_col_dst, rows_per_cta, bpr_fd, rpc_fd, \
         ggml_cuda_batch_invariant(), ggml_cuda_pdl_prefetch())
+    // the prefetch kernels exist for one column only (decode)
+#define PTQ1_0_PT_LAUNCH(FUS, GATE)                                                                                      \
+    if (ncols == 1 && ggml_cuda_pdl_prefetch() > 0) {                                                                    \
+        PTQ1_0_PT_LAUNCH_PF(FUS, GATE, ncols == 1);                                                                      \
+    } else {                                                                                                             \
+        PTQ1_0_PT_LAUNCH_PF(FUS, GATE, false);                                                                           \
+    }
 
     if (has_fusion) {
         GGML_ASSERT(ncols == 1 && "fusion only supported for ncols_dst=1");
@@ -550,6 +560,7 @@ static void mul_mat_vec_ptq1_0_pt_launch(
         return;
     }
     PTQ1_0_PT_LAUNCH(false, false);
+#undef PTQ1_0_PT_LAUNCH_PF
 #undef PTQ1_0_PT_LAUNCH
 }
 

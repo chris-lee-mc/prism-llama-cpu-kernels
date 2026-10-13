@@ -11,6 +11,7 @@ from infra import gpus
 EXP = pathlib.Path(__file__).resolve().parent.parent
 MAN = json.loads((EXP / "exps" / "manifest.json").read_text())
 KEYS = {"cmd", "gpus", "est_min", "failsafe_min", "build_llama", "disk_gb", "desc"}
+LONG_FAILSAFE = {"e4_pdl": 60}  # clone + cold build + downloads + 32 benches; launch needs --allow-long
 EXPECTED = {"p0_smoke", "p0_l2", "e1", "e2_08b", "e2_2b", "e3", "e3d", "e4_pq2", "e4_ptq1", "e4_pdl", "e5_base", "e5_k4", "e5_k6", "e5_k8"}
 
 
@@ -24,7 +25,7 @@ def test_manifest_entry_schema(name):
     assert set(e) == KEYS
     assert isinstance(e["cmd"], str) and e["cmd"]
     assert e["gpus"] and all(g in gpus.RUNPOD_CANDIDATES for g in e["gpus"])
-    assert e["failsafe_min"] <= 40
+    assert e["failsafe_min"] <= LONG_FAILSAFE.get(name, 40)
     assert e["est_min"] <= e["failsafe_min"] - 5
     assert isinstance(e["build_llama"], bool)
     assert isinstance(e["disk_gb"], int) and e["disk_gb"] > 0

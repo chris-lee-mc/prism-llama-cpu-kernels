@@ -7,11 +7,20 @@ Configs (environment of each llama-bench process): pdl0 = GGML_CUDA_PDL=0, pdl1 
 pf<N> = GGML_CUDA_PDL=1 GGML_CUDA_PDL_PREFETCH=N (mmvq.cu / mmvq-ptq1_0.cuh issue prefetch.global.L2 of the
 first N K iterations of their weight rows before cudaGridDependencySynchronize). One llama-bench per
 (model, config) covers all depths: -p 0 -n 128 -d 0,32768 -r 5, f16 KV, -fa on, -ub 2048.
-Models: Bonsai 2 27B PQ2_0 and PTQ1_0 (targets) and the E5 draft Qwen3.5-0.8B alone, as BF16 (mul_mat_vec_f:
-the prefetch is not there, so pf rows are a control) and Q8_0 (mmvq, prefetch active).
-Round 1 runs configs in order, round 2 in reverse order (drift cancels in the median), if the budget allows.
-Correctness first: test-backend-ops -o MUL_MAT,MUL_MAT_ID -b CUDA0 on PQ2_0/PTQ1_0/Q8_0 cases vs CPU, with the
-prefetch off and on. Needs CR_LLAMA_BIN with llama-bench and test-backend-ops built (CR_BUILD_LLAMA=1).
+Models: Bonsai 2 27B PQ2_0 and PTQ1_0 (targets) and the E5 draft Qwen3.5-0.8B alone, as Q8_0 (mmvq, prefetch active)
+and BF16 (mul_mat_vec_f: the prefetch is not there, so pf rows are a control).
+Per model, round 1 runs configs in order and round 2 in reverse (drift cancels in the median); a model that is cut
+by the time budget is lost whole, and the summary uses only rounds in which every config finished.
+Correctness first: test-backend-ops -o MUL_MAT,MUL_MAT_ID,MUL_MAT_VEC_FUSION -b CUDA0 on PQ2_0/PTQ1_0/Q8_0 cases vs
+CPU, with the prefetch off and on. This shows results are unchanged (and that moving the wait broke nothing). It
+cannot show that prefetch addresses are in range: prefetch.global.L2 returns no data and a bad address is ignored.
+Prefetch kernels are separate template instantiations (pdl_pf), picked on the host when the knob is > 0; the knob-off
+kernels have the same registers and shared memory as before the prefetch (nvcc -Xptxas -v, sm_86 and sm_120).
+Not covered by the prefetch: more than one column (so PQ2_0 verify widths 3-8, mul_mat_vec_pq2_0_mc), all other quant
+types, ids (MoE) mat-vecs, and the tail bytes of blocks that cross a 128 B line (first byte only).
+Host health: nvidia-smi is sampled during every llama-bench call (SM/mem clocks, power draw and cap, temperature);
+a degraded host (SM clock < 40% of max, mem clock < 50%, power cap < 75% of default) on the first call stops the run.
+Needs CR_LLAMA_BIN with llama-bench and test-backend-ops built (CR_BUILD_LLAMA=1).
 """
 from __future__ import annotations
 
@@ -20,15 +29,20 @@ import os
 import re
 import subprocess
 import sys
+import threading
 
 from exps import common, e4_bonsai, hf_ids
 
 EXP = "e4_pdl"
-MODELS = ("pq2", "ptq1", "draft_bf16", "draft_q8_0")
+MODELS = ("pq2", "ptq1", "draft_q8_0", "draft_bf16")
 DEFAULT_DEPTHS = [0, 32768]
-TBO_OPS = "MUL_MAT,MUL_MAT_ID"
-TBO_TYPES = "type_a=(pq2_0|ptq1_0|q8_0),"
+TBO_OPS = "MUL_MAT,MUL_MAT_ID,MUL_MAT_VEC_FUSION"  # the fused up/gate mat-vec (gate prefetch) is its own op
+TBO_TYPES = "type(_a)?=(pq2_0|ptq1_0|q8_0),"  # MUL_MAT(_ID) vars start with type_a=, the fusion test with type=
 TBO_PREFETCH = (0, 4)
+SMI_FIELDS = ("clocks.sm", "clocks.max.sm", "clocks.mem", "clocks.max.mem", "power.draw", "power.limit",
+              "power.default_limit", "temperature.gpu")
+SMI_PERIOD_S = 2.0
+HEALTH_MIN_SM, HEALTH_MIN_MEM, HEALTH_MIN_POWER_CAP = 0.4, 0.5, 0.75  # E3d host ran at SM 620 MHz, 350 W of 600 W
 
 
 # ---------------------------------------------------------------- pure helpers
@@ -78,22 +92,29 @@ def _median(xs):
 
 
 def summarize(rows: list[dict], cfg_names: list[str]) -> dict:
-    """Per model and depth: median tok/s per config and the gains pdl1 vs pdl0 and pf<N> vs pdl1 (percent)."""
-    out: dict = {}
+    """Per model and depth: median tok/s per config and the gains pdl1 vs pdl0 and pf<N> vs pdl1 (percent).
+
+    Only rounds in which every config has a result count, so a budget cut cannot leave half a reverse-order pair.
+    """
+    cells: dict = {}  # (model, depth) -> {config: {round: [tok_s]}}
     for r in rows:
         if r.get("tok_s"):
-            out.setdefault(r["model"], {}).setdefault(str(r["depth"]), {}).setdefault(r["config"], []).append(r["tok_s"])
+            cells.setdefault((r["model"], str(r["depth"])), {}).setdefault(r["config"], {}).setdefault(
+                r.get("round", 0), []).append(r["tok_s"])
     summ: dict = {}
-    for model, by_d in out.items():
-        for d, by_c in by_d.items():
-            med = {c: _median(by_c.get(c, [])) for c in cfg_names}
-            gains = {}
+    for (model, d), by_c in cells.items():
+        done = [set(by_c.get(c, {})) for c in cfg_names]
+        rounds = sorted(set.intersection(*done)) if done else []
+        vals = {c: [x for rnd in rounds for x in by_c.get(c, {}).get(rnd, [])] for c in cfg_names}
+        med = {c: _median(vals[c]) for c in cfg_names}
+        gains = {}
+        if rounds:
             if med.get("pdl0") and med.get("pdl1"):
                 gains["pdl1_vs_pdl0_pct"] = 100.0 * (med["pdl1"] / med["pdl0"] - 1.0)
             for c in cfg_names:
                 if c.startswith("pf") and med.get(c) and med.get("pdl1"):
                     gains[f"{c}_vs_pdl1_pct"] = 100.0 * (med[c] / med["pdl1"] - 1.0)
-            summ.setdefault(model, {})[d] = {"tok_s": med, "n": {c: len(by_c.get(c, [])) for c in cfg_names}, **gains}
+        summ.setdefault(model, {})[d] = {"tok_s": med, "n": {c: len(vals[c]) for c in cfg_names}, "rounds": rounds, **gains}
     return summ
 
 
@@ -104,6 +125,88 @@ def verdict_lines(summ: dict) -> list[str]:
             parts = [f"{k}={v:+.1f}%" for k, v in s.items() if k.endswith("_pct")]
             lines.append(f"{model} depth {d}: " + (", ".join(parts) if parts else "no complete pair"))
     return lines
+
+
+def parse_smi(text: str) -> dict | None:
+    """First CSV line of nvidia-smi --query-gpu=SMI_FIELDS; '[N/A]' and junk become None."""
+    lines = [ln for ln in text.splitlines() if ln.strip()]
+    if not lines:
+        return None
+    vals = [v.strip() for v in lines[0].split(",")]
+    if len(vals) != len(SMI_FIELDS):
+        return None
+    out = {}
+    for k, v in zip(SMI_FIELDS, vals):
+        try:
+            out[k] = float(v)
+        except ValueError:
+            out[k] = None
+    return out
+
+
+def smi_sample() -> dict | None:
+    cmd = ["nvidia-smi", "--query-gpu=" + ",".join(SMI_FIELDS), "--format=csv,noheader,nounits", "-i", "0"]
+    try:
+        p = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    return parse_smi(p.stdout) if p.returncode == 0 else None
+
+
+def smi_summary(before: dict | None, during: list[dict], after: dict | None) -> dict:
+    """Clocks, power and temperature of one llama-bench call: samples taken during it plus one before and after."""
+    pts = list(during) or [x for x in (before, after) if x]
+    if not pts:
+        return {}
+
+    def col(k, f=_median):
+        xs = [p[k] for p in pts if p.get(k) is not None]
+        return f(xs) if xs else None
+    last = pts[-1]
+    return {"n": len(during), "sm_mhz_med": col("clocks.sm"), "sm_mhz_min": col("clocks.sm", min), "sm_mhz_max": last.get("clocks.max.sm"),
+            "mem_mhz_med": col("clocks.mem"), "mem_mhz_max": last.get("clocks.max.mem"), "power_w_med": col("power.draw"),
+            "power_w_max": col("power.draw", max), "power_cap_w": last.get("power.limit"),
+            "power_default_w": last.get("power.default_limit"), "temp_c_max": col("temperature.gpu", max),
+            "before": before, "after": after}
+
+
+def health_problem(s: dict) -> str | None:
+    """Reason the host looks throttled or power capped, else None. Missing fields skip their check."""
+    sm, sm_max, mem, mem_max = s.get("sm_mhz_med"), s.get("sm_mhz_max"), s.get("mem_mhz_med"), s.get("mem_mhz_max")
+    cap, cap_def = s.get("power_cap_w"), s.get("power_default_w")
+    if sm and sm_max and sm < HEALTH_MIN_SM * sm_max:
+        return "SM clock %.0f MHz < %.0f%% of max %.0f" % (sm, 100 * HEALTH_MIN_SM, sm_max)
+    if mem and mem_max and mem < HEALTH_MIN_MEM * mem_max:
+        return "mem clock %.0f MHz < %.0f%% of max %.0f" % (mem, 100 * HEALTH_MIN_MEM, mem_max)
+    if cap and cap_def and cap < HEALTH_MIN_POWER_CAP * cap_def:
+        return "power cap %.0f W < %.0f%% of default %.0f W" % (cap, 100 * HEALTH_MIN_POWER_CAP, cap_def)
+    return None
+
+
+class SmiWatch:
+    """Context manager: samples nvidia-smi every SMI_PERIOD_S while the body runs. No nvidia-smi gives an empty summary."""
+
+    def __enter__(self):
+        self.before, self.after, self.during = smi_sample(), None, []
+        self._stop = threading.Event()
+        self._t = threading.Thread(target=self._loop, daemon=True)
+        self._t.start()
+        return self
+
+    def _loop(self):
+        while not self._stop.wait(SMI_PERIOD_S):
+            s = smi_sample()
+            if s:
+                self.during.append(s)
+
+    def __exit__(self, *exc):
+        self._stop.set()
+        self._t.join(timeout=15)
+        self.after = smi_sample()
+        return False
+
+    def summary(self) -> dict:
+        return smi_summary(self.before, self.during, self.after)
 
 
 # ---------------------------------------------------------------- running
@@ -166,12 +269,12 @@ def run(args) -> int:
         print(f"error: {bin_dir / 'llama-bench'} not found; build llama.cpp (CR_BUILD_LLAMA=1) or set CR_LLAMA_BIN",
               file=sys.stderr)
         return 2
-    budget = common.Budget(args.budget_min or (6 if args.quick else 31))
+    budget = common.Budget(args.budget_min or (6 if args.quick else 45))
     cfgs = configs(args.prefetch)
     names = [c for c, _ in cfgs]
     config = {"models": args.models, "depths": args.depths, "reps": args.reps, "rounds": args.rounds, "configs": dict(cfgs),
               "n_gen": 32 if args.quick else e4_bonsai.N_GEN, "bench_cmd_example": bench_cmd(bin_dir, "<model.gguf>", args.depths, args.reps),
-              "tbo_cmd": tbo_cmd(bin_dir), "quick": args.quick, "models_info": {}}
+              "tbo_cmd": tbo_cmd(bin_dir), "quick": args.quick, "models_info": {}, "health_gate": {"sm": HEALTH_MIN_SM, "mem": HEALTH_MIN_MEM, "power_cap": HEALTH_MIN_POWER_CAP}}
     rows: list[dict] = []
     extra: dict = {"tbo": [], "summary": {}}
 
@@ -188,33 +291,49 @@ def run(args) -> int:
             paths[m], config["models_info"][m] = model_path(m, notes)
         except Exception as e:
             notes.append(f"{m}: model download failed: {type(e).__name__}: {e}")
-    for rnd in range(args.rounds):
-        for m in args.models:
-            if m not in paths:
-                continue
+    n_bench, unhealthy, aborted = 0, False, False
+    for m in args.models:  # both rounds of a model back to back: a budget cut drops whole models, not half pairs
+        if m not in paths or aborted:
+            continue
+        for rnd in range(args.rounds):
             for cname, cenv in round_order(cfgs, rnd):
+                if aborted:
+                    break
                 if budget.expired(120):
                     notes.append(f"time budget used up; round {rnd} {m} {cname} and later skipped")
                     continue
                 cmd = bench_cmd(bin_dir, paths[m], args.depths, args.reps, config["n_gen"])
-                tg, err = bench_once(cmd, run_env(cenv), budget.timeout(1800, reserve_s=60))
+                with SmiWatch() as watch:
+                    tg, err = bench_once(cmd, run_env(cenv), budget.timeout(1800, reserve_s=60))
+                smi = watch.summary()
+                bad = health_problem(smi)
+                n_bench += 1
+                if bad and n_bench == 1:
+                    notes.append(f"ABORT: unhealthy host: {bad}")
+                    aborted = True
+                elif bad and not unhealthy:
+                    unhealthy = True
+                    notes.append(f"host health: {bad} during round {rnd} {m} {cname}; timings after this may be invalid")
                 if err:
                     notes.append(f"round {rnd} {m} {cname} bench failed: {err}")
                 for d in args.depths:
                     r = tg.get(d)
                     rows.append({"model": m, "depth": d, "config": cname, "env": cenv, "round": rnd,
                                  "tok_s": r["tok_s"] if r else None, "stddev": r["stddev"] if r else None,
-                                 "us_per_token": 1e6 / r["tok_s"] if r and r["tok_s"] else None, "error": None if r else err})
+                                 "us_per_token": 1e6 / r["tok_s"] if r and r["tok_s"] else None, "error": None if r else err,
+                                 "smi": smi})
                 save()
-                print("[e4_pdl] r%d %s %s %s" % (rnd, m, cname, {d: (tg.get(d) or {}).get("tok_s") for d in args.depths}),
-                      flush=True)
+                print("[e4_pdl] r%d %s %s %s smi sm %s MHz" % (rnd, m, cname, {d: (tg.get(d) or {}).get("tok_s") for d in args.depths},
+                                                               smi.get("sm_mhz_med")), flush=True)
     extra["summary"] = summarize(rows, names)
     notes.extend(verdict_lines(extra["summary"]))
     notes.append("draft_bf16 runs mul_mat_vec_f, which has no pre-wait prefetch: its pf rows are a control")
+    notes.append("test-backend-ops checks that results are unchanged, not that prefetch addresses are in range")
+    notes.append("not covered by the prefetch: more than one column (PQ2_0 verify widths 3-8), ids mat-vecs, other quant types")
     if extra["tbo"] and not all(t.get("ok") for t in extra["tbo"]):
         notes.append("test-backend-ops reported failures; compare prefetch=0 and prefetch=4 rows before reading timings")
     common.write_result(EXP, args, config, rows, notes, False, extra=extra)
-    return 0 if any(r.get("tok_s") for r in rows) else 1
+    return 0 if any(r.get("tok_s") for r in rows) and not aborted else 1
 
 
 # ---------------------------------------------------------------- CLI

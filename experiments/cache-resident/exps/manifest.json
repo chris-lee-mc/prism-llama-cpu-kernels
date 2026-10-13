@@ -114,10 +114,10 @@
    "rtx5090"
   ],
   "est_min": 35,
-  "failsafe_min": 40,
+  "failsafe_min": 60,
   "build_llama": true,
   "disk_gb": 80,
-  "desc": "E4 PDL A/B: llama-bench tg128 at depth 0/32K with GGML_CUDA_PDL=0, =1, =1 plus GGML_CUDA_PDL_PREFETCH=1/4, Bonsai 2 27B PQ2_0/PTQ1_0 and the E5 draft alone; test-backend-ops MUL_MAT(_ID) prefetch off/on"
+  "desc": "E4 PDL A/B: llama-bench tg128 at depth 0/32K with GGML_CUDA_PDL=0, =1, =1 plus GGML_CUDA_PDL_PREFETCH=1/4, Bonsai 2 27B PQ2_0/PTQ1_0 and the E5 draft alone; test-backend-ops MUL_MAT(_ID) and fused mat-vec prefetch off/on; needs --allow-long (failsafe 60: clone, cold CUDA build, ~16 GB of downloads, 32 llama-bench runs)"
  },
  "e5_base": {
   "cmd": "python3 -m exps.e5_spec --k 0",

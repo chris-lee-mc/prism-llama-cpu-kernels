@@ -132,7 +132,7 @@ static __device__ __forceinline__ void ggml_cuda_pdl_lc() {
 #endif // defined(GGML_CUDA_USE_PDL) && defined(__CUDA_ARCH__) && __CUDA_ARCH__ >= GGML_CUDA_CC_HOPPER
 }
 
-// L2-only prefetch for use before ggml_cuda_pdl_sync(). Only for data no earlier kernel writes (weights).
+// L2 prefetch hint, no data returned: safe before ggml_cuda_pdl_sync() for any address
 static __device__ __forceinline__ void ggml_cuda_pdl_prefetch_l2(const void * p) {
 #if defined(GGML_CUDA_USE_PDL) && defined(__CUDA_ARCH__) && __CUDA_ARCH__ >= GGML_CUDA_CC_HOPPER
     asm volatile("prefetch.global.L2 [%0];" :: "l"(__cvta_generic_to_global(p)));
@@ -190,8 +190,8 @@ static inline bool ggml_cuda_batch_invariant() {
     return enabled;
 }
 
-// GGML_CUDA_PDL_PREFETCH=N: mat-vec kernels prefetch the weights of their first N K iterations to L2
-// before the PDL wait, so the DRAM fetch overlaps the tail of the previous kernel. 0 (default) = off.
+// GGML_CUDA_PDL_PREFETCH=N: one-column mat-vec kernels (PQ2_0, PTQ1_0, Q8_0, no ids) prefetch the weights of their first N K iterations
+// to L2 before the PDL wait, so the DRAM fetch overlaps the tail of the previous kernel. 0 (default) = off. Needs PDL (sm_90+, GGML_CUDA_PDL).
 static inline int ggml_cuda_pdl_prefetch() {
     static const int n = [] {
         const char * env = getenv("GGML_CUDA_PDL_PREFETCH");

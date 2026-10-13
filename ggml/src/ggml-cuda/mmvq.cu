@@ -573,7 +573,9 @@ static constexpr __host__ __device__ int calc_rows_per_block(ggml_type type, int
 
 // y_soa: PTQ1_0 one-column activations are in the warp-transposed exact-isum layout (see
 // ggml_cuda_q8_1_layout_for). Only ever instantiated true for type == PTQ1_0 && ncols_dst == 1.
-template <ggml_type type, int ncols_dst, bool has_fusion, bool has_gate, bool small_k = false, bool halve_iters = false, bool y_soa = false>
+// pdl_pf: L2 prefetch of the weights before the PDL wait (GGML_CUDA_PDL_PREFETCH), compiled out when false.
+template <ggml_type type, int ncols_dst, bool has_fusion, bool has_gate, bool small_k = false, bool halve_iters = false, bool y_soa = false,
+          bool pdl_pf = false>
 __launch_bounds__(calc_nwarps(type, ncols_dst, get_device_table_id(), small_k, halve_iters)*ggml_cuda_get_physical_warp_size(), 1)
 static __global__ void mul_mat_vec_q(
         const void * vx_ptr, const void * vy_ptr, const int32_t * ids_ptr, const ggml_cuda_mm_fusion_args_device fusion, float * dst_ptr,
@@ -611,7 +613,7 @@ static __global__ void mul_mat_vec_q(
     using pdl_block_t = std::conditional_t<type == GGML_TYPE_PQ2_0, block_pq2_0,
         std::conditional_t<type == GGML_TYPE_PTQ1_0, block_ptq1_0,
         std::conditional_t<type == GGML_TYPE_Q8_0, block_q8_0, void>>>;
-    if constexpr (!std::is_void_v<pdl_block_t>) {
+    if constexpr (pdl_pf && !std::is_void_v<pdl_block_t>) {
         // ids is written by an earlier kernel, so only the plain path can find its weight rows before the wait
         if (!ids && tid % (qi/vdr) == 0) {
             const int kbx_offset_pf = fastdiv(blockIdx.z, sample_ratio)*stride_sample_x +
@@ -1149,19 +1151,33 @@ static std::pair<dim3, dim3> calc_launch_params(
 
 // Resolves the runtime SoA decision to the y_soa template parameter. The true instantiation exists
 // only for PTQ1_0 at one column, so every other type/column count compiles exactly one kernel body.
-template<ggml_type type, int c_ncols_dst, bool has_fusion, bool has_gate, bool small_k, bool halve_iters, typename... Args>
-static void mul_mat_vec_q_launch(const bool y_soa, const ggml_cuda_kernel_launch_params & launch_params, Args&&... args) {
+template<ggml_type type, int c_ncols_dst, bool has_fusion, bool has_gate, bool small_k, bool halve_iters, bool pdl_pf, typename... Args>
+static void mul_mat_vec_q_launch_pf(const bool y_soa, const ggml_cuda_kernel_launch_params & launch_params, Args&&... args) {
     if constexpr (type == GGML_TYPE_PTQ1_0 && c_ncols_dst == 1) {
         if (y_soa) {
-            ggml_cuda_kernel_launch(mul_mat_vec_q<type, c_ncols_dst, has_fusion, has_gate, small_k, halve_iters, true>,
+            ggml_cuda_kernel_launch(mul_mat_vec_q<type, c_ncols_dst, has_fusion, has_gate, small_k, halve_iters, true, pdl_pf>,
                                     launch_params, std::forward<Args>(args)..., ggml_cuda_pdl_prefetch());
             return;
         }
     } else {
         GGML_ASSERT(!y_soa);
     }
-    ggml_cuda_kernel_launch(mul_mat_vec_q<type, c_ncols_dst, has_fusion, has_gate, small_k, halve_iters, false>,
+    ggml_cuda_kernel_launch(mul_mat_vec_q<type, c_ncols_dst, has_fusion, has_gate, small_k, halve_iters, false, pdl_pf>,
                             launch_params, std::forward<Args>(args)..., ggml_cuda_pdl_prefetch());
+}
+
+// The prefetch kernels exist only for the types and the column count the prefetch covers (GGML_CUDA_PDL_PREFETCH off = old kernels).
+template<ggml_type type, int c_ncols_dst, bool has_fusion, bool has_gate, bool small_k, bool halve_iters, typename... Args>
+static void mul_mat_vec_q_launch(const bool y_soa, const ggml_cuda_kernel_launch_params & launch_params, Args&&... args) {
+    if constexpr (c_ncols_dst == 1 && (type == GGML_TYPE_PQ2_0 || type == GGML_TYPE_PTQ1_0 || type == GGML_TYPE_Q8_0)) {
+        if (ggml_cuda_pdl_prefetch() > 0) {
+            mul_mat_vec_q_launch_pf<type, c_ncols_dst, has_fusion, has_gate, small_k, halve_iters, true>(
+                y_soa, launch_params, std::forward<Args>(args)...);
+            return;
+        }
+    }
+    mul_mat_vec_q_launch_pf<type, c_ncols_dst, has_fusion, has_gate, small_k, halve_iters, false>(
+        y_soa, launch_params, std::forward<Args>(args)...);
 }
 
 template<ggml_type type, int c_ncols_dst, bool small_k = false, bool halve_iters = false>
