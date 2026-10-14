@@ -11,8 +11,8 @@ from infra import gpus
 EXP = pathlib.Path(__file__).resolve().parent.parent
 MAN = json.loads((EXP / "exps" / "manifest.json").read_text())
 KEYS = {"cmd", "gpus", "est_min", "failsafe_min", "build_llama", "disk_gb", "desc"}
-LONG_FAILSAFE = {"e4_pdl": 70, "r1": 55}  # clone + cold build + downloads + the runs; launch needs --allow-long
-EXPECTED = {"p0_smoke", "p0_l2", "e1", "e2_08b", "e2_2b", "e3", "e3d", "e4_pq2", "e4_ptq1", "e4_pdl", "e5_base", "e5_k4", "e5_k6", "e5_k8", "e5_cost", "r1"}
+LONG_FAILSAFE = {"e4_pdl": 70, "r1": 55, "r2a": 55}  # clone + cold build + downloads + the runs; launch needs --allow-long
+EXPECTED = {"p0_smoke", "p0_l2", "e1", "e2_08b", "e2_2b", "e3", "e3d", "e4_pq2", "e4_ptq1", "e4_pdl", "e5_base", "e5_k4", "e5_k6", "e5_k8", "e5_cost", "r1", "r2a"}
 
 
 def test_manifest_has_all_experiments():
@@ -55,8 +55,8 @@ def test_result_dirs_match_manifest_keys():
     from exps import e4_pdl
     assert e4_pdl.EXP in MAN
     assert set(e5_spec.EXP_NAMES.values()) <= set(MAN)
-    from exps import e5_cost, r1
-    assert e5_cost.EXP in MAN and r1.EXP in MAN
+    from exps import e5_cost, r1, r2a_longctx
+    assert e5_cost.EXP in MAN and r1.EXP in MAN and r2a_longctx.EXP in MAN
     from exps import e1_sweep, e3_residency, e3d_resident_draft
     assert e1_sweep.EXP in MAN and e3_residency.EXP in MAN and e3d_resident_draft.EXP in MAN
 
@@ -107,3 +107,15 @@ def test_r1_entry_fits_one_session():
     from exps import r1
     budget = float(re.search(r"exps\.r1 --budget-min (\d+)", e["cmd"]).group(1))
     assert budget == r1.DEFAULT_TOTAL_MIN and e["est_min"] == 6 + budget
+
+
+def test_r2a_entry_fits_one_session():
+    from infra import runpod
+    e = MAN["r2a"]
+    assert e["gpus"] == ["pro6000"] and e["build_llama"] is True
+    assert e["failsafe_min"] == 55 and e["est_min"] + runpod.BOOTSTRAP_MIN + runpod.LLAMA_BUILD_MIN <= e["failsafe_min"] - 5
+    assert e["cmd"].startswith("python3 -m exps.fetch_models --models pq2,draft_bf16 --timeout-min 6 && python3 -m exps.r2a_longctx")
+    from exps import r2a_longctx
+    budget = float(re.search(r"exps\.r2a_longctx --budget-min (\d+)", e["cmd"]).group(1))
+    assert budget == r2a_longctx.DEFAULT_TOTAL_MIN and e["est_min"] == 6 + budget
+    assert (EXP / "exps" / "data" / "prompts_r2a.jsonl").exists()

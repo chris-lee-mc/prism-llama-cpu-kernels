@@ -184,5 +184,16 @@
   "build_llama": true,
   "disk_gb": 80,
   "desc": "R1 pre-E6 measurements on one PRO 6000: (b) E5 matrix on N fixed-seed prompts sized from a cost model, plus extra code_fix/refactor prompts (20 per category) for base and the n-gram configs: target alone, draft-simple K=4 (control), K=4 with target backend sampling (-bs), K=4 with the post-hoc PTQ1_0 draft, ngram-mod / ngram-map-k on the code categories (per-category r, alpha, tok/s, speedup with bootstrap CI, output equality, rollback path from the n_rs_seq log line; K=2/3 are opt-in via --configs); (a) Qwen3.5-0.8B BF16/Q8_0/post-hoc PTQ1_0 top-1 agreement and KL vs Bonsai 2 27B PQ2_0 (llama-perplexity, 8192 tokens, E5 chat text built from part b outputs); (c) one nsys capture of ~20 K=4 steps split by stream role into verify, draft re-eval, draft steps, copies and idle; needs --allow-long (failsafe 55 = clone, apt, torch and cold CUDA build ~14 (850 s measured) + downloads <= 6 (fetch_models --timeout-min 6) + r1 29 + end reserve 5; est 35 = downloads 6 + r1 29)"
+ },
+ "r2a": {
+  "cmd": "python3 -m exps.fetch_models --models pq2,draft_bf16 --timeout-min 6 && python3 -m exps.r2a_longctx --budget-min 29",
+  "gpus": [
+   "pro6000"
+  ],
+  "est_min": 35,
+  "failsafe_min": 55,
+  "build_llama": true,
+  "disk_gb": 80,
+  "desc": "R2a long-context agentic prompts on one PRO 6000 (exps/data/prompts_r2a.jsonl: 40 code edits embedding one repo file of 2-8K tokens, full file or unified diff, and 20 multi-turn tool-call traces; n_predict 512 / 128, ctx 16384, every server with -lv 4): (m) target alone, draft-simple K=2/3/4 (Qwen3.5-0.8B BF16), ngram-mod and ngram-map-k with default and short parameters, seeded prompt and config order, per category and overall tok/s, speedup, r, alpha with bootstrap 95% CIs, greedy equality against target alone, spec path and rollback (n_rs_seq, seq_rm lines) from the logs, prompt count sized from a cost model and cut evenly across categories if time is short; (c) same-pod overhead control: unprofiled K=4 on a fixed 10-prompt subset followed by the nsys capture of the same requests (allowlisted env, private dir, decode steps only); (p) -lv 5 probe counting speculative checkpoint create/restore events; needs --allow-long (failsafe 55 = clone, apt, torch and cold CUDA build ~14 + downloads <= 6 (fetch_models --timeout-min 6) + r2a 29 + end reserve 5; est 35 = downloads 6 + r2a 29)"
  }
 }

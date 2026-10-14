@@ -182,16 +182,16 @@ def _cat_of(x: dict, li: int, short_idx: dict, burst_of, roles: dict) -> str:
 
 
 def analyze(acts: list[dict], k: int, gap_us: float = GAP_US, tiny_us: float = TINY_US, skip: int = SKIP_STEPS,
-            max_steps: int = MAX_STEPS) -> dict:
+            max_steps: int = MAX_STEPS, roles: dict | None = None) -> dict:
     """Per-step time split from GPU activity. acts: [{t0, t1 (ns), kind: kernel|memcpy|memset, stream, name, bytes, copy_kind}].
     Bursts are built per stream role when the streams split into target and draft (split_mode "stream"); otherwise by
-    duration alone (split_mode "duration")."""
+    duration alone (split_mode "duration"). roles: stream roles of a bigger capture (default: found in acts)."""
     out: dict = {"ok": False, "error": None, "k": k, "n_acts": len(acts)}
     if not acts:
         out["error"] = "no GPU activity in the capture"
         return out
     acts = sorted(acts, key=lambda x: x["t0"])
-    roles = assign_roles(acts, gap_us)
+    roles = assign_roles(acts, gap_us) if roles is None else roles
     out["streams"] = stream_summary(acts)
     thr = None
     if roles:
@@ -393,9 +393,11 @@ def cleanup(workdir: str) -> None:
 
 
 def capture(*, nsys: str, server_argv: list[str], port: int, prompt: str, budget: common.Budget, workdir: str, log_path: str,
-            k: int = 4, n_predict: int = N_PREDICT, notes: list | None = None, on_stage=None) -> dict:
+            k: int = 4, n_predict: int = N_PREDICT, notes: list | None = None, on_stage=None, driver=None, analyzer=None) -> dict:
     """Run the nsys flow. Never raises; the report files are removed from workdir before return.
-    on_stage(res) is called once the request is captured (before the export and parse), so a run cut short keeps it."""
+    on_stage(res) is called once the request is captured (before the export and parse), so a run cut short keeps it.
+    driver(base_url) replaces the single request: it sends the requests inside the capture and returns their records (res["requests"]).
+    analyzer(acts, k) replaces analyze()."""
     from exps import e5_spec
     notes = notes if notes is not None else []
     res: dict = {"ok": False, "error": None, "nsys": nsys, "server_cmd": server_argv, "log": log_path, "analysis": None}
@@ -430,8 +432,11 @@ def capture(*, nsys: str, server_argv: list[str], port: int, prompt: str, budget
             res["error"] = f"nsys start failed ({code}): {out[-300:].strip()}"
             return res
         time.sleep(0.5)
-        resp = e5_spec.post_json(base + "/completion", e5_spec.completion_body(text, n_predict), budget.timeout(120.0, reserve_s=10))
-        res["request"] = e5_spec.parse_completion(resp)
+        if driver:
+            res["requests"] = driver(base)
+        else:
+            resp = e5_spec.post_json(base + "/completion", e5_spec.completion_body(text, n_predict), budget.timeout(120.0, reserve_s=10))
+            res["request"] = e5_spec.parse_completion(resp)
         if on_stage:
             try:
                 on_stage(res)
@@ -459,7 +464,7 @@ def capture(*, nsys: str, server_argv: list[str], port: int, prompt: str, budget
                 res["error"] = f"nsys export failed ({code}): {out[-300:].strip()}"
                 return res
         acts = read_sqlite(sql)
-        res["analysis"] = analyze(acts, k)
+        res["analysis"] = (analyzer or analyze)(acts, k)
         res["ok"] = bool(res["analysis"]["ok"])
         res["error"] = res["analysis"].get("error")
         return res
