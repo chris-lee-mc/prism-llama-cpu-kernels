@@ -1,0 +1,225 @@
+{
+ "schema": 1,
+ "exp": "r2b_mc",
+ "gpu": "rtx5090",
+ "utc": "2026-10-14T21:56:48.794326+00:00",
+ "env": {
+  "gpu_name": "NVIDIA GeForce RTX 5090",
+  "gpu_tag": "rtx5090",
+  "cc": "12.0",
+  "sm": "sm_120",
+  "driver": "615.71.09",
+  "cuda_runtime": "12.8",
+  "cuda_driver": null,
+  "torch": "2.11.0+cu128",
+  "vram_bytes": 33766572032,
+  "sm_count": 170,
+  "l2_bytes": 100663296,
+  "persisting_l2_max_bytes": null,
+  "access_policy_window_max_bytes": null,
+  "persisting_l2_limit_bytes": null,
+  "git_sha": "4a9b10d40fa4ac033673e966badc5979d109863d",
+  "git_branch": "exp/cache-resident",
+  "hostname": "5fe100a60777",
+  "pod_id": "jd1lx2phraert3",
+  "python": "3.10.12",
+  "counters_ok": null,
+  "transformers": "5.19.0"
+ },
+ "data": {
+  "config": {
+   "parts": "tkbf",
+   "budget_min": 22.0,
+   "configs": {
+    "off": {},
+    "on": {
+     "GGML_CUDA_PQ2_MULTICOL": "1"
+    },
+    "on_pdl0": {
+     "GGML_CUDA_PQ2_MULTICOL": "1",
+     "GGML_CUDA_PDL": "0"
+    }
+   },
+   "widths": [
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9
+   ],
+   "reps": 5,
+   "rounds": 2,
+   "tbo_cmd": [
+    "/workspace/repo/build-cuda/bin/test-backend-ops",
+    "test",
+    "-o",
+    "MUL_MAT",
+    "-b",
+    "CUDA0",
+    "-p",
+    "type_a=pq2_0,"
+   ],
+   "perf_cmd": [
+    "/workspace/repo/build-cuda/bin/test-backend-ops",
+    "perf",
+    "-o",
+    "MUL_MAT",
+    "-b",
+    "CUDA0",
+    "-p",
+    "type_a=pq2_0,"
+   ],
+   "bench_pp_cmd": [
+    "/workspace/repo/build-cuda/bin/llama-bench",
+    "-m",
+    "<model.gguf>",
+    "-ngl",
+    "99",
+    "-fa",
+    "on",
+    "-p",
+    "1,2,3,4,5,6,7,8,9",
+    "-n",
+    "0",
+    "-d",
+    "0",
+    "-ctk",
+    "f16",
+    "-ctv",
+    "f16",
+    "-ub",
+    "2048",
+    "-r",
+    "5",
+    "-o",
+    "json"
+   ],
+   "bench_tg_cmd": [
+    "/workspace/repo/build-cuda/bin/llama-bench",
+    "-m",
+    "<model.gguf>",
+    "-ngl",
+    "99",
+    "-fa",
+    "on",
+    "-p",
+    "0",
+    "-n",
+    "128",
+    "-d",
+    "0",
+    "-ctk",
+    "f16",
+    "-ctv",
+    "f16",
+    "-ub",
+    "2048",
+    "-r",
+    "5",
+    "-o",
+    "json"
+   ],
+   "pq2_filter": "type_a=pq2_0,",
+   "models_info": {
+    "pq2": {
+     "kind": "bonsai2",
+     "key": "PQ2_0",
+     "repo": "prism-ml/Ternary-Bonsai-2-27B-gguf",
+     "file": "Ternary-Bonsai-2-27B-PQ2_0.gguf",
+     "exists": true,
+     "source": "api",
+     "checked_utc": "2026-10-14T21:56:29.056321+00:00",
+     "alternatives": [],
+     "note": null
+    }
+   },
+   "quick": false
+  },
+  "rows": [],
+  "notes": [
+   "test-backend-ops reported failures: see data.tbo[].fail_lines before reading any timing",
+   "stop: test-backend-ops did not pass with GGML_CUDA_PQ2_MULTICOL set (on, on_pdl0); parts k, b, f not run",
+   "widths 1 and 2 do not use the multi-column kernel: their gain is the noise floor of the comparison",
+   "the mc kernel waits for the quantizer (ggml_cuda_pdl_sync) but never calls ggml_cuda_pdl_lc, unlike mul_mat_vec_q: with 'on' the next kernel does not overlap its launch, so the gain of on over off is slightly understated; on_pdl0 vs on mixes this in"
+  ],
+  "counters_ok": false,
+  "tbo": [
+   {
+    "cmd": [
+     "/workspace/repo/build-cuda/bin/test-backend-ops",
+     "test",
+     "-o",
+     "MUL_MAT",
+     "-b",
+     "CUDA0",
+     "-p",
+     "type_a=pq2_0,"
+    ],
+    "passed": 0,
+    "total": 219,
+    "fail_lines": [],
+    "n_fail": 2,
+    "returncode": 1,
+    "ok": false,
+    "config": "on",
+    "env": {
+     "GGML_CUDA_PQ2_MULTICOL": "1"
+    }
+   },
+   {
+    "cmd": [
+     "/workspace/repo/build-cuda/bin/test-backend-ops",
+     "test",
+     "-o",
+     "MUL_MAT",
+     "-b",
+     "CUDA0",
+     "-p",
+     "type_a=pq2_0,"
+    ],
+    "passed": 0,
+    "total": 219,
+    "fail_lines": [],
+    "n_fail": 2,
+    "returncode": 1,
+    "ok": false,
+    "config": "on_pdl0",
+    "env": {
+     "GGML_CUDA_PQ2_MULTICOL": "1",
+     "GGML_CUDA_PDL": "0"
+    }
+   },
+   {
+    "cmd": [
+     "/workspace/repo/build-cuda/bin/test-backend-ops",
+     "test",
+     "-o",
+     "MUL_MAT",
+     "-b",
+     "CUDA0",
+     "-p",
+     "type_a=pq2_0,"
+    ],
+    "passed": 0,
+    "total": 219,
+    "fail_lines": [],
+    "n_fail": 2,
+    "returncode": 1,
+    "ok": false,
+    "config": "off",
+    "env": {}
+   }
+  ],
+  "path": null,
+  "perf": null,
+  "bench": [],
+  "summary": {
+   "pp": {},
+   "tg": {}
+  }
+ }
+}
