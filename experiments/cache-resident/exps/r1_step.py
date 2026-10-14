@@ -458,13 +458,19 @@ def capture(*, nsys: str, server_argv: list[str], port: int, prompt: str, budget
         if not os.path.exists(rep):
             res["error"] = "no .nsys-rep after the capture"
             return res
+        res["report_mb"] = round(os.path.getsize(rep) / 1e6, 1)
         if not os.path.exists(sql):
+            t_exp = time.monotonic()
             code, out = _run(export_cmd(nsys, rep, sql), env, budget.timeout(300.0, reserve_s=5))
+            res["export_s"] = round(time.monotonic() - t_exp, 1)
             if code != 0 or not os.path.exists(sql):
                 res["error"] = f"nsys export failed ({code}): {out[-300:].strip()}"
                 return res
+        t_parse = time.monotonic()
         acts = read_sqlite(sql)
+        res["n_acts"] = len(acts)
         res["analysis"] = (analyzer or analyze)(acts, k)
+        res["parse_s"] = round(time.monotonic() - t_parse, 1)
         res["ok"] = bool(res["analysis"]["ok"])
         res["error"] = res["analysis"].get("error")
         return res

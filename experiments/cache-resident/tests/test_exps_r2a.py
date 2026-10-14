@@ -1,9 +1,12 @@
 """R2a: long-context prompt set, plan, log checks, summary, segmented nsys analysis and a run against fake binaries."""
+import glob
 import json
 import os
 import pathlib
+import re
 import stat
 import sys
+import tempfile
 
 import pytest
 
@@ -25,14 +28,15 @@ def test_committed_set_shape(rows):
     cats = {c: [r for r in rows if r["category"] == c] for c in make_prompts.R2A_CATEGORIES}
     assert {c: len(v) for c, v in cats.items()} == {"edit_full_file": 20, "edit_diff": 20, "toolcall_trace": 20}
     for r in rows:
-        assert set(r) == {"id", "category", "n_predict", "approx_tokens", "chars", "messages", "meta"}
+        assert set(r) == {"id", "category", "n_predict", "approx_tokens", "chars", "messages", "tools", "meta"}
         assert r["n_predict"] == make_prompts.R2A_N_PREDICT[r["category"]]
-        assert r["chars"] == sum(len(m["content"]) for m in r["messages"])
+        assert r["chars"] == make_prompts.messages_chars(r["messages"], r["tools"])
         assert r["approx_tokens"] == round(r["chars"] / make_prompts.CHARS_PER_TOKEN)
     for r in cats["edit_full_file"] + cats["edit_diff"]:
-        assert 2000 <= r["approx_tokens"] <= 8000 and len(r["messages"]) == 1 and r["messages"][0]["role"] == "user"
-    assert all(1500 <= r["approx_tokens"] <= 6000 for r in cats["toolcall_trace"])
-    assert 128 <= max(r["n_predict"] for r in rows) - 384 and {r["n_predict"] for r in rows} == {512, 128}
+        assert 2000 <= r["approx_tokens"] <= 8000 and len(r["messages"]) == 1 and r["messages"][0]["role"] == "user" and r["tools"] is None
+    assert all(1800 <= r["approx_tokens"] <= 6500 for r in cats["toolcall_trace"])
+    assert sum(1 for r in cats["toolcall_trace"] if r["approx_tokens"] < 2000) <= 2          # short files only
+    assert {r["n_predict"] for r in rows} == {320, 512, 128}
     assert len({r["meta"]["file"] for r in rows}) == 60                    # no file twice: the n-gram pool must not see a file early
     assert len({m["content"] for r in rows for m in r["messages"][-1:]}) == 60
 
@@ -61,7 +65,9 @@ def test_edit_prompts_embed_the_real_file_and_a_concrete_instruction(rows):
         assert m["function"] in body.split("Task:")[1]
         assert body.startswith(f"File: {m['file']}\n")
         if m["variant"] == "full_file":
-            assert r["category"] == "edit_full_file" and "complete modified file" in body
+            lines = (src or "").split("\n")
+            assert r["category"] == "edit_full_file" and "starting with the line `" in body and f"(line {m['start_line'] + 1} of the original)" in body
+            assert m["start_line"] <= m["edit_line"] and (not src or lines[m["start_line"]].strip()[:100] in body.split("Task:")[1])
         else:
             assert r["category"] == "edit_diff" and "unified diff" in body and f"--- a/{m['file']}" in body
         kinds[m["variant"]][m["kind"]] = kinds[m["variant"]].get(m["kind"], 0) + 1
@@ -76,16 +82,66 @@ def test_trace_prompts_are_multi_turn_tool_calls(rows):
     turns = []
     for r in (x for x in rows if x["category"] == "toolcall_trace"):
         msgs = r["messages"]
-        assert msgs[0]["role"] == "system" and msgs[1]["role"] == "user"
-        assert [m["role"] for m in msgs[2:]] == ["assistant", "user"] * r["meta"]["n_turns"]
-        for m in msgs[2::2]:
-            call = json.loads(m["content"])
-            assert call["tool"] in names and isinstance(call["args"], dict)
-        assert all(m["content"].startswith("Tool result (") for m in msgs[3::2])
-        assert msgs[-1]["content"].endswith("Reply with the next tool call as one JSON object.")
-        assert all(t in msgs[0]["content"] for t in names)
+        assert msgs[0]["role"] == "system" and msgs[1]["role"] == "user" and msgs[-1]["role"] == "tool"
+        assert [m["role"] for m in msgs[2:]] == ["assistant", "tool"] * r["meta"]["n_turns"]
+        assert {t["function"]["name"] for t in r["tools"]} == names and all(t["type"] == "function" for t in r["tools"])
+        for a, t in zip(msgs[2::2], msgs[3::2]):          # native format: tool_calls on the assistant, a tool message per call
+            (call,) = a["tool_calls"]
+            assert call["type"] == "function" and call["function"]["name"] in names and isinstance(json.loads(call["function"]["arguments"]), dict)
+            assert t["tool_call_id"] == call["id"] and t["content"]
+        assert "Reply with" not in msgs[-1]["content"]
         turns.append(r["meta"]["n_turns"])
     assert set(turns) == {3, 4, 5}
+
+
+def test_full_file_edit_is_inside_the_answer_window(rows):
+    ff = [r for r in rows if r["category"] == "edit_full_file"]
+    for r in ff:
+        m = r["meta"]
+        assert m["start_line"] <= m["edit_line"] and m["edit_offset_tokens"] + 128 <= r["n_predict"]          # >= 128 tokens after the edit
+    assert max(r["meta"]["edit_offset_tokens"] for r in ff) <= 100
+    assert make_prompts.longctx_stats(rows)["full_file_edit_offset_tokens"]["max"] <= 100
+    assert all(r["meta"]["edit_offset_tokens"] is None for r in rows if r["category"] == "edit_diff")
+    lines = ["", "", "int a;", "", "void f() {", "}"]
+    assert make_prompts.start_line_of(lines, 4, 3) == 2 and make_prompts.start_line_of(lines, 1, 3) == 1 and make_prompts.start_line_of(lines, 4, 9) == 2
+
+
+def test_prompts_fit_the_context_with_a_pessimistic_tokenizer(rows):
+    worst = max(r["chars"] for r in rows) / 3.0            # C/C++ with deep indentation can be ~3.0 chars per token
+    assert worst + max(r["n_predict"] for r in rows) + r2a.CTX_MARGIN <= r2a.CTX
+
+
+SECRET_RES = [r"ghp_[A-Za-z0-9]{20,}", r"hf_[A-Za-z0-9]{20,}", r"\bsk-[A-Za-z0-9_-]{20,}", r"PRIVATE KEY", r"rpa_[A-Za-z0-9]{12,}",
+              r"AKIA[0-9A-Z]{16}"]
+
+
+def test_prompt_file_has_no_secret_like_text_and_no_infra_sources(rows):
+    text = FILE.read_text()
+    for rx in SECRET_RES:
+        assert not re.search(rx, text), rx
+    for name, val in os.environ.items():
+        if re.search(r"TOKEN|SECRET|API_KEY|PASSWORD", name) and len(val) >= 8:
+            assert val not in text, name
+    assert not any("/infra/" in r["meta"].get("file", "") or "/results/" in r["meta"].get("file", "") for r in rows)
+    assert not any(f in make_prompts.R2A_EDIT_FILES + make_prompts.R2A_TRACE_FILES for f in
+                   ("experiments/cache-resident/infra/pod_runner.py", "experiments/cache-resident/infra/results.py"))
+
+
+def test_listings_use_tracked_files_only(tmp_path):
+    import subprocess
+    git = lambda *a: subprocess.run(["git", "-C", str(tmp_path), *a], check=True, capture_output=True)
+    git("init", "-q")
+    (tmp_path / "d" / "sub").mkdir(parents=True)
+    for f in ("d/a.cpp", "d/b.py", "d/sub/x.cpp", "d/.hidden"):
+        (tmp_path / f).write_text("int shared_name(void) {\n}\n")
+    git("add", "d/a.cpp", "d/b.py", "d/sub/x.cpp", "d/.hidden")
+    (tmp_path / "d" / "secret.cpp").write_text("shared_name SECRET\n")          # untracked
+    (tmp_path / "d" / ".env").write_text("TOKEN=x\n")
+    assert make_prompts.dir_listing(tmp_path, "d") == "a.cpp\nb.py\nsub/"
+    hits = make_prompts.grep_dir(tmp_path, "d", "d/a.cpp", "shared_name")
+    assert "secret.cpp" not in hits and "d/a.cpp:1" in hits and "d/b.py:1" in hits and "sub" not in hits
+    with pytest.raises(RuntimeError, match="not a git checkout"):
+        make_prompts.dir_listing(tmp_path / "d" / "sub" / "nope", "x")
 
 
 def test_stats_and_cli(rows, capsys):
@@ -140,6 +196,8 @@ def test_configs_match_r1_and_all_carry_lv4():
     cfgs = {c["name"]: c for c in r2a.matrix_configs()}
     r1c = {c["name"]: c for c in e5_spec.matrix_configs()}
     assert list(cfgs) == r2a.CONFIG_NAMES == ["base", "k2", "k3", "k4", "ngram_mod", "ngram_map_k", "ngram_mod_short", "ngram_map_k_short"]
+    assert r2a.DEFAULT_CONFIGS == ["base", "k4", "ngram_mod", "ngram_map_k", "ngram_mod_short", "ngram_map_k_short"]
+    assert r2a.parse_args([]).configs == r2a.DEFAULT_CONFIGS and r2a.parse_args(["--configs", "base,k2,k3"]).configs == ["base", "k2", "k3"]
     for n, c in cfgs.items():
         cmd = r2a.config_cmd("/b", "/t.gguf", "/d.gguf", c)
         assert cmd.count("-lv") == 1 and cmd[cmd.index("-lv") + 1] == "4" and cmd[cmd.index("-c") + 1] == "16384"
@@ -166,11 +224,12 @@ def test_plan_fits_cuts_evenly_and_lists_what_it_dropped(rows):
     order = make_prompts.shuffled(rows, r2a.SEED, stratify=True)
     pre = [r["category"] for r in order[:30]]
     assert all(pre.count(c) == 10 for c in make_prompts.R2A_CATEGORIES)
-    cfgs = r2a.config_order(r2a.matrix_configs())
+    cfgs = r2a.config_order(r2a.matrix_configs(r2a.DEFAULT_CONFIGS))
     big = r2a.plan_n(cfgs, order, 3600.0)
     assert big["n"] == 60 and big["fits"] and big["dropped"] == [] and big["est_s"] <= 0.9 * 3600
-    p = r2a.plan_n(cfgs, order, 21.5 * 60)
-    assert 12 <= p["n"] < 60 and p["fits"] and p["est_s"] <= 0.9 * 21.5 * 60
+    p = r2a.plan_n(cfgs, order, 21.5 * 60 - r2a.DRIFT_RESERVE_S)
+    assert 42 <= p["n"] < 60 and p["fits"]                       # 14-15 per category at the default budget (exploratory below 15)
+    assert min(p["per_category"].values()) >= 14 and p["est_s"] <= 0.9 * (21.5 * 60 - r2a.DRIFT_RESERVE_S)
     assert p["dropped"] == [r["id"] for r in order[p["n"]:]] and sum(p["dropped_per_category"].values()) == 60 - p["n"]
     assert max(p["per_category"].values()) - min(p["per_category"].values()) <= 1
     assert max(p["dropped_per_category"].values()) - min(p["dropped_per_category"].values()) <= 1
@@ -178,6 +237,8 @@ def test_plan_fits_cuts_evenly_and_lists_what_it_dropped(rows):
     assert tiny["n"] == r2a.N_FLOOR and not tiny["fits"]
     slow = r2a.plan_n(cfgs, order, 21.5 * 60, scale=2.0)
     assert slow["n"] < p["n"]
+    c = {x["name"]: x for x in r2a.matrix_configs()}
+    assert r2a.config_cost_s(c["k4"], order[:30]) > 1.2 * r2a.config_cost_s(c["base"], order[:30])      # R1: K=4 ran at 0.5-0.7x on code (prefill dominates here)
 
 
 def test_measured_scale_and_part_budget(rows):
@@ -229,13 +290,42 @@ def test_log_checks_read_the_path_from_the_trace_lines():
     assert any("KV-checkpoint" in n and "replay" in n for n in notes)
 
 
-def test_count_spec_events_from_a_debug_log():
-    log = "\n".join(["slot x: created speculative checkpoint (pos_min = 1)", "slot x: accepted 4/4 draft tokens, new n_tokens = 9",
-                     "slot x: created speculative checkpoint (pos_min = 9)", "slot x: restoring speculative checkpoint (pos_min = 9)",
-                     "slot x: accepted 1/4 draft tokens, new n_tokens = 11", "slot x: accepted 0/0 draft tokens", "slot x: accepted 0/3 draft tokens"])
+FULL_STEPS = """slot x: created speculative checkpoint (pos_min = 1, pos_max = 9, n_tokens = 10, size = 1.0 MiB, draft = 0.0 MiB)
+slot x: accepted  4/ 4 draft tokens
+slot x: accepted 4/4 draft tokens, new n_tokens = 15
+slot x: created speculative checkpoint (pos_min = 1, pos_max = 14, n_tokens = 15, size = 1.0 MiB, draft = 0.0 MiB)
+slot x: accepted  2/ 4 draft tokens (restore checkpoint)
+slot x: restoring speculative checkpoint (pos_min = 1, pos_max = 14, size = 1.0 MiB)
+slot x: accepted  2/ 3 draft tokens
+slot x: accepted 2/3 draft tokens, new n_tokens = 18
+slot x: created speculative checkpoint (pos_min = 1, pos_max = 17, n_tokens = 18, size = 1.0 MiB, draft = 0.0 MiB)
+slot x: accepted  0/ 5 draft tokens (restore checkpoint)
+slot x: restoring speculative checkpoint (pos_min = 1, pos_max = 17, size = 1.0 MiB)
+slot x: accepted 0/1 draft tokens, new n_tokens = 19
+slot x: created speculative checkpoint (pos_min = 1, pos_max = 18, n_tokens = 19, size = 1.0 MiB, draft = 0.0 MiB)
+"""
+
+
+def test_count_spec_events_on_the_checkpoint_path_uses_created_as_denominator():
+    # what the server prints: a restore has no DEBUG accepted line, its replay logs a/(a+1); the last step of a request has none
+    ev = r2a.count_spec_events(FULL_STEPS)
+    assert ev["path"] == "checkpoint" and ev["created"] == 4 and ev["restored"] == 2 and ev["replay_steps"] == 2
+    assert ev["steps_with_draft"] == 4 and ev["full_accept"] == 2 and ev["restore_per_step"] == pytest.approx(0.5) and ev["checkpoint_per_step"] == 1.0
+    assert ev["restored_ab_logged"] == 2 and ev["partial_accept"] == 1 and ev["zero_accept"] == 1 and ev["restored_mean_accepted"] == pytest.approx(1.0)
+    # the replay lines (2/3 and 0/1) are not steps: they are not classified as partial or zero accepts of a draft
+    no_trace = "\n".join(ln for ln in FULL_STEPS.splitlines() if not re.search(r"draft tokens( \(restore checkpoint\))?$", ln))    # LLAMA_TRACE off
+    ev2 = r2a.count_spec_events(no_trace)
+    assert ev2["restored"] == 2 and ev2["replay_steps"] == 2 and ev2["partial_accept"] is None and ev2["zero_accept"] is None
+    assert ev2["steps_with_draft"] == 4 and ev2["restore_per_step"] == pytest.approx(0.5)
+
+
+def test_count_spec_events_in_batch_rollback_reads_the_accepted_lines():
+    log = "\n".join(["slot x: accepted 4/4 draft tokens, new n_tokens = 9", "slot x: accepted 1/4 draft tokens, new n_tokens = 11",
+                     "slot x: accepted 0/0 draft tokens, new n_tokens = 12", "slot x: accepted 0/3 draft tokens, new n_tokens = 13"])
     ev = r2a.count_spec_events(log)
-    assert ev["created"] == 2 and ev["restored"] == 1 and ev["steps_with_draft"] == 3 and ev["full_accept"] == 1
-    assert ev["partial_accept"] == 1 and ev["zero_accept"] == 1 and ev["restore_per_step"] == pytest.approx(1 / 3)
+    assert ev["path"] == "in_batch" and ev["created"] == 0 and ev["steps_with_draft"] == 3 and ev["full_accept"] == 1
+    assert ev["partial_accept"] == 1 and ev["zero_accept"] == 1 and ev["restore_per_step"] == 0.0 and ev["checkpoint_per_step"] == 0.0
+    assert r2a.count_spec_events("")["steps_with_draft"] == 0 and r2a.count_spec_events("")["restore_per_step"] is None
 
 
 # ---------------------------------------------------------------- summary
@@ -275,7 +365,7 @@ def test_observed_prompt_set():
 
 # ---------------------------------------------------------------- segmented nsys analysis
 
-def _request_acts(t, steps=8, prefill_ms=200):
+def _request_acts(t, steps=8, prefill_ms=200, slow_ms=None):
     """One request: prefill (one long target burst, then a draft prompt pass), then `steps` decode steps as in r1's two-stream fixture."""
     ms = 1_000_000
     acts = []
@@ -290,8 +380,8 @@ def _request_acts(t, steps=8, prefill_ms=200):
         t += 200_000
         t = burst(t, 15 * ms, 9)
         t += 300_000
-    for _ in range(steps):
-        t = burst(t, 10 * ms, 7)
+    for n in range(steps):
+        t = burst(t, (slow_ms if slow_ms and n == 4 else 10) * ms, 7)
         t += 5_000
         t = burst(t, 2 * ms, 9)
         for _ in range(3):
@@ -314,7 +404,7 @@ def test_analyze_segments_cuts_prefill_and_pools_decode_steps():
     acts = _capture_acts(3)
     res = r2a.analyze_segments(acts, 4)
     assert res["ok"] and res["n_segments"] == 3 and res["n_segments_used"] == 3 and res["split_mode"] == "stream"
-    assert res["n_steps"] == 3 * 6                         # 8 verifies, 1 skipped, 7 left -> 6 steps per request
+    assert res["n_steps"] == 3 * 5 and res["n_steps_dropped_long"] == 0      # 8 verifies, 2 skipped, 6 left -> 5 steps per request
     m = res["median_ms"]
     assert m["target_verify"] == pytest.approx(9.98, abs=0.05) and m["draft_reeval"] == pytest.approx(2.0, abs=0.05)
     assert m["draft_gen"] == pytest.approx(4.8, abs=0.1) and m["wall"] == pytest.approx(18.3, abs=0.2)
@@ -323,6 +413,13 @@ def test_analyze_segments_cuts_prefill_and_pools_decode_steps():
     assert plain["ok"] and plain["median_ms"]["wall"] >= m["wall"] and max(s["wall"] for s in plain["steps_ms"]) > 150
     no_pre = r2a.analyze_segments(_capture_acts(3, prefill_ms=0), 4)
     assert no_pre["ok"] and not no_pre["checks"]["prefill_cut_in_every_segment"] and no_pre["median_ms"]["wall"] == pytest.approx(18.3, abs=0.2)
+
+
+def test_analyze_segments_drops_steps_with_a_long_target_burst():
+    res = r2a.analyze_segments(_capture_acts(3, slow_ms=30), 4)         # one 30 ms burst per request: a prompt batch, not a verify
+    assert res["ok"] and res["n_steps_dropped_long"] == 3 and res["n_steps"] == 3 * 5 - 3
+    assert res["median_ms"]["target_verify"] == pytest.approx(9.98, abs=0.05) and max(s["target_verify"] for s in res["steps_ms"]) < 12
+    assert r2a.analyze_segments(_capture_acts(3, slow_ms=30), 4, long_factor=10.0)["n_steps_dropped_long"] == 0
 
 
 def test_analyze_segments_failure_modes():
@@ -337,13 +434,16 @@ def test_analyze_segments_failure_modes():
 def test_overhead_compares_the_nsys_step_with_the_unprofiled_step():
     un = [_row(i, "x", "t", 100.0, toks=48, drafted=44, acc=20) for i in range(4)]          # steps = 48 - 20 - 1 = 27 per row
     pr = [_row(i, "x", "t", 80.0, toks=48, drafted=44, acc=20) for i in range(4)]
-    an = {"median_ms": {"wall": 20.0, "target_verify": 10.0, "draft_gen": 5.0, "draft_reeval": 1.5, "c1_floor": 3.0}}
+    an = {"mean_ms": {"wall": 20.0, "target_verify": 10.0, "draft_gen": 5.0, "draft_reeval": 1.5, "c1_floor": 3.0},
+          "median_ms": {"wall": 19.0, "target_verify": 9.5, "draft_gen": 4.9, "draft_reeval": 1.4, "c1_floor": 2.5}}
     o = r2a.overhead(un, pr, an)
+    assert o["nsys_step_wall_ms"] == 20.0 and o["nsys_step_wall_median_ms"] == 19.0 and o["split_median_ms"]["target_verify"] == 9.5      # mean vs mean
     assert o["unprofiled_ms_per_step"] == pytest.approx(480 / 27 / 1.0) and o["profiled_request_over_unprofiled"] == pytest.approx(1.25)
     assert o["overhead_ms"] == pytest.approx(20.0 - 480 / 27) and o["nsys_wall_over_unprofiled"] == pytest.approx(20.0 / (480 / 27))
     assert o["split_ms"]["kernel_busy_sum"] == pytest.approx(16.5) and o["unprofiled_non_compute_ms"] == pytest.approx(480 / 27 - 16.5)
     assert o["c1_floor_minus_overhead_ms"] == pytest.approx(max(3.0 - (20.0 - 480 / 27), 0.0))
-    assert r2a.overhead([], [], None) == {"unprofiled_ms_per_step": None, "profiled_request_ms_per_step": None, "nsys_step_wall_ms": None}
+    assert r2a.overhead([], [], None) == {"unprofiled_ms_per_step": None, "profiled_request_ms_per_step": None, "nsys_step_wall_ms": None,
+                                          "nsys_step_wall_median_ms": None}
 
 
 def test_control_subset_is_a_balanced_prefix(rows):
@@ -371,17 +471,26 @@ class H(BaseHTTPRequestHandler):
     def do_POST(self):
         body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
         if self.path == "/apply-template":
-            return self._send({{"prompt": "T:" + body["messages"][-1]["content"][-60:]}})
+            return self._send({{"prompt": "T:" + body["messages"][-1]["content"][-60:] + ("|tools" if body.get("tools") else "")}})
+        if self.path == "/tokenize":
+            return self._send({{"tokens": list(range(len(body["content"])))}})
         text = "out:" + body["prompt"]
         n = body["n_predict"]
         speed = {{"none": 100.0, "draft-simple": 120.0}}.get(spec, 130.0)
         t = {{"predicted_per_second": speed, "predicted_ms": 1e3 * n / speed, "predicted_n": n, "prompt_n": 3000, "prompt_ms": 1000.0}}
         if spec != "none":
             t.update(draft_n=2 * n, draft_n_accepted=n // 2)
-        if lv >= 5:
-            print("slot x: created speculative checkpoint (pos_min = 1)", flush=True)
-            print("slot x: restoring speculative checkpoint (pos_min = 1)", flush=True)
+        if lv >= 5 and spec == "draft-simple":
             print("slot x: accepted 1/4 draft tokens, new n_tokens = 5", flush=True)
+            print("slot x: accepted 4/4 draft tokens, new n_tokens = 9", flush=True)
+        elif lv >= 5 and spec != "none":
+            print("slot x: created speculative checkpoint (pos_min = 1)", flush=True)
+            if os.environ.get("LLAMA_TRACE"):
+                print("slot x: accepted  1/ 4 draft tokens (restore checkpoint)", flush=True)
+            print("slot x: restoring speculative checkpoint (pos_min = 1)", flush=True)
+            print("slot x: accepted 1/2 draft tokens, new n_tokens = 5", flush=True)
+            print("slot x: created speculative checkpoint (pos_min = 5)", flush=True)
+            print("slot x: accepted 4/4 draft tokens, new n_tokens = 9", flush=True)
         self._send({{"content": text, "tokens_predicted": n, "timings": t, "stop_type": "limit"}})
 print("srv: speculative decoding enabled: " + spec, flush=True)
 if spec == "draft-simple":
@@ -454,7 +563,12 @@ def _result(tmp):
     return json.loads(files[0].read_text())
 
 
+def s_ids(m):
+    return list(m["summary"])
+
+
 def test_r2a_end_to_end_with_fakes(pod):
+    leftovers = set(glob.glob(os.path.join(tempfile.gettempdir(), "cr-r1-nsys-*")))
     args = ["--configs", "base,k2,k4,ngram_mod,ngram_map_k_short", "--limit", "9", "--control-n", "3", "--nsys-n-predict", "16", "--budget-min", "12"]
     assert r2a.main(args) == 0
     doc = _result(pod)
@@ -464,9 +578,14 @@ def test_r2a_end_to_end_with_fakes(pod):
     assert m["config_order"][0] == "base" and sorted(m["config_order"]) == sorted(["base", "k2", "k4", "ngram_mod", "ngram_map_k_short"])
     assert m["config_order"] == [c["name"] for c in r2a.config_order(r2a.matrix_configs(["base", "k2", "k4", "ngram_mod", "ngram_map_k_short"]))]
     assert m["plan"]["n"] == 9 and m["plan"]["dropped"] == [] and set(m["plan"]["per_category"].values()) == {3}
-    assert list(m["runs"]) == m["config_order"]
+    assert list(m["runs"]) == m["config_order"] + ["base_end"] and m["drift_config"] == "base_end"
     base = m["runs"]["base"]
-    assert len(base["rows"]) == 9 and base["rows"][0]["text"].startswith("out:") and {r["n_predict"] for r in base["rows"]} == {512, 128}
+    assert len(base["rows"]) == 9 and base["rows"][0]["text"].startswith("out:") and {r["n_predict"] for r in base["rows"]} == {320, 512, 128}
+    assert all(r["prompt_tokens"] and r["prompt_tokens"] > 0 for r in base["rows"])
+    assert all(r["text"].endswith("|tools") == (r["category"] == "toolcall_trace") for r in base["rows"])          # tools reach /apply-template
+    assert [r["id"] for r in m["runs"]["base_end"]["rows"]] == [r["id"] for r in base["rows"]][:r2a.DRIFT_N]
+    assert m["drift"]["n"] == r2a.DRIFT_N and m["drift"]["ratio"] == pytest.approx(1.0) and m["drift"]["text_equal_frac"] == 1.0
+    assert set(m["clocks"]) <= set(m["runs"]) and "base_end" in s_ids(m)
     for name, run in m["runs"].items():
         cmd = run["cmd"]
         assert cmd[cmd.index("-lv") + 1] == "4" and cmd[cmd.index("-c") + 1] == "16384" and run["checks"]["rollback_path"] != "unknown"
@@ -489,9 +608,13 @@ def test_r2a_end_to_end_with_fakes(pod):
     assert ov["unprofiled_ms_per_step"] and ov["nsys_step_wall_ms"] == pytest.approx(18.3, abs=0.3) and "overhead_ms" in ov
     assert ov["split_ms"]["target_verify"] == pytest.approx(9.98, abs=0.05)
     p = d["probe"]
-    assert set(p["configs"]) == {"k4", "ngram_map_k_short"} and p["lv"] == "5"
-    ev = p["configs"]["k4"]["events"]
-    assert ev["created"] >= 3 and ev["restored"] >= 3 and ev["partial_accept"] >= 3 and ev["restore_per_step"] == pytest.approx(1.0)
+    assert set(p["configs"]) == {"k4", "ngram_map_k_short"} and p["lv"] == "5" and p["llama_trace"] == "1"
+    assert len(p["prompt_ids"]) == 3 and sorted(p["n_predict"].values()) == [64, 128, 128]
+    ev = p["configs"]["k4"]["events"]                      # in-batch rollback: steps from the accepted a/b lines
+    assert ev["path"] == "in_batch" and ev["created"] == 0 and ev["steps_with_draft"] == 8 and ev["partial_accept"] == 4 and ev["full_accept"] == 4   # 3 prompts + warm-up
+    ev = p["configs"]["ngram_map_k_short"]["events"]       # checkpoint path: created is the denominator, replays are not steps
+    assert ev["path"] == "checkpoint" and ev["created"] == 8 and ev["restored"] == 4 and ev["replay_steps"] == 4 and ev["steps_with_draft"] == 8
+    assert ev["restore_per_step"] == pytest.approx(0.5) and ev["full_accept"] == 4 and ev["restored_ab_logged"] == 4     # LLAMA_TRACE reached the server
     text = json.dumps(doc)
     assert "hf_secretsecret123" not in text and "rpa_secretsecret456" not in text
     verbs = [json.loads(ln) for ln in (pod / "nsys.log").read_text().splitlines()]
@@ -501,7 +624,8 @@ def test_r2a_end_to_end_with_fakes(pod):
     assert not list(pod.rglob("*.nsys-rep")) and not list(pod.rglob("*.sqlite"))
     raw = pod / "results" / "r2a" / "pro6000-ws" / "raw"
     assert not (raw / "partial.json").exists() and not list(raw.glob("*probe*"))          # debug logs are not kept
-    assert sorted(f.name.split("-", 1)[1] for f in raw.glob("*-server-*.log")) >= ["server-base.log", "server-control-nsys.log"]
+    assert not list(pod.rglob("server-probe-*")) and set(glob.glob(os.path.join(tempfile.gettempdir(), "cr-r1-nsys-*"))) == leftovers
+    assert {"server-base.log", "server-base_end.log", "server-control-nsys.log"} <= {f.name.split("-", 1)[1] for f in raw.glob("*-server-*.log")}
 
 
 def test_r2a_cuts_the_prompt_count_evenly_and_logs_it(pod):
@@ -515,6 +639,48 @@ def test_r2a_cuts_the_prompt_count_evenly_and_logs_it(pod):
     n_run = {n: len(r["rows"]) for n, r in m["runs"].items()}
     assert n_run["base"] <= pl["n"] and all(v <= n_run["base"] for v in n_run.values())
     assert d["control"] is None and d["probe"] is None
+
+
+def test_r2a_cut_run_summarizes_again_with_intervals(pod, monkeypatch):
+    real, calls = r2a.run_config, []
+
+    def cut_after_base(*a, **kw):
+        calls.append(kw["cfg"]["name"] if "cfg" in kw else a[0]["name"])
+        if len(calls) == 2:
+            raise SystemExit(143)             # SIGTERM during the second config
+        return real(*a, **kw)
+    monkeypatch.setattr(r2a, "run_config", cut_after_base)
+    with pytest.raises(SystemExit):
+        r2a.main(["--parts", "m", "--configs", "base,k4", "--limit", "6", "--budget-min", "8"])
+    d = _result(pod)["data"]
+    assert any("run cut during part m" in n for n in d["notes"])
+    b = d["matrix"]["summary"]["base"]["all"]
+    assert b["n"] >= 2
+    assert "tok_s_ci95" in b                      # recomputed in the final save, not the CI-less timer refresh
+
+
+def test_context_guard_skips_a_prompt_that_cannot_fit(monkeypatch):
+    ps = [{"id": "a", "category": "edit_diff", "approx_tokens": 1, "n_predict": 512, "messages": [{"role": "user", "content": "x"}]},
+          {"id": "b", "category": "edit_diff", "approx_tokens": 1, "n_predict": 512, "messages": [{"role": "user", "content": "y"}]}]
+    sent = []
+    monkeypatch.setattr(r2a, "apply_template", lambda base, msgs, state, tools=None: msgs[0]["content"])
+    monkeypatch.setattr(r2a, "count_tokens", lambda base, text: 16000 if text == "x" else 3000)
+    monkeypatch.setattr(r2a.e5_spec, "post_json", lambda url, body, timeout=0: sent.append(body) or {"content": "o", "tokens_predicted": 1, "timings": {}})
+    rows, _ = r2a.run_requests(ps, common.Budget(5.0), [], r2a.matrix_configs(["base"])[0])
+    assert "does not fit" in rows[0]["error"] and rows[0]["prompt_tokens"] == 16000 and rows[1]["prompt_tokens"] == 3000 and "error" not in rows[1]
+    assert len(sent) == 1
+
+
+def test_clock_flags_and_drift_summary():
+    ok = lambda i, tps: {"id": f"r{i}", "category": "edit_diff", "tokens_predicted": 100, "predicted_per_second": tps, "predicted_ms": 1e5 / tps, "text": "t"}
+    runs = {"base": {"spec_type": "none", "rows": [ok(i, 100.0) for i in range(4)], "smi": {"sm_mhz_med": 2400}},
+            "base_end": {"spec_type": "none", "rows": [ok(i, 95.0) for i in range(4)], "smi": {"sm_mhz_med": 2200}},
+            "k4": {"spec_type": "draft-simple", "rows": [], "smi": {"sm_mhz_med": 2390}}, "nosmi": {"rows": []}}
+    f = r2a.clock_flags(runs)
+    assert f["base_end"]["flag"] is True and f["k4"]["flag"] is False and f["base"]["vs_base"] == 1.0 and "nosmi" not in f
+    d = r2a.drift_summary(runs)
+    assert d["n"] == 4 and d["ratio"] == pytest.approx(0.95) and d["text_equal_frac"] == 1.0
+    assert r2a.drift_summary({"base": runs["base"]}) is None
 
 
 def test_r2a_unhealthy_host_skips_timed_parts(pod, monkeypatch):

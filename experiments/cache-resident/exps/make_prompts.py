@@ -16,6 +16,7 @@ import pathlib
 import random
 import re
 import statistics
+import subprocess
 import sys
 
 SEED = 1234
@@ -265,10 +266,12 @@ def shuffled(rows: list[dict], seed: int, stratify: bool = False) -> list[dict]:
 R2A_OUT = DEFAULT_OUT.parent / "prompts_r2a.jsonl"
 R2A_SEED = 20261014
 R2A_CATEGORIES = ["edit_full_file", "edit_diff", "toolcall_trace"]
-R2A_N_PREDICT = {"edit_full_file": 512, "edit_diff": 512, "toolcall_trace": 128}
+R2A_N_PREDICT = {"edit_full_file": 320, "edit_diff": 512, "toolcall_trace": 128}
 R2A_ROOT = pathlib.Path(__file__).resolve().parent.parent.parent.parent
 CHARS_PER_TOKEN = 3.5
 EDIT_TOKENS = (2000, 8000)
+TRACE_MIN_TOKENS = 2100        # estimated tokens (chars / 3.5) a trace is lengthened to, when its file is long enough
+START_BEFORE = 3            # lines of copy before the first edited line in an edit_full_file answer
 EDIT_KINDS = ["rename", "add_param", "fix_bug", "add_logging", "refactor"]
 TRACE_TURNS = [3, 3, 3, 3, 3, 3, 3, 4, 4, 4, 4, 4, 4, 4, 5, 5, 5, 5, 5, 5]
 LANG_OF_EXT = {".py": "python", ".c": "c", ".cpp": "cpp", ".h": "cpp", ".cu": "cpp", ".cuh": "cpp"}
@@ -289,7 +292,7 @@ R2A_EDIT_FILES: list[str] = [
     "ggml/src/ggml-cuda/mmid.cu", "ggml/src/ggml-cuda/im2col.cu", "ggml/src/ggml-cuda/fwht.cu",
     "ggml/src/ggml-cuda/mmq-hopper-q1.cu", "ggml/src/ggml-cuda/dsv4-hc.cu", "experiments/cache-resident/harness/counters.py",
     "experiments/cache-resident/harness/l2persist.py", "experiments/cache-resident/harness/p0_l2_check.py",
-    "experiments/cache-resident/infra/pod_runner.py", "experiments/cache-resident/infra/results.py",
+    "experiments/cache-resident/kernels/toy_hybrid.py", "tools/kv-mean-center/kv-mean-center.cpp",
     "experiments/cache-resident/kernels/bench_gemv.py",
 ]
 R2A_TRACE_FILES: list[str] = [
@@ -318,13 +321,19 @@ TOOL_SCHEMA = [
     {"name": "apply_patch", "description": "Apply a unified diff to the working tree.",
      "parameters": {"type": "object", "properties": {"patch": {"type": "string"}}, "required": ["patch"]}},
 ]
-TRACE_SYSTEM = ("You are a coding agent working in a repository checked out at /work/repo. You can call exactly one tool per turn. "
-                "The available tools are described by this JSON schema:\n{schema}\n"
-                "Reply with exactly one JSON object of the form {{\"tool\": \"<name>\", \"args\": {{...}}}} and nothing else.")
+TRACE_TOOLS = [{"type": "function", "function": t} for t in TOOL_SCHEMA]      # OpenAI format: the chat template renders the tools block
+TRACE_SYSTEM = ("You are a coding agent working in a repository checked out at /work/repo. Use the tools to inspect and change the "
+                "code. Call one tool per turn.")
 
 
 def approx_tokens(chars: int) -> int:
     return int(round(chars / CHARS_PER_TOKEN))
+
+
+def messages_chars(messages: list[dict], tools: list[dict] | None = None) -> int:
+    """Characters the chat template will render from the messages: contents, tool call JSON and the tool schema."""
+    n = sum(len(m.get("content") or "") + (len(json.dumps(m["tool_calls"])) if m.get("tool_calls") else 0) for m in messages)
+    return n + (len(json.dumps(tools)) if tools else 0)
 
 
 def sha16(text: str) -> str:
@@ -450,6 +459,8 @@ def edit_instruction(kind: str, text: str, lang: str, rng: random.Random) -> tup
     """(instruction, meta) for one edit kind, or None when the file has nothing for it."""
     funcs = find_functions(text, lang)
     med = lambda f: 6 <= f["n_body"] <= 140
+    lines = text.split("\n")
+    first_use = lambda name: next(i for i, ln in enumerate(lines) if re.search(r"\b%s\b" % re.escape(name), ln))
     if kind == "rename":
         f = _pick(rng, funcs, lambda f: f["calls"] >= 1 and len(f["name"]) >= 5 and f["name"] != "main")
         if not f:
@@ -457,7 +468,7 @@ def edit_instruction(kind: str, text: str, lang: str, rng: random.Random) -> tup
         new = next(f["name"] + s for s in SUFFIXES if f["name"] + s not in text)
         msg = rng.choice([f"Rename the function `{f['name']}` to `{new}` and update every call site in this file.",
                           f"Rename `{f['name']}` to `{new}`. Update the definition and all {f['calls']} call site(s) in this file."])
-        return msg, {"function": f["name"], "new_name": new}
+        return msg, {"function": f["name"], "new_name": new, "edit_line": first_use(f["name"])}
     if kind == "add_param":
         f = _pick(rng, funcs, lambda f: f["calls"] >= 1 and med(f) and f["name"] != "main")
         if not f:
@@ -469,12 +480,12 @@ def edit_instruction(kind: str, text: str, lang: str, rng: random.Random) -> tup
             msg = (f"Add a new trailing parameter `bool verbose` to `{f['name']}`. Give it the default value `false` when the language "
                    f"allows default arguments, otherwise pass `false` at every existing call site in this file. When `verbose` is true, "
                    f"print one line to stderr at the start of the function.")
-        return msg, {"function": f["name"]}
+        return msg, {"function": f["name"], "edit_line": first_use(f["name"])}
     if kind == "fix_bug":
         f = _pick(rng, funcs, lambda f: med(f) and f["loop_lt"])
         if f:
             return (f"Bug report: the loop `{f['loop_lt'][1].strip()}` in `{f['name']}` skips its last element (off-by-one in the loop "
-                    f"bound). Fix the bound and keep everything else unchanged."), {"function": f["name"]}
+                    f"bound). Fix the bound and keep everything else unchanged."), {"function": f["name"], "edit_line": f["loop_lt"][0]}
         f = _pick(rng, funcs, lambda f: med(f) and f["first_param"] and (f["first_ptr"] or lang == "python"))
         if not f:
             return None
@@ -484,13 +495,13 @@ def edit_instruction(kind: str, text: str, lang: str, rng: random.Random) -> tup
         else:
             msg = (f"Bug report: `{f['name']}` crashes when its argument `{f['first_param']}` is NULL. Add an early return with a "
                    f"safe default value (pick it from the return type) when `{f['first_param']}` is NULL.")
-        return msg, {"function": f["name"]}
+        return msg, {"function": f["name"], "edit_line": f["line"]}
     if kind == "add_logging":
         f = _pick(rng, funcs, lambda f: med(f) and f["first_param"])
         if not f:
             return None
         return (f"Add a debug log line at the start of `{f['name']}` that prints the function name and the value of `{f['first_param']}` "
-                f"(use {_log_macro(text, lang)}). Do not change anything else."), {"function": f["name"]}
+                f"(use {_log_macro(text, lang)}). Do not change anything else."), {"function": f["name"], "edit_line": f["body_start"]}
     if kind == "refactor":
         f = _pick(rng, funcs, lambda f: med(f) and f["loop"])
         if f:
@@ -498,14 +509,22 @@ def edit_instruction(kind: str, text: str, lang: str, rng: random.Random) -> tup
             msg = (f"Refactor `{f['name']}`: extract its first loop (`{f['loop'][1].strip()}`) into a new helper function `{helper}` "
                    f"defined right above `{f['name']}`, pass what it needs as parameters, and call it from `{f['name']}`. "
                    f"The behavior must stay the same.")
-            return msg, {"function": f["name"], "helper": helper}
+            return msg, {"function": f["name"], "helper": helper, "edit_line": f["line"]}
         f = _pick(rng, funcs, lambda f: 16 <= f["n_body"] <= 140)
         if not f:
             return None
         helper = f["name"] + "_tail"
         return (f"Refactor `{f['name']}`: move the second half of its body into a new helper function `{helper}` defined right above "
-                f"it and call it from `{f['name']}`. The behavior must stay the same."), {"function": f["name"], "helper": helper}
+                f"it and call it from `{f['name']}`. The behavior must stay the same."), {"function": f["name"], "helper": helper, "edit_line": f["line"]}
     raise ValueError(kind)
+
+
+def start_line_of(lines: list[str], edit_line: int, before: int = START_BEFORE) -> int:
+    """0-based first line of a full_file answer: a few lines before the first edited line, never a blank one."""
+    start = max(0, edit_line - before)
+    while start < edit_line and not lines[start].strip():
+        start += 1
+    return start
 
 
 def edit_prompt(path: str, text: str, kind: str, variant: str, lang: str, rng: random.Random) -> tuple[list[dict], dict] | None:
@@ -514,9 +533,18 @@ def edit_prompt(path: str, text: str, kind: str, variant: str, lang: str, rng: r
         return None
     instruction, meta = ins
     fence = lang
+    meta["edit_offset_tokens"] = None
     if variant == "full_file":
-        spec = (f"Output the complete modified file in a single ```{fence} code block. Keep every unchanged line exactly as it is "
-                f"and do not add any explanation.")
+        # a 320-token answer that starts at line 1 would only copy the file head (the edit is often thousands of tokens down),
+        # so the answer starts a few lines before the first edited line
+        lines = text.split("\n")
+        start = start_line_of(lines, meta["edit_line"])
+        shown = lines[start].strip()
+        shown = shown if len(shown) <= 100 else shown[:100] + "..."
+        meta.update(start_line=start, edit_offset_tokens=approx_tokens(len("\n".join(lines[start:meta["edit_line"]]))))
+        spec = (f"Output the modified file starting with the line `{shown}` (line {start + 1} of the original) and continuing to the "
+                f"last line of the file, in a single ```{fence} code block. Do not output the lines before it. Keep every unchanged "
+                f"line exactly as it is and do not add any explanation.")
     else:
         spec = (f"Output only a unified diff for this single file (`--- a/{path}` and `+++ b/{path}` headers, 3 lines of context) in a "
                 f"single ```diff code block. Do not output the whole file and do not add any explanation.")
@@ -539,16 +567,32 @@ def read_source(root, rel: str) -> str | None:
     return t if t.isascii() and "\r" not in t and "\0" not in t else None
 
 
+def tracked_files(root) -> list[str]:
+    """Files tracked by git under root. Listings and greps use only these, so an untracked or ignored file (a .env, results/,
+    a scratch file) can never get into a prompt."""
+    p = subprocess.run(["git", "-C", str(root), "ls-files", "-z"], capture_output=True, text=True)
+    if p.returncode != 0:
+        raise RuntimeError(f"R2a: {root} is not a git checkout; directory listings use tracked files only")
+    return [f for f in p.stdout.split("\0") if f]
+
+
 def dir_listing(root, rel_dir: str, limit: int = 40) -> str:
-    names = sorted(n for n in os.listdir(pathlib.Path(root) / rel_dir) if not n.startswith("."))
-    names = [n + "/" if (pathlib.Path(root) / rel_dir / n).is_dir() else n for n in names]
-    return "\n".join(_ascii(n) for n in names[:limit])
+    """ls of a directory as the tracked files see it (sub directories end with /)."""
+    pre = rel_dir.rstrip("/") + "/"
+    kids: dict[str, bool] = {}
+    for f in tracked_files(root):
+        if f.startswith(pre):
+            name, _, rest = f[len(pre):].partition("/")
+            if not name.startswith("."):
+                kids[name] = kids.get(name, False) or bool(rest)
+    return "\n".join(_ascii(n + "/" if kids[n] else n) for n in sorted(kids)[:limit])
 
 
 def grep_dir(root, rel_dir: str, first: str, pattern: str, limit: int = 12) -> str:
     """grep -n of a word in `first` (a path) and in the code files of its directory, sorted, at most `limit` hits."""
-    files = [first] + [f"{rel_dir}/{n}" for n in sorted(os.listdir(pathlib.Path(root) / rel_dir))
-                       if n.endswith(CODE_EXTS) and f"{rel_dir}/{n}" != first][:8]
+    pre = rel_dir.rstrip("/") + "/"
+    near = sorted(f for f in tracked_files(root) if f.startswith(pre) and "/" not in f[len(pre):] and f.endswith(CODE_EXTS) and f != first)
+    files = [first] + near[:8]
     rx = re.compile(r"\b%s\b" % re.escape(pattern))
     hits = []
     for rel in sorted(files):
@@ -575,30 +619,40 @@ def trace_prompt(root, rel: str, text: str, n_turns: int, rng: random.Random) ->
 
     def region(f):
         a = max(1, f["line"] + 1 - rng.randint(0, 6))
-        return a, min(n_lines, a + rng.randint(60, 100))
+        return a, min(n_lines, a + rng.randint(110, 170))
     ra, rb = region(fn)
     oa, ob = region(other)
-    steps = {
-        "ls": ("list_dir", {"path": d}, dir_listing(root, d)),
-        "grep": ("search_code", {"query": fn["name"], "path": d}, grep_dir(root, d, rel, fn["name"])),
-        "read": ("read_file", {"path": rel, "start_line": ra, "end_line": rb}, numbered(text, ra, rb)),
-        "wc": ("run_shell", {"cmd": f"wc -l {rel}"}, f"{n_lines} {rel}"),
-        "grep2": ("search_code", {"query": other["name"], "path": d}, grep_dir(root, d, rel, other["name"], 10)),
-        "read2": ("read_file", {"path": rel, "start_line": oa, "end_line": ob}, numbered(text, oa, ob)),
-        "head": ("read_file", {"path": rel, "start_line": 1, "end_line": 40}, numbered(text, 1, 40)),
-    }
     plan = rng.choice([["ls", "grep", "read", "grep2", "read2"], ["grep", "read", "wc", "grep2", "read2"],
                        ["head", "grep", "read", "grep2", "read2"]])[:n_turns]
     task = rng.choice([f"Add a debug log line to `{fn['name']}` in `{rel}`.",
                        f"I want to rename `{fn['name']}` in `{rel}` to `{fn['name']}_v2`. Check where it is used before changing anything.",
                        f"Fix the bug where `{fn['name']}` in `{rel}` mishandles an empty input.",
                        f"Explain what `{fn['name']}` in `{rel}` does and check how `{other['name']}` relates to it."])
-    msgs = [{"role": "system", "content": TRACE_SYSTEM.format(schema=json.dumps(TOOL_SCHEMA, indent=1))}, {"role": "user", "content": task}]
-    for k, key in enumerate(plan):
-        tool, args, result = steps[key]
-        msgs.append({"role": "assistant", "content": json.dumps({"tool": tool, "args": args})})
-        tail = "\n\nReply with the next tool call as one JSON object." if k == len(plan) - 1 else ""
-        msgs.append({"role": "user", "content": f"Tool result ({tool}):\n{result}{tail}"})
+
+    def build(more: int) -> list[dict]:
+        """more: extra lines of every read range. A short trace is lengthened this way until it reaches TRACE_MIN_TOKENS."""
+        rb2, ob2 = min(n_lines, rb + more), min(n_lines, ob + more)
+        steps = {
+            "ls": ("list_dir", {"path": d}, dir_listing(root, d)),
+            "grep": ("search_code", {"query": fn["name"], "path": d}, grep_dir(root, d, rel, fn["name"])),
+            "read": ("read_file", {"path": rel, "start_line": ra, "end_line": rb2}, numbered(text, ra, rb2)),
+            "wc": ("run_shell", {"cmd": f"wc -l {rel}"}, f"{n_lines} {rel}"),
+            "grep2": ("search_code", {"query": other["name"], "path": d}, grep_dir(root, d, rel, other["name"], 10)),
+            "read2": ("read_file", {"path": rel, "start_line": oa, "end_line": ob2}, numbered(text, oa, ob2)),
+            "head": ("read_file", {"path": rel, "start_line": 1, "end_line": 40}, numbered(text, 1, 40)),
+        }
+        msgs = [{"role": "system", "content": TRACE_SYSTEM}, {"role": "user", "content": task}]
+        for k, key in enumerate(plan):
+            tool, args, result = steps[key]
+            call = {"id": f"call_{k + 1}", "type": "function", "function": {"name": tool, "arguments": json.dumps(args)}}
+            msgs.append({"role": "assistant", "content": "", "tool_calls": [call]})
+            msgs.append({"role": "tool", "tool_call_id": call["id"], "content": result})
+        return msgs
+    more = 0
+    msgs = build(more)
+    while approx_tokens(messages_chars(msgs, TRACE_TOOLS)) < TRACE_MIN_TOKENS and more < n_lines:
+        more += 40
+        msgs = build(more)
     srcs = {rel: sha16(text), "dir:" + d: sha16(dir_listing(root, d)),
             "grep:" + fn["name"]: sha16(grep_dir(root, d, rel, fn["name"])),
             "grep:" + other["name"]: sha16(grep_dir(root, d, rel, other["name"], 10))}
@@ -638,9 +692,9 @@ def generate_longctx(root=R2A_ROOT, edit_files=None, trace_files=None, seed: int
             if not res:
                 raise RuntimeError(f"R2a: no edit instruction fits {rel}")
             msgs, meta = res
-            chars = sum(len(m["content"]) for m in msgs)
+            chars = messages_chars(msgs)
             rows.append({"id": "", "category": cat, "n_predict": R2A_N_PREDICT[cat], "approx_tokens": approx_tokens(chars), "chars": chars,
-                         "messages": msgs, "meta": dict(meta, file=rel, file_lines=len(text.split("\n")), sources={rel: sha16(text)})})
+                         "messages": msgs, "tools": None, "meta": dict(meta, file=rel, file_lines=len(text.split("\n")), sources={rel: sha16(text)})})
     for i, rel in enumerate(trace_files):
         text = read_source(root, rel)
         if text is None:
@@ -649,9 +703,9 @@ def generate_longctx(root=R2A_ROOT, edit_files=None, trace_files=None, seed: int
         if not res:
             raise RuntimeError(f"R2a: no usable functions in trace file {rel}")
         msgs, meta = res
-        chars = sum(len(m["content"]) for m in msgs)
+        chars = messages_chars(msgs, TRACE_TOOLS)
         rows.append({"id": "", "category": "toolcall_trace", "n_predict": R2A_N_PREDICT["toolcall_trace"], "approx_tokens": approx_tokens(chars),
-                     "chars": chars, "messages": msgs, "meta": meta})
+                     "chars": chars, "messages": msgs, "tools": TRACE_TOOLS, "meta": meta})
     for n, r in enumerate(rows):
         r["id"] = "r%03d" % n
     return rows
@@ -676,6 +730,8 @@ def longctx_stats(rows: list[dict]) -> dict:
         if k:
             kinds[k] = kinds.get(k, 0) + 1
     out["edit_kinds"] = kinds
+    offs = [r["meta"]["edit_offset_tokens"] for r in rows if r["meta"].get("edit_offset_tokens") is not None]
+    out["full_file_edit_offset_tokens"] = {"median": int(statistics.median(offs)), "max": max(offs)} if offs else None
     out["trace_turns"] = {str(t): sum(1 for r in rows if r["meta"].get("n_turns") == t) for t in (3, 4, 5)}
     out["files"] = len({s for r in rows for s in r["meta"].get("sources", {}) if not s.startswith(("dir:", "grep:"))})
     out["languages"] = {lg: sum(1 for r in rows if r["meta"].get("lang") == lg) for lg in sorted({r["meta"].get("lang") for r in rows if r["meta"].get("lang")})}
@@ -717,8 +773,8 @@ def select_files(root=R2A_ROOT, seed: int = R2A_SEED) -> dict:
     import subprocess
     tracked = subprocess.run(["git", "-C", str(root), "ls-files"], capture_output=True, text=True, check=True).stdout.split("\n")
     quota = {"src": 9, "common": 8, "tools": 8, "ggml/src/ggml-cuda": 9, "experiments/cache-resident/harness": 3,
-             "experiments/cache-resident/infra": 2, "experiments/cache-resident/kernels": 1}
-    skip = ("/tests/", "/webui/", "template-instances", "/vendor/", "/results/", "/data/")
+             "experiments/cache-resident/kernels": 3}
+    skip = ("/tests/", "/webui/", "template-instances", "/vendor/", "/results/", "/data/", "/infra/")   # infra/ handles secrets
     rng = random.Random(seed)
     edit, used = [], set()
     for d, n in quota.items():

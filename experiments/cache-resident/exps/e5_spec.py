@@ -134,10 +134,11 @@ class Server:
     a kill that reaches only this process.
     """
 
-    def __init__(self, cmd: list[str], log_path: str):
+    def __init__(self, cmd: list[str], log_path: str, env: dict | None = None):
+        """env: extra environment variables on top of ours (for example LLAMA_TRACE)."""
         self.cmd, self.log_path = cmd, log_path
         self.log = open(log_path, "w")
-        self.proc = subprocess.Popen(cmd, stdout=self.log, stderr=subprocess.STDOUT,
+        self.proc = subprocess.Popen(cmd, stdout=self.log, stderr=subprocess.STDOUT, env=dict(os.environ, **env) if env else None,
                                      preexec_fn=_die_with_parent if sys.platform.startswith("linux") else None)
 
     def tail(self, n: int = 4000) -> str:
