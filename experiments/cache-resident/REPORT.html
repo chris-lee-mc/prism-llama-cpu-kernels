@@ -1,0 +1,425 @@
+<title>Cache-Resident Decoding Study</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,500;6..72,600&family=Public+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: one reading column (~70ch) with full-width tables and charts that scroll inside their own frames; verdict chips mark each experiment. */
+:root {
+  --bg: #f6f7f9;
+  --surface: #ffffff;
+  --fg: #1b2230;
+  --muted: #5b6577;
+  --rule: #d9dee7;
+  --accent: #2c56c9;
+  --accent-soft: #e5ecfb;
+  --go: #1d7a4f;
+  --go-soft: #e2f3ea;
+  --nogo: #b23a2e;
+  --nogo-soft: #f8e5e2;
+  --mixed: #9a6a0a;
+  --mixed-soft: #f8efd9;
+  --bar-a: #2c56c9;
+  --bar-b: #c46a1b;
+  --bar-c: #6b7a90;
+  --font-display: "Newsreader", "Iowan Old Style", Georgia, serif;
+  --font-body: "Public Sans", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  --s1: 4px; --s2: 8px; --s3: 12px; --s4: 16px; --s5: 24px; --s6: 32px; --s7: 48px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #12161d; --surface: #1a2029; --fg: #e3e7ee; --muted: #9aa5b6; --rule: #2d3542;
+    --accent: #8ea8ff; --accent-soft: #222c44;
+    --go: #5ccc95; --go-soft: #17322a; --nogo: #f08b7f; --nogo-soft: #3a201d; --mixed: #e2b453; --mixed-soft: #362c16;
+    --bar-a: #8ea8ff; --bar-b: #f0a35e; --bar-c: #8d99ab;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #12161d; --surface: #1a2029; --fg: #e3e7ee; --muted: #9aa5b6; --rule: #2d3542;
+  --accent: #8ea8ff; --accent-soft: #222c44;
+  --go: #5ccc95; --go-soft: #17322a; --nogo: #f08b7f; --nogo-soft: #3a201d; --mixed: #e2b453; --mixed-soft: #362c16;
+  --bar-a: #8ea8ff; --bar-b: #f0a35e; --bar-c: #8d99ab;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--fg); font-family: var(--font-body); font-size: 16px; line-height: 1.6;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: var(--s6) var(--s7);
+}
+.wrap { max-width: 860px; margin: 0 auto; display: flex; flex-direction: column; gap: var(--s6); }
+header { display: flex; flex-direction: column; gap: var(--s3); border-bottom: 1px solid var(--rule); padding-bottom: var(--s5); }
+.eyebrow { font-family: var(--font-mono); font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+h1, h2, h3 { font-family: var(--font-display); font-weight: 600; text-wrap: balance; line-height: 1.2; margin: 0; }
+h1 { font-size: clamp(30px, 5vw, 42px); }
+h2 { font-size: 26px; }
+h3 { font-size: 19px; font-family: var(--font-body); font-weight: 600; }
+p { margin: 0; max-width: 68ch; }
+.lede { font-size: 18px; color: var(--fg); }
+.meta { color: var(--muted); font-size: 14px; }
+section { display: flex; flex-direction: column; gap: var(--s4); }
+.sub { display: flex; flex-direction: column; gap: var(--s3); }
+ul { margin: 0; padding-left: 1.2em; display: flex; flex-direction: column; gap: var(--s2); max-width: 68ch; }
+code, .mono { font-family: var(--font-mono); font-size: .88em; }
+code { background: var(--accent-soft); padding: 1px 5px; border-radius: 4px; overflow-wrap: anywhere; }
+a { color: var(--accent); }
+.tbl { overflow-x: auto; border: 1px solid var(--rule); border-radius: 6px; background: var(--surface); }
+table { border-collapse: collapse; width: 100%; font-size: 14px; font-variant-numeric: tabular-nums; }
+th, td { padding: 7px 10px; text-align: left; border-bottom: 1px solid var(--rule); white-space: nowrap; vertical-align: top; }
+th { font-weight: 600; color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .05em; background: var(--bg); }
+tr:last-child td { border-bottom: 0; }
+td.num, th.num { text-align: right; }
+td.wrap-cell { white-space: normal; min-width: 220px; }
+.chip { display: inline-block; font-family: var(--font-mono); font-size: 11px; font-weight: 500; letter-spacing: .04em; text-transform: uppercase; padding: 2px 8px; border-radius: 999px; }
+.chip.go { background: var(--go-soft); color: var(--go); }
+.chip.nogo { background: var(--nogo-soft); color: var(--nogo); }
+.chip.mixed { background: var(--mixed-soft); color: var(--mixed); }
+.chip.info { background: var(--accent-soft); color: var(--accent); }
+.pos { color: var(--go); } .neg { color: var(--nogo); }
+.summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: var(--s4); }
+.finding { background: var(--surface); border: 1px solid var(--rule); border-radius: 6px; padding: var(--s4); display: flex; flex-direction: column; gap: var(--s2); min-width: 0; }
+.finding .big { font-family: var(--font-display); font-size: 28px; font-weight: 600; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.finding p { font-size: 14px; color: var(--muted); }
+.chart { background: var(--surface); border: 1px solid var(--rule); border-radius: 6px; padding: var(--s4); overflow-x: auto; }
+.chart svg { display: block; min-width: 560px; width: 100%; height: auto; }
+.chart svg text { fill: var(--muted); font-family: var(--font-mono); font-size: 11px; }
+.chart svg .ttl { fill: var(--fg); font-family: var(--font-body); font-size: 13px; font-weight: 600; }
+.legend { display: flex; flex-wrap: wrap; gap: var(--s4); font-size: 13px; color: var(--muted); margin-top: var(--s2); }
+.legend span::before { content: ""; display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 6px; vertical-align: -1px; background: var(--c); }
+.callout { border-left: 3px solid var(--accent); background: var(--accent-soft); padding: var(--s3) var(--s4); border-radius: 0 6px 6px 0; }
+.callout p { max-width: none; }
+footer { border-top: 1px solid var(--rule); padding-top: var(--s4); color: var(--muted); font-size: 13px; }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+</style>
+
+<div class="wrap">
+<header>
+  <div class="eyebrow">exp/cache-resident &middot; PrismML llama.cpp fork &middot; Oct 13-14, 2026</div>
+  <h1>Cache-resident decoding on Blackwell</h1>
+  <p class="lede">Can a small model kept in the large L2 cache of an RTX 5090 or RTX PRO 6000 speed up decoding of Bonsai 2 27B (ternary, PQ2_0) as a speculative draft? Two days of RunPod measurements answer the cache part with no, and show where speculative decoding does and does not pay on this target.</p>
+  <p class="meta">All runs on rented RunPod pods (RTX 5090, RTX PRO 6000 Blackwell, RTX 3090 control). Raw results live under <code>experiments/cache-resident/results/</code> on the branch. Timing only: the hosts deny GPU performance counters (ERR_NVGPUCTRPERM), so no ncu hit rates.</p>
+</header>
+
+<section>
+  <h2>Summary</h2>
+  <div class="summary">
+    <div class="finding"><span class="chip nogo">No-go</span><div class="big">&le; 17%</div><p>Best hot-set gain from persisting L2 on a 5090 in the synthetic sweep (E1). The plan required 20%. The 3090 control stays at 0-1%.</p></div>
+    <div class="finding"><span class="chip nogo">No-go</span><div class="big">&le; 1%</div><p>End-to-end speculative-decoding gain from pinning a resident ternary draft in L2 between 27B verify passes on a PRO 6000 (E3d). On a real 0.8B model, persisting GDN state and LM head saved nothing (E3).</p></div>
+    <div class="finding"><span class="chip mixed">Depends on prompt</span><div class="big">0.61x / 1.05x</div><p>Draft-simple K=4 with a Qwen3.5-0.8B BF16 draft: short agentic prompts (R1) vs long-context edits and tool traces (R2a). It wins only where acceptance is high.</p></div>
+    <div class="finding"><span class="chip go">Best case</span><div class="big">2.63x</div><p>ngram-mod on full-file edits (R2a), where the answer copies the prompt. Overall 1.41x [1.22, 1.66] on long-context prompts, but below 1.0x on diffs.</p></div>
+  </div>
+  <div class="callout"><p id="r2b-callout">Latest (R2b): enabling the fork's PQ2_0 multi-column kernel on sm_120 passes test-backend-ops and speeds up 3-8 token llama-bench batches by 8-25% on two RTX 5090 hosts. Those hosts were themselves abnormally slow, so this is a lead, not yet PR-grade evidence. A Q8_0 draft beats the BF16 draft by about 9% at equal acceptance. See <a href="#r2b">R2b</a> and <a href="#next">Recommendations</a>.</p></div>
+</section>
+
+<section>
+  <h2>Question and plan</h2>
+  <p>The proposal: Blackwell GB202 cards have 96 MB (5090) and 128 MB (PRO 6000) of L2, and CUDA lets an application mark an address range as "persisting" so it survives streaming traffic. If a ternary draft model of a few tens of MB stays in L2, its decode steps cost almost no DRAM traffic, and speculative decoding of a large target gets a nearly free draft. The PR goal was a small opt-in ggml-cuda change that pins the draft weights with an access policy window on CUDA graph kernel nodes.</p>
+  <p>The plan ran in phases with a go/no-go gate after Phase 1: does persisting a set of 90 MB or less cut time per token in proportion on a real model? If not, write up and stop. The gate came back negative, so Phase 2 (training a ternary draft) did not start. The later R-series runs studied speculative decoding in llama.cpp itself, which the PR would need anyway.</p>
+  <div class="tbl"><table>
+    <thead><tr><th>GPU</th><th>Arch</th><th class="num">L2</th><th class="num">Persisting max</th><th class="num">DRAM BW</th><th>Role</th></tr></thead>
+    <tbody>
+      <tr><td>RTX 5090</td><td>GB202 sm_120</td><td class="num">96 MB</td><td class="num">60 MiB</td><td class="num">1.79 TB/s</td><td>Dev card, E1-E3, R2b multicol</td></tr>
+      <tr><td>RTX PRO 6000 Blackwell</td><td>GB202 sm_120</td><td class="num">128 MB</td><td class="num">device-reported</td><td class="num">1.79 TB/s</td><td>27B target, E3d-E5, R1-R2b</td></tr>
+      <tr><td>RTX 3090</td><td>GA102 sm_86</td><td class="num">6 MB</td><td class="num">4.1 MiB</td><td class="num">0.94 TB/s</td><td>Negative control</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section>
+  <h2>Phase 0: harness and kernels</h2>
+  <ul>
+    <li><b>Persisting L2 works mechanically.</b> A 64 MiB buffer re-read 100 times runs 3.0x faster with a persisting window on the 5090 (window clamped to the 60 MiB maximum). On the 3090 the window clamps to 4.1 MiB and nothing changes, as expected.</li>
+    <li><b>Ternary GEMV.</b> The LUT kernel reached 78% of DRAM peak at the largest shape and 41-66% at 4096x4096, below the 70% target at that size; the FP4-unpack variant was slower (30-53%). Later tuning (cp.async ring, cluster split-K) is in the branch.</li>
+    <li><b>Toy hybrid step.</b> A CUDA graph cut a GDN + attention + MLP toy step from 1101 to 781 us per token (294 launches); the per-layer floor is about 14 us.</li>
+  </ul>
+</section>
+
+<section>
+  <h2>Phase 1: the cache ceiling</h2>
+  <div class="sub">
+    <h3>E1 synthetic working-set sweep <span class="chip nogo">stop rule hit</span></h3>
+    <p>Each token reads a hot set of W MiB of ternary weights and then streams 512 MiB of cold 27B-shaped weights through L2, all in one CUDA graph. The figure is the gain in hot-set time with persisting on, best mode per W.</p>
+    <div class="chart"><svg id="e1chart" viewBox="0 0 720 300" role="img" aria-label="E1 hot-set gain versus working-set size"></svg>
+      <div class="legend"><span style="--c: var(--bar-a)">RTX 5090</span><span style="--c: var(--bar-c)">RTX 3090 (control)</span><span style="--c: var(--nogo)">20% stop-rule line</span></div></div>
+    <p>The knee sits where theory puts it: gains of 11-17% up to about 64 MiB, falling to zero past 128 MiB. But the best gain is 17.0% (W = 48 MiB), below the 20% gate, and with no cold traffic (C = 0) it is only 9%. The likely reason is that a ternary GEMV at these sizes is not purely bandwidth bound, so an L2 hit saves less time than the byte count suggests.</p>
+  </div>
+  <div class="sub">
+    <h3>E2 stock hybrid models, BF16 <span class="chip info">baseline</span></h3>
+    <p>Qwen3.5-0.8B decodes at 546 tok/s at context 0 on a 5090 (HF Transformers, compiled, grouped decode attention), dropping to 216 tok/s at 64K. Qwen3.5-2B: 281 tok/s on the 5090 and 294 tok/s on the PRO 6000 at context 0, 167 tok/s at 64K on the PRO 6000. The fit gives an effective 311 GB/s, far below the 1.79 TB/s peak: the PyTorch path is launch and overhead bound, not bandwidth bound.</p>
+  </div>
+  <div class="sub">
+    <h3>E3 GDN state and LM head residency <span class="chip nogo">no-go</span></h3>
+    <p>Persisting the 19 MB GDN recurrent state, a pruned LM head, or both, inside the captured decode graph of the 0.8B model, saved no measurable time on the 5090 (proxy -2.3 against a 0.5 threshold) or on the PRO 6000 (-0.05). Several conditions were slower, up to -6% with the full BF16 head. This was the Phase 1 go/no-go, and it failed.</p>
+  </div>
+  <div class="sub">
+    <h3>E3d resident ternary draft vs target verify <span class="chip nogo">no-go</span></h3>
+    <p>The direct test of the thesis: a ternary draft of D MiB pinned in L2 while a target verify pass streams through, then K draft steps. In steady state the draft already stays in L2 without persistence (0.0% difference at every size up to L2). Persistence only helps the first draft step after each 6 GiB verify pass: at D = 72 MiB the refill cost drops from 109 to 12 us (PDL off). Against a verify of 6 ms or more, that is +0.2% to +1.0% end to end with a shared verify time. Per-mode projections ranged from -7% to +0.3%, but that spread came from a timing-cell order bias on a power-capped card, not from the draft. Above the 80 MiB persisting max, persistence makes steps slower. The 3090 control is null.</p>
+  </div>
+  <div class="sub">
+    <h3>E4 Bonsai 2 27B in the fork <span class="chip info">baseline</span></h3>
+    <div class="tbl"><table>
+      <thead><tr><th>Quant</th><th>KV</th><th class="num">ctx 0</th><th class="num">32K</th><th class="num">128K</th><th class="num">256K</th></tr></thead>
+      <tbody>
+        <tr><td>PQ2_0</td><td>f16</td><td class="num">130.3</td><td class="num">110.2</td><td class="num">74.1</td><td class="num">52.6</td></tr>
+        <tr><td>PQ2_0</td><td>q8_0</td><td class="num">128.6</td><td class="num">96.9</td><td class="num">52.5</td><td class="num">timeout</td></tr>
+        <tr><td>PTQ1_0</td><td>f16</td><td class="num">143.1</td><td class="num">120.3</td><td class="num">79.2</td><td class="num">55.2</td></tr>
+        <tr><td>PTQ1_0</td><td>q8_0</td><td class="num">141.2</td><td class="num">101.3</td><td class="num">63.1</td><td class="num">timeout</td></tr>
+      </tbody>
+    </table></div>
+    <p class="meta">llama-bench tg128, tok/s, PRO 6000 Workstation. nsys split at context 0 (PQ2_0): mat-vec 61% of kernel time, Hadamard 10%, activation quantize 4.5%. At 7.2 ms per token the 7.2 GB model streams at about 56% of DRAM peak.</p>
+    <p>PDL A/B (E4 PDL): programmatic dependent launch adds 4.5% (PQ2_0), 4.7% (PTQ1_0) and 6.6-8.1% (0.8B draft) at context 0; a pre-wait L2 prefetch adds another 0.9-1.8% on the 27B and 3.4% on the Q8_0 draft. test-backend-ops passed 791/791 with the prefetch.</p>
+  </div>
+  <div class="sub">
+    <h3>E5 baseline speculative decoding <span class="chip nogo">slower</span></h3>
+    <p>llama-server with Bonsai 2 27B PQ2_0 as target and Qwen3.5-0.8B BF16 as draft-simple draft, 120 short agentic and code prompts (token-weighted): target alone 139 tok/s; K = 4, 6, 8 give 82, 64 and 57 tok/s (0.59x, 0.46x, 0.41x) with acceptance r of 0.18, 0.12 and 0.11.</p>
+    <p>E5 cost (R0) explains the break-even: the target alone costs 7.19 ms per token, a draft step 1.60 ms (BF16) or 1.28 ms (Q8_0), and llama-bench puts a width-5 verify at 11.1 ms (noisy, 25-33% stdev). On top of that the server spends about 4 ms per step outside the model math. Under those costs, a draft needs per-token acceptance alpha of roughly 0.6-0.7 to pay off at K = 4.</p>
+  </div>
+</section>
+
+<section>
+  <h2>R1: why the draft loses on short prompts</h2>
+  <p>R1 re-ran the E5 matrix with balanced categories and 95% bootstrap intervals (154 prompts), measured draft-target agreement, and split a K = 4 step with nsys.</p>
+  <div class="tbl"><table>
+    <thead><tr><th>Config</th><th>Scope</th><th class="num">n</th><th class="num">tok/s</th><th class="num">Speedup [95% CI]</th><th class="num">r</th><th class="num">alpha</th></tr></thead>
+    <tbody>
+      <tr><td>base</td><td>all</td><td class="num">155</td><td class="num">141.7</td><td class="num">1.00</td><td class="num">-</td><td class="num">-</td></tr>
+      <tr><td>k4 (BF16 draft)</td><td>all</td><td class="num">154</td><td class="num">85.9</td><td class="num neg">0.61 [0.59, 0.63]</td><td class="num">0.18</td><td class="num">0.43</td></tr>
+      <tr><td>k4</td><td>json_extract</td><td class="num">19</td><td class="num">188.6</td><td class="num pos">1.33 [1.29, 1.36]</td><td class="num">0.73</td><td class="num">0.89</td></tr>
+      <tr><td>k4</td><td>tool_call</td><td class="num">19</td><td class="num">166.9</td><td class="num pos">1.16 [1.04, 1.30]</td><td class="num">0.69</td><td class="num">0.91</td></tr>
+      <tr><td>k4</td><td>plan</td><td class="num">19</td><td class="num">68.9</td><td class="num neg">0.49 [0.47, 0.50]</td><td class="num">0.09</td><td class="num">0.26</td></tr>
+      <tr><td>k4 + target backend sampling</td><td>all</td><td class="num">154</td><td class="num">84.2</td><td class="num neg">0.98x of k4 [0.979, 0.983]</td><td class="num">0.18</td><td class="num">0.43</td></tr>
+      <tr><td>k4, post-hoc PTQ1_0 draft</td><td>all</td><td class="num">77</td><td class="num">53.4</td><td class="num neg">0.38 [0.375, 0.378]</td><td class="num">0.00</td><td class="num">0.00</td></tr>
+      <tr><td>ngram-mod (code_fix, refactor)</td><td>code</td><td class="num">40</td><td class="num">139.9</td><td class="num neg">0.99 [0.98, 0.99]</td><td class="num">0.07</td><td class="num">-</td></tr>
+      <tr><td>ngram-map-k (code)</td><td>code</td><td class="num">40</td><td class="num">140.5</td><td class="num neg">0.99 [0.99, 1.00]</td><td class="num">0.06</td><td class="num">-</td></tr>
+    </tbody>
+  </table></div>
+  <ul>
+    <li><b>Agreement.</b> Teacher-forced top-1 agreement of the 0.8B BF16 draft with the 27B is 0.76 on the chat text (Q8_0 identical), but measured alpha is 0.43: the proxy overstates alpha by 0.33. A post-hoc PTQ1_0 quantization of the draft collapses agreement to 0.001; the fork's quantizer scales by absmax and ignores the imatrix, so this rules out the naive recipe, not a trained ternary draft.</li>
+    <li><b>Step overhead.</b> Unprofiled, a K = 4 step takes 20.2 ms: target verify 9.7 ms, four draft tokens 6.3 ms, and about 4.2 ms of overhead, of which the draft re-eval is 2.1 ms. Removing the re-eval leaves about 2 ms, borderline against the 2 ms criterion. Even with zero overhead K = 4 would reach only 0.76x at alpha 0.43.</li>
+    <li><b>Rollback path.</b> The n-gram types get <code>n_rs_seq = 0</code> from <code>need_n_rs_seq()</code>, so on the hybrid (GDN) target every drafting step saves a KV checkpoint and every partial acceptance restores it and replays the target pass. Draft-simple rolls back inside the batch. The n-gram numbers are therefore lower bounds.</li>
+  </ul>
+</section>
+
+<section>
+  <h2>R2a: long-context agentic prompts</h2>
+  <p>R1's prompts were short. R2a built 60 long-context prompts from this repository (2-8K tokens): full-file edits that answer from just above the edit, unified-diff edits, and multi-turn tool-call traces in the model's native tool format. 53 ran per config on a PRO 6000 Workstation, ctx 16384, greedy, with a drift check (base again at the end: 0.998).</p>
+  <div class="chart"><svg id="r2achart" viewBox="0 0 720 330" role="img" aria-label="R2a speedup over target alone by category with 95 percent intervals"></svg>
+    <div class="legend"><span style="--c: var(--bar-a)">draft-simple K=4 (BF16)</span><span style="--c: var(--bar-b)">ngram-mod (fork defaults)</span><span style="--c: var(--bar-c)">ngram-mod short</span></div></div>
+  <div class="tbl"><table>
+    <thead><tr><th>Config</th><th>Category</th><th class="num">n</th><th class="num">tok/s</th><th class="num">Speedup [95% CI]</th><th class="num">r</th><th class="num">alpha</th><th class="num">eq</th></tr></thead>
+    <tbody id="r2atable"></tbody>
+  </table></div>
+  <ul>
+    <li>Draft-simple K = 4 now accepts far more (alpha 0.77 overall, 0.86 on full-file edits) and wins on full-file edits (1.26x) and tool traces (1.12x), but loses on diffs (0.88x). Overall 1.05x, and the interval includes 1.0.</li>
+    <li>ngram-mod with fork defaults is the largest single win: 2.63x on full-file edits, where the answer copies long runs of the prompt, even though it pays checkpoint save, restore and replay. The probe confirmed that path: 38 drafting steps, 38 checkpoints, 34 restores.</li>
+    <li>Greedy output equality against target alone is 0.89-1.0, while base run again at the end matches itself 1.0. The likely cause is batch-size dependent numerics in the verify pass; this was not isolated.</li>
+  </ul>
+</section>
+
+<section id="r2b">
+  <h2>R2b: multi-column kernel and draft variants</h2>
+  <div id="r2b-body" class="sub">
+  <h3>Multi-column PQ2_0 mat-vec on sm_120 (RTX 5090) <span class="chip go">correct; faster at 3-8 columns</span></h3>
+  <div id="mc-body" class="sub">
+    <p>The fork's PQ2_0 multi-column mat-vec (3-8 columns, the verify width of a K = 2-7 step) was enabled only on Ada. A new opt-in switch, <code>GGML_CUDA_PQ2_MULTICOL=1</code>, enables it on newer NVIDIA GPUs. Because the kernel is launched with PDL on sm_90+ and the activation quantizer releases its dependents early, the kernel now calls <code>ggml_cuda_pdl_sync()</code> before it reads the quantized activations. Default behavior is unchanged.</p>
+    <ul>
+      <li><b>Correctness.</b> test-backend-ops MUL_MAT, all 219 PQ2_0 cases against the CPU backend: 219/219 with the switch on, on with PDL off, and off, on two separate 5090 hosts. An nsys kernel trace of a 4-token batch shows <code>mul_mat_vec_pq2_0_mc&lt;4&gt;</code> (794 launches) only with the switch on, and the generic <code>mul_mat_vec_q&lt;PQ2_0, 4&gt;</code> only with it off.</li>
+      <li><b>Op level.</b> At the 27B projection shapes the kernel is 1.6-2.1x faster than the generic one for 4-8 columns and 1.1-1.6x at 3 columns (for example 17408 x 5120 at 8 columns: 101 to 53 us), and unchanged at 1, 2 and 9+ columns.</li>
+      <li><b>Whole model.</b> llama-bench batches of W tokens on Bonsai 2 27B: 8-13% faster at W = 3-5 and 20-25% at W = 6-8, positive in all four round pairs. Widths 1, 2 and 9 do not use the kernel and move by -3% to +5%, which is the noise floor (biased slightly negative at W = 1-2). Decode (tg128) is unchanged. This is a llama-bench prompt batch at depth 0, a stand-in for the verify step: the effect inside the real speculative loop has not been measured.</li>
+      <li><b>PDL.</b> On and on-with-PDL-off agree within the noise, so the added sync costs nothing measurable.</li>
+    </ul>
+    <div class="tbl"><table>
+      <thead><tr><th class="num">Width W</th><th class="num">off ms</th><th class="num">on ms</th><th class="num">off tok/s</th><th class="num">on tok/s</th><th class="num">Gain run 2</th><th class="num">Gain run 1</th><th>Kernel</th></tr></thead>
+      <tbody>
+        <tr><td class="num">1</td><td class="num">31.92</td><td class="num">33.03</td><td class="num">31.3</td><td class="num">30.3</td><td class="num">-3.4%</td><td class="num">-2.6%</td><td>generic</td></tr>
+        <tr><td class="num">2</td><td class="num">31.78</td><td class="num">32.24</td><td class="num">62.9</td><td class="num">62.0</td><td class="num">-1.4%</td><td class="num">-0.5%</td><td>generic</td></tr>
+        <tr><td class="num">3</td><td class="num">34.79</td><td class="num">32.09</td><td class="num">86.2</td><td class="num">93.5</td><td class="num pos">+8.4%</td><td class="num pos">+9.5%</td><td>mc</td></tr>
+        <tr><td class="num">4</td><td class="num">37.59</td><td class="num">33.92</td><td class="num">106.4</td><td class="num">117.9</td><td class="num pos">+10.8%</td><td class="num pos">+12.3%</td><td>mc</td></tr>
+        <tr><td class="num">5</td><td class="num">38.29</td><td class="num">34.47</td><td class="num">130.6</td><td class="num">145.1</td><td class="num pos">+11.1%</td><td class="num pos">+13.2%</td><td>mc</td></tr>
+        <tr><td class="num">6</td><td class="num">42.48</td><td class="num">35.05</td><td class="num">141.2</td><td class="num">171.2</td><td class="num pos">+21.2%</td><td class="num pos">+19.5%</td><td>mc</td></tr>
+        <tr><td class="num">7</td><td class="num">44.55</td><td class="num">36.96</td><td class="num">157.1</td><td class="num">189.4</td><td class="num pos">+20.5%</td><td class="num pos">+23.4%</td><td>mc</td></tr>
+        <tr><td class="num">8</td><td class="num">47.57</td><td class="num">38.14</td><td class="num">168.2</td><td class="num">209.7</td><td class="num pos">+24.7%</td><td class="num pos">+23.6%</td><td>mc</td></tr>
+        <tr><td class="num">9</td><td class="num">44.53</td><td class="num">42.51</td><td class="num">202.1</td><td class="num">211.7</td><td class="num">+4.8%</td><td class="num">-1.6%</td><td>generic</td></tr>
+        <tr><td>tg128</td><td class="num">-</td><td class="num">-</td><td class="num">30.12</td><td class="num">30.18</td><td class="num">+0.2%</td><td class="num">-1.0%</td><td>generic</td></tr>
+      </tbody>
+    </table></div>
+    <p class="meta">llama-bench -p W -n 0 -r 5 (ms per batch) and -p 0 -n 128 -r 5, depth 0, f16 KV, two rounds in opposite config order, median. Gain = ms_off / ms_on - 1. Run 2 (table values) and run 1 are two different RTX 5090 hosts.</p>
+    <div class="callout"><p><b>Caveat on absolute numbers.</b> Both 5090 hosts ran this model at about 30 tok/s (33 ms per single-token pass), against 134-142 tok/s (7.1-7.5 ms) on the PRO 6000 Workstation. Both hosts were capped at 400-420 W and drew their full cap during a 30 tok/s decode, which does not explain a 4.5x gap on the same GB202 die; a shared or throttled GPU is a hypothesis only. On a healthy card the mat-vec is a larger share of each pass, so the relative gain may differ in either direction. The on/off comparison is paired on the same host and reproduced on two hosts, so the relative gains stand; the absolute 5090 tok/s should not be quoted. Two other 5090 hosts were unusable (CUDA allocation failed with "device busy or unavailable"; on another, CUDA was not available at all and the run fell back to the CPU). The driver now stops before any benchmark when test-backend-ops runs no CUDA case.</p></div>
+  </div>
+
+  <h3>Draft precision and ngram-mod + draft-simple (PRO 6000 Max-Q) <span class="chip mixed">exploratory n</span></h3>
+  <p>24 prompts (the first 8 per category of the R2a seeded order), same flags as R2a. Both PRO 6000 600 W editions had no community capacity, so this ran on a 300 W Max-Q host: its target-alone rate is 0.90x of the R2a host on the same prompts. The anchor holds otherwise: K = 4 BF16 reproduces R2a exactly (r = 0.520 on both, 24 of 24 outputs identical to R2a). Speedups are within-pod. Drift: base at the end ran at 0.967x of the start, and the spec configs ran at 5-8% higher median SM clocks than base, so speedups carry about +/- 4% of host noise on this power-capped card. With 8 prompts per category the intervals, not the point values, are the evidence.</p>
+  <div class="tbl"><table>
+    <thead><tr><th>Mode</th><th>Category</th><th class="num">n</th><th class="num">r</th><th class="num">alpha [95% CI]</th><th class="num">tok/s</th><th class="num">Speedup [95% CI]</th><th class="num">eq</th><th class="num">R2a anchor</th></tr></thead>
+    <tbody id="r2btable"></tbody>
+  </table></div>
+  <p class="meta">R2a anchor: the R2a speedup of the same config on the same prompt ids (PRO 6000 Workstation, 600 W). For k4_q8 and combo it is the nearest R2a config (k4 BF16, ngram-mod alone). eq = share of outputs identical to target alone.</p>
+  <ul>
+    <li><b>Q8_0 draft.</b> Same acceptance as BF16 (alpha 0.757 both), a cheaper step (23.5 vs 25.8 ms). Paired per prompt, Q8_0 is 1.09x [1.07, 1.13] of BF16 overall and 1.08-1.13x in every category. Clock and run order account for part of that; the true gain is at least about 4%.</li>
+    <li><b>ngram-mod,draft-simple combined.</b> 1.31x [1.06, 1.74] overall and 2.54x [1.97, 3.47] on full-file edits, close to ngram-mod alone on the same R2a prompts (1.33x, 2.32x; different hosts, so not paired). On diffs it is 0.89x, below 1 like every other mode. The combined type used the BF16 draft; with Q8_0 it is untested. It was not tried on short prompts, where draft-simple lost, so it is not a general default.</li>
+    <li><b>Rollback path, read from the logs.</b> With draft-simple in the list, <code>need_n_rs_seq()</code> gives the target <code>n_rs_seq = 4</code> and the server picks the in-batch (RS) path. In the probe, ngram-mod made 5 drafts (mean 30 tokens, up to 64, cut to the slot room 4 times) and draft-simple 74 drafts of 4. Exactly the 3 drafts longer than 4 created a checkpoint and 2 were restored and replayed; all draft-simple steps rolled back in the batch. So the combined type falls back to checkpoints only for long n-gram drafts.</li>
+    <li><b>ngram-mod alone</b> (probe): <code>n_rs_seq = 0</code>, FULL path, a checkpoint on every drafting step (5 of 5), 2 restores with replay.</li>
+  </ul>
+</div>
+</section>
+
+<section id="next">
+  <h2>Recommendations</h2>
+  <div class="tbl"><table>
+    <thead><tr><th class="num">Rank</th><th>Item</th><th>Status</th><th>What it needs next</th></tr></thead>
+    <tbody>
+      <tr><td class="num">1</td><td class="wrap-cell">Close the L2-residency PR track (the original goal) and record it as a negative result.</td><td><span class="chip nogo">closed</span></td><td class="wrap-cell">Nothing. E1 reached 17% against a 20% gate, E3 showed no gain, E3d at most about 1%.</td></tr>
+      <tr><td class="num">2</td><td class="wrap-cell">Fork PR to PrismML: enable the #306 PQ2_0 multi-column kernel on sm_120 and add <code>ggml_cuda_pdl_sync()</code> before its first activation read.</td><td><span class="chip mixed">conditional</span></td><td class="wrap-cell">A paired off/on rerun on a healthy 600 W PRO 6000; an end-to-end llama-server spec run with the kernel on (greedy text equality, real verify cost); a 4090 (Ada) regression check. About $0.6-0.8.</td></tr>
+      <tr><td class="num">3</td><td class="wrap-cell">Configuration guidance, no code: Q8_0 draft for draft-simple; ngram-mod or ngram-mod,draft-simple for full-file edits and long-context agentic work; no speculation for diff edits or short chat and planning prompts.</td><td><span class="chip go">ready</span></td><td class="wrap-cell">Nothing to build; publish with this data.</td></tr>
+      <tr><td class="num">4</td><td class="wrap-cell">In-batch rollback for the n-gram speculation types, and skipping the draft re-eval in draft-simple (about 2 ms per step). Upstream already has a TODO for the latter (<code>TAG_SPEC_AVOID_DRAFT_REEVAL</code>).</td><td><span class="chip info">investigate</span></td><td class="wrap-cell">A test build to measure the gain, then an upstream issue first. Design-level change in common/ and the server.</td></tr>
+      <tr><td class="num">5</td><td class="wrap-cell">Small kernel follow-ups: launch-completion trigger in the mc kernel; routing W = 7-8 elsewhere.</td><td><span class="chip info">low</span></td><td class="wrap-cell">Each a separate measured follow-up.</td></tr>
+      <tr><td class="num">6</td><td class="wrap-cell">Post-hoc ternary draft and Phase 2 ternary draft training (E6).</td><td><span class="chip nogo">dropped</span></td><td class="wrap-cell">The draft is latency bound, so ternary saves about 0.1 ms per token; step cost, not acceptance, is the limit.</td></tr>
+    </tbody>
+  </table></div>
+  <div class="sub">
+    <h3>The rank-2 patch, if it goes ahead</h3>
+    <ul>
+      <li><code>mmvq-pq2_0.cuh</code>: call <code>ggml_cuda_pdl_sync()</code> after the out-of-range row return and before the first read of the quantized activations; move <code>__restrict__</code> from the kernel parameters to local copies, as <code>mul_mat_vec_q</code> does. Required before any sm_90+ enablement.</li>
+      <li><code>common.cuh</code>, <code>ggml_cuda_pq2_multicol</code>: allow <code>GGML_CUDA_CC_BLACKWELL</code> (sm_120) next to Ada and update its one-line comment. No environment variable, and no <code>cc &gt;= ADA</code>: Hopper, sm_100/103 and sm_121 are untested.</li>
+      <li>No new test files: the existing test-backend-ops cases already cover 1-32 columns at the 27B shapes and odd row counts.</li>
+    </ul>
+    <div class="callout"><p><b>Authorship.</b> Per the fork's AGENTS.md, the PR author writes the code, commit messages and PR description, and must be able to explain the PDL ordering (why the consumer must wait before reading activations, and why <code>__restrict__</code> on the parameters could let loads move above the wait) without AI help. The prototype commit on the experiment branch is a reference only. Check the fork's issues first, coordinate with the #306 author, disclose AI assistance per the template, and rebase onto the latest <code>prism</code> just before submitting.</p></div>
+  </div>
+</section>
+
+<section>
+  <h2>Method and cost</h2>
+  <ul>
+    <li>Every pod had a budget gate, a self-terminate failsafe, a token-protected results server (nsys reports never served or committed, secrets scrubbed) and orchestrator-side termination in a finally block.</li>
+    <li>Speedups pair each prompt with its target-alone run on the same pod; intervals are 95% bootstrap over prompts (1000 resamples) and cover prompt-to-prompt variation only, not host-to-host. A health gate stops runs on hosts with throttled clocks under load or broken CUDA; power-capped hosts are flagged but still timed (both R2b 5090 runs were flagged this way).</li>
+    <li>RunPod PRO 6000 Workstation hosts at 600 W were used where available; a 300 W Max-Q host is marked where it ran, since its absolute tok/s does not compare.</li>
+  </ul>
+  <p class="meta" id="spend-line">R2b spend: $1.14 on six pods, above the roughly $0.90 planned for it (PRO 6000 Max-Q $0.38 for the spec run; five RTX 5090 pods $0.76, of which $0.36 went to three bad hosts). The whole project: about $12.50 of RunPod time across all runs, by the ledger.</p>
+</section>
+
+<footer>
+  Branch <code>exp/cache-resident</code> of chris-lee-mc/prism-llama-cpu-kernels, results as of commit <code>64b3023fb</code>. Driver code under <code>experiments/cache-resident/exps/</code>, results under <code>experiments/cache-resident/results/&lt;exp&gt;/&lt;gpu&gt;/</code>.
+</footer>
+</div>
+
+<script>
+(function () {
+  var NS = "http://www.w3.org/2000/svg";
+  function el(tag, attrs, parent, text) {
+    var e = document.createElementNS(NS, tag);
+    for (var k in attrs) e.setAttribute(k, attrs[k]);
+    if (text != null) e.textContent = text;
+    if (parent) parent.appendChild(e);
+    return e;
+  }
+  function css(name) { return "var(" + name + ")"; }
+
+  // E1: best hot-set gain (%) per W, C = 512 MiB
+  var W = [8, 16, 24, 32, 48, 56, 64, 80, 96, 128, 192, 256, 512, 1024];
+  var g5090 = [11.2, 13.1, 16.6, 16.2, 17.0, 15.1, 16.3, 14.9, 11.3, 4.1, 0.4, 0.0, 0.2, -0.9];
+  var g3090 = [0.0, 0.0, 1.3, 1.0, 0.0, 0.0, 1.0, 0.8, 1.0, 0.3, 0.2, 0.3, -0.1, 0.0];
+  (function () {
+    var svg = document.getElementById("e1chart");
+    var L = 56, R = 700, T = 20, B = 250, ymin = -2, ymax = 22;
+    function x(w) { return L + (Math.log2(w) - 3) / (10 - 3) * (R - L); }
+    function y(v) { return B - (v - ymin) / (ymax - ymin) * (B - T); }
+    [0, 5, 10, 15, 20].forEach(function (v) {
+      el("line", { x1: L, x2: R, y1: y(v), y2: y(v), stroke: css("--rule"), "stroke-width": 1 }, svg);
+      el("text", { x: L - 8, y: y(v) + 4, "text-anchor": "end" }, svg, v + "%");
+    });
+    W.forEach(function (w) { el("text", { x: x(w), y: B + 18, "text-anchor": "middle" }, svg, w); });
+    el("text", { x: (L + R) / 2, y: B + 40, "text-anchor": "middle" }, svg, "hot working set W (MiB, log scale)");
+    el("line", { x1: L, x2: R, y1: y(20), y2: y(20), stroke: css("--nogo"), "stroke-width": 1.5, "stroke-dasharray": "5 4" }, svg);
+    el("line", { x1: x(60), x2: x(60), y1: T, y2: B, stroke: css("--muted"), "stroke-width": 1, "stroke-dasharray": "2 3" }, svg);
+    el("text", { x: x(60) + 6, y: T + 12 }, svg, "5090 persisting max 60 MiB");
+    [[g3090, "--bar-c"], [g5090, "--bar-a"]].forEach(function (s) {
+      var d = s[0].map(function (v, i) { return (i ? "L" : "M") + x(W[i]).toFixed(1) + " " + y(v).toFixed(1); }).join(" ");
+      el("path", { d: d, fill: "none", stroke: css(s[1]), "stroke-width": 2.2 }, svg);
+      s[0].forEach(function (v, i) { el("circle", { cx: x(W[i]), cy: y(v), r: 3, fill: css(s[1]) }, svg); });
+    });
+  })();
+
+  // R2a: per category speedups with 95% CI
+  var R2A = [
+    ["k4", "edit_full_file", 18, 169.1, 1.260, 1.203, 1.322, 0.704, 0.864, 1.0],
+    ["k4", "edit_diff", 18, 117.9, 0.879, 0.844, 0.919, 0.413, 0.679, 0.89],
+    ["k4", "toolcall_trace", 17, 152.0, 1.123, 1.031, 1.235, 0.622, 0.829, 0.94],
+    ["k4", "all", 53, 140.6, 1.047, 0.983, 1.120, 0.542, 0.772, 0.94],
+    ["ngram_mod", "edit_full_file", 18, 353.5, 2.634, 2.275, 3.115, 0.65, null, 0.94],
+    ["ngram_mod", "edit_diff", 18, 128.2, 0.956, 0.941, 0.969, 0.089, null, 0.89],
+    ["ngram_mod", "toolcall_trace", 17, 147.2, 1.088, 1.012, 1.180, 0.234, null, 0.94],
+    ["ngram_mod", "all", 53, 189.0, 1.408, 1.216, 1.660, 0.446, null, 0.92],
+    ["ngram_mod_short", "edit_full_file", 18, 135.6, 1.010, 0.928, 1.104, 0.364, null, 0.94],
+    ["ngram_mod_short", "edit_diff", 18, 109.7, 0.818, 0.776, 0.855, 0.267, null, 0.89],
+    ["ngram_mod_short", "toolcall_trace", 17, 94.4, 0.698, 0.663, 0.731, 0.231, null, 1.0],
+    ["ngram_mod_short", "all", 53, 118.8, 0.885, 0.839, 0.938, 0.31, null, 0.94],
+    ["ngram_map_k_short", "all", 53, 119.6, 0.891, 0.856, 0.933, 0.286, null, 0.96]
+  ];
+  var R2B = [
+    ["k4 (BF16)", "edit_full_file", 8, 0.693, 0.858, 0.832, 0.885, 148.1, 1.242, 1.174, 1.310, 1.00, "1.25 [1.19, 1.31]"],
+    ["k4 (BF16)", "edit_diff", 8, 0.398, 0.668, 0.624, 0.708, 101.9, 0.848, 0.788, 0.915, 1.00, "0.86 [0.80, 0.93]"],
+    ["k4 (BF16)", "toolcall_trace", 8, 0.519, 0.760, 0.697, 0.839, 122.4, 1.004, 0.909, 1.152, 0.88, "1.01 [0.92, 1.15]"],
+    ["k4 (BF16)", "all", 24, 0.520, 0.757, 0.706, 0.811, 121.3, 1.012, 0.921, 1.122, 0.96, "1.02 [0.93, 1.13]"],
+    ["k4_q8 (Q8_0)", "edit_full_file", 8, 0.710, 0.868, 0.823, 0.911, 164.9, 1.382, 1.259, 1.505, 1.00, "k4: 1.25"],
+    ["k4_q8 (Q8_0)", "edit_diff", 8, 0.386, 0.657, 0.624, 0.686, 109.6, 0.912, 0.856, 0.968, 1.00, "k4: 0.86"],
+    ["k4_q8 (Q8_0)", "toolcall_trace", 8, 0.550, 0.780, 0.729, 0.839, 138.7, 1.138, 1.052, 1.255, 0.88, "k4: 1.01"],
+    ["k4_q8 (Q8_0)", "all", 24, 0.520, 0.757, 0.702, 0.815, 132.8, 1.107, 1.004, 1.245, 0.96, "k4: 1.02"],
+    ["combo", "edit_full_file", 8, 0.598, null, null, null, 302.5, 2.537, 1.972, 3.471, 1.00, "ngram_mod: 2.32 [1.84, 3.21]"],
+    ["combo", "edit_diff", 8, 0.344, null, null, null, 107.1, 0.891, 0.834, 0.941, 0.88, "ngram_mod: 0.95 [0.92, 0.96]"],
+    ["combo", "toolcall_trace", 8, 0.360, null, null, null, 128.1, 1.051, 0.889, 1.343, 0.88, "ngram_mod: 1.04 [0.93, 1.20]"],
+    ["combo", "all", 24, 0.450, null, null, null, 157.5, 1.313, 1.061, 1.737, 0.92, "ngram_mod: 1.33 [1.10, 1.71]"],
+    ["base", "all", 24, null, null, null, null, 119.9, 1.0, 1.0, 1.0, 1.00, "R2a host 133.7 tok/s"]
+  ];
+  (function () {
+    var tb = document.getElementById("r2btable");
+    R2B.forEach(function (r) {
+      var tr = document.createElement("tr");
+      var a = r[4] == null ? "-" : r[4].toFixed(2) + " [" + r[5].toFixed(2) + ", " + r[6].toFixed(2) + "]";
+      var cls = r[9] > 1 ? "pos" : (r[10] < 1 ? "neg" : "");
+      tr.innerHTML = "<td>" + r[0] + "</td><td>" + r[1] + "</td><td class='num'>" + r[2] + "</td><td class='num'>" + (r[3] == null ? "-" : r[3].toFixed(2)) +
+        "</td><td class='num'>" + a + "</td><td class='num'>" + r[7].toFixed(1) + "</td><td class='num " + cls + "'>" + r[8].toFixed(2) + " [" + r[9].toFixed(2) + ", " + r[10].toFixed(2) + "]" +
+        "</td><td class='num'>" + r[11].toFixed(2) + "</td><td class='num'>" + r[12] + "</td>";
+      tb.appendChild(tr);
+    });
+  })();
+  (function () {
+    var tb = document.getElementById("r2atable");
+    R2A.forEach(function (r) {
+      var tr = document.createElement("tr");
+      var sp = r[4].toFixed(2) + " [" + r[5].toFixed(2) + ", " + r[6].toFixed(2) + "]";
+      var cls = r[5] > 1 ? "pos" : (r[6] < 1 ? "neg" : "");
+      tr.innerHTML = "<td>" + r[0] + "</td><td>" + r[1] + "</td><td class='num'>" + r[2] + "</td><td class='num'>" + r[3].toFixed(1) +
+        "</td><td class='num " + cls + "'>" + sp + "</td><td class='num'>" + r[7].toFixed(2) + "</td><td class='num'>" + (r[8] == null ? "-" : r[8].toFixed(2)) +
+        "</td><td class='num'>" + r[9].toFixed(2) + "</td>";
+      tb.appendChild(tr);
+    });
+    var svg = document.getElementById("r2achart");
+    var cats = ["edit_full_file", "edit_diff", "toolcall_trace", "all"];
+    var cfgs = [["k4", "--bar-a"], ["ngram_mod", "--bar-b"], ["ngram_mod_short", "--bar-c"]];
+    var L = 56, R = 700, T = 16, B = 270, ymax = 3.2;
+    function y(v) { return B - v / ymax * (B - T); }
+    [0, 0.5, 1, 1.5, 2, 2.5, 3].forEach(function (v) {
+      el("line", { x1: L, x2: R, y1: y(v), y2: y(v), stroke: css("--rule"), "stroke-width": 1 }, svg);
+      el("text", { x: L - 8, y: y(v) + 4, "text-anchor": "end" }, svg, v.toFixed(1) + "x");
+    });
+    el("line", { x1: L, x2: R, y1: y(1), y2: y(1), stroke: css("--fg"), "stroke-width": 1.2 }, svg);
+    var gw = (R - L) / cats.length, bw = 34;
+    cats.forEach(function (c, ci) {
+      var gx = L + gw * ci + gw / 2;
+      el("text", { x: gx, y: B + 20, "text-anchor": "middle" }, svg, c);
+      cfgs.forEach(function (cf, k) {
+        var row = R2A.filter(function (r) { return r[0] === cf[0] && r[1] === c; })[0];
+        if (!row) return;
+        var bx = gx + (k - 1) * (bw + 8) - bw / 2;
+        el("rect", { x: bx, y: Math.min(y(row[4]), y(0)), width: bw, height: Math.abs(y(0) - y(row[4])), fill: css(cf[1]), opacity: 0.85 }, svg);
+        var cx = bx + bw / 2;
+        el("line", { x1: cx, x2: cx, y1: y(row[5]), y2: y(row[6]), stroke: css("--fg"), "stroke-width": 1.3 }, svg);
+        el("line", { x1: cx - 6, x2: cx + 6, y1: y(row[5]), y2: y(row[5]), stroke: css("--fg"), "stroke-width": 1.3 }, svg);
+        el("line", { x1: cx - 6, x2: cx + 6, y1: y(row[6]), y2: y(row[6]), stroke: css("--fg"), "stroke-width": 1.3 }, svg);
+      });
+    });
+  })();
+})();
+</script>
