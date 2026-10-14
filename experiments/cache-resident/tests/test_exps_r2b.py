@@ -219,6 +219,8 @@ def test_multicol_failure_with_the_env_set_stops_before_any_benchmark(pod, monke
     d = _result(pod, "r2b_mc", "rtx5090")["data"]
     assert d["path"] is None and d["perf"] is None and d["bench"] == []
     assert any(n.startswith("stop: test-backend-ops did not pass") and "on, on_pdl0" in n for n in d["notes"])
+    assert any("FAIL MUL_MAT" in ln for ln in d["tbo"][0]["problem_lines"]) and "0/1 tests passed" in d["tbo"][0]["out_tail"]
+    assert "\x1b" not in d["tbo"][0]["out_tail"] and "hf_secretsecret123" not in json.dumps(d)
 
 
 def test_multicol_filter_that_matches_nothing_falls_back_to_the_whole_op(pod, monkeypatch):

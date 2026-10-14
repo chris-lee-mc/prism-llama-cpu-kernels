@@ -36,7 +36,7 @@ import shutil
 import subprocess
 import sys
 
-from exps import common, e4_bonsai, e4_pdl, e5_cost, hf_ids, r1_step
+from exps import common, e4_bonsai, e4_pdl, e5_cost, hf_ids, r1, r1_step
 
 EXP = "r2b_mc"
 ENV_VAR = "GGML_CUDA_PQ2_MULTICOL"
@@ -164,6 +164,16 @@ def verdict_lines(summ: dict) -> list[str]:
 
 # ---------------------------------------------------------------- running
 
+def gpu_mem() -> str | None:
+    """nvidia-smi memory used / total and processes, recorded before part t (a full GPU fails every test at allocation)."""
+    try:
+        p = subprocess.run(["nvidia-smi", "--query-gpu=memory.used,memory.total,name,driver_version", "--format=csv,noheader"],
+                           capture_output=True, text=True, timeout=10)
+    except (OSError, subprocess.SubprocessError) as e:
+        return f"nvidia-smi failed: {e}"
+    return p.stdout.strip() or p.stderr.strip()
+
+
 def run_tbo(cmd: list[str], env: dict, timeout: float) -> dict:
     row = {"cmd": cmd}
     try:
@@ -172,6 +182,11 @@ def run_tbo(cmd: list[str], env: dict, timeout: float) -> dict:
         row.update(ok=False, error="timeout")
         return row
     row.update(parse_tbo(p.stdout), returncode=p.returncode, ok=p.returncode == 0)
+    if not row["ok"]:     # keep what failed: the console has no FAIL line for an allocation or setup error
+        text = ANSI_RE.sub("", (p.stdout or "") + "\n" + (p.stderr or ""))
+        bad = [ln.strip()[:300] for ln in text.splitlines() if ln.strip() and not ln.rstrip().endswith(("OK", "not supported [CPU]"))]
+        row["problem_lines"] = r1.scrub(bad[:40], r1.secret_values())
+        row["out_tail"] = r1.scrub(text[-3000:], r1.secret_values())
     return row
 
 
@@ -341,6 +356,7 @@ def run(args) -> int:
             print(f"[r2b_mc] part {p}: {sub.left() / 60:.1f} min of {total.left() / 60:.1f} min left", flush=True)
             try:
                 if p == "t":
+                    config["gpu_mem_before_t"] = gpu_mem()
                     extra["tbo"] = tbo_part(bin_dir, sub, notes)
                     if any(not t.get("ok") for t in extra["tbo"]):
                         rc = 1
