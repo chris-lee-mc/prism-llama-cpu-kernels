@@ -15,13 +15,20 @@
 
 template <int ncols>
 __global__ void __launch_bounds__(PQ2_0_MC_WARPS * 32, 3)
-mul_mat_vec_pq2_0_mc(const void * __restrict__ vx, const void * __restrict__ vy, float * __restrict__ dst,
+mul_mat_vec_pq2_0_mc(const void * vx_, const void * vy_, float * dst_,
         const int ncols_x, const int nrows_x, const int stride_row_x, const int stride_col_y, const int stride_col_dst) {
+    // GGML_CUDA_RESTRICT is off the parameters, same as mul_mat_vec_q: restrict must not let loads move above the PDL wait
+    const void * GGML_CUDA_RESTRICT vx  = vx_;
+    const void * GGML_CUDA_RESTRICT vy  = vy_;
+    float      * GGML_CUDA_RESTRICT dst = dst_;
+
     const int lane = threadIdx.x & 31;
     const int row0 = ((blockIdx.x * blockDim.x + threadIdx.x) >> 5) * PQ2_0_MC_ROWS;
     if (row0 >= nrows_x) {
         return;
     }
+    // launched through ggml_cuda_kernel_launch (PDL on sm_90+): wait for the quantizer that wrote vy
+    ggml_cuda_pdl_sync();
 
     const int     nchunk    = ncols_x / QK8_1;
     const size_t  col_bytes = (size_t) stride_col_y * sizeof(block_q8_1);

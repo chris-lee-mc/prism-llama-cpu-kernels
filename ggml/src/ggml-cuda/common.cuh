@@ -1307,13 +1307,19 @@ int ggml_cuda_get_device();
 // Lives here, after ggml_cuda_info(), because the body reads the current device's cc.
 // PQ2_0 multi-column mat-vec (mmvq-pq2_0.cuh): Ada only, plain 2D (no ids, no batch dims), 3-8 columns.
 // Batch invariance keeps the generic kernel.
+// GGML_CUDA_PQ2_MULTICOL=1 (experimental): also on newer NVIDIA GPUs, e.g. sm_120.
 static inline bool ggml_cuda_pq2_multicol(int ncols_dst) {
 #if defined(GGML_USE_HIP)
     GGML_UNUSED(ncols_dst);
     return false;
 #else
+    static const bool env_newer = [] {
+        const char * env = getenv("GGML_CUDA_PQ2_MULTICOL");
+        return env != nullptr && std::atoi(env) != 0;
+    }();
     const int cc = ggml_cuda_info().devices[ggml_cuda_get_device()].cc;
-    return !ggml_cuda_batch_invariant() && GGML_CUDA_CC_IS_NVIDIA(cc) && cc == GGML_CUDA_CC_ADA_LOVELACE &&
+    return !ggml_cuda_batch_invariant() && GGML_CUDA_CC_IS_NVIDIA(cc) &&
+        (env_newer ? cc >= GGML_CUDA_CC_ADA_LOVELACE : cc == GGML_CUDA_CC_ADA_LOVELACE) &&
         ncols_dst >= 3 && ncols_dst <= 8;
 #endif
 }
