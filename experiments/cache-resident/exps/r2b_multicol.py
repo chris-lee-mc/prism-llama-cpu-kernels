@@ -113,6 +113,11 @@ def parse_tbo(text: str) -> dict:
     return out
 
 
+def tbo_passed(row: dict) -> bool:
+    """Exit 0, at least one case ran on CUDA0 and every case passed (0/0 means no CUDA backend, e.g. a CPU-only fallback)."""
+    return bool(row.get("ok")) and row.get("total", 0) > 0 and row.get("passed") == row.get("total") and not row.get("n_fail")
+
+
 def mc_kernels(kerns: list[dict]) -> dict:
     """From nsys kernel rows ({name, time_ns, count}): the PQ2_0 multi-column launches and the top kernels by time."""
     mc = [k for k in kerns if MC_KERNEL_RE.search(k["name"])]
@@ -361,9 +366,10 @@ def run(args) -> int:
                     if any(not t.get("ok") for t in extra["tbo"]):
                         rc = 1
                         notes.append("test-backend-ops reported failures: see data.tbo[].fail_lines before reading any timing")
-                    bad_on = [t["config"] for t in extra["tbo"] if t.get("env") and (not t.get("ok") or t.get("n_fail"))]
-                    if bad_on or not any(t.get("env") and t.get("ok") for t in extra["tbo"]):
+                    bad_on = [t["config"] for t in extra["tbo"] if t.get("env") and not tbo_passed(t)]
+                    if bad_on or not any(t.get("env") and tbo_passed(t) for t in extra["tbo"]):
                         notes.append("stop: test-backend-ops did not pass with %s set (%s); parts k, b, f not run" % (ENV_VAR, ", ".join(bad_on) or "no passing run"))
+                        rc = 1
                         cut["part"] = None
                         save()
                         break

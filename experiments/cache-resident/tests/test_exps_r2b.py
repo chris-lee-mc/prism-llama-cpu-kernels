@@ -129,7 +129,7 @@ FAKE_TBO = """#!{py}
 import os, sys
 a = sys.argv
 on = os.environ.get("GGML_CUDA_PQ2_MULTICOL") == "1"
-if "-p" in a and a[a.index("-p") + 1] == "type_a=pq2_0," and os.environ.get("FAKE_NO_FILTER"):
+if ("-p" in a and a[a.index("-p") + 1] == "type_a=pq2_0," and os.environ.get("FAKE_NO_FILTER")) or os.environ.get("FAKE_NO_CUDA"):
     print("  0/0 tests passed"); sys.exit(0)
 if a[1] == "perf":
     for n in (1, 3, 4, 8):
@@ -221,6 +221,15 @@ def test_multicol_failure_with_the_env_set_stops_before_any_benchmark(pod, monke
     assert any(n.startswith("stop: test-backend-ops did not pass") and "on, on_pdl0" in n for n in d["notes"])
     assert any("FAIL MUL_MAT" in ln for ln in d["tbo"][0]["problem_lines"]) and "0/1 tests passed" in d["tbo"][0]["out_tail"]
     assert "\x1b" not in d["tbo"][0]["out_tail"] and "hf_secretsecret123" not in json.dumps(d)
+
+
+def test_multicol_no_cuda_case_ran_stops_before_any_benchmark(pod, monkeypatch):
+    monkeypatch.setenv("FAKE_NO_FILTER", "1")
+    monkeypatch.setenv("FAKE_NO_CUDA", "1")
+    assert mc.main(["--budget-min", "10"]) == 1
+    d = _result(pod, "r2b_mc", "rtx5090")["data"]
+    assert d["bench"] == [] and d["path"] is None and all(t["total"] == 0 for t in d["tbo"])
+    assert any(n.startswith("stop: test-backend-ops did not pass") for n in d["notes"])
 
 
 def test_multicol_filter_that_matches_nothing_falls_back_to_the_whole_op(pod, monkeypatch):
