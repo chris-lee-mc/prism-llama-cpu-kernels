@@ -19,6 +19,8 @@ DRIVERS = [
     ("exps.e5_spec", ["--k", "6"]),
     ("exps.r1", []),
     ("exps.r2a_longctx", []),
+    ("exps.r2b_multicol", []),
+    ("exps.r2b_spec", []),
 ]
 
 

@@ -148,9 +148,14 @@ def config_cmd(bin_dir, target: str, draft: str | None, cfg: dict, port: int | N
 
 # ---------------------------------------------------------------- plan
 
+def decode_factor(spec_type: str) -> float:
+    """Cost of a decoded token relative to target alone; a list of types with a draft model (ngram-mod,draft-simple) costs like draft-simple."""
+    return DECODE_FACTOR.get(spec_type, DECODE_FACTOR["draft-simple"] if "draft-simple" in spec_type else 1.0)
+
+
 def prompt_cost_s(p: dict, cfg: dict, scale: float = 1.0) -> float:
-    pre = p["approx_tokens"] / PREFILL_TOK_S * (1.1 if cfg["spec_type"] == "draft-simple" else 1.0)
-    dec = min(OUT_TOKENS.get(p["category"], p["n_predict"]), p["n_predict"]) / DECODE_TOK_S * DECODE_FACTOR.get(cfg["spec_type"], 1.0)
+    pre = p["approx_tokens"] / PREFILL_TOK_S * (1.1 if "draft-simple" in cfg["spec_type"] else 1.0)
+    dec = min(OUT_TOKENS.get(p["category"], p["n_predict"]), p["n_predict"]) / DECODE_TOK_S * decode_factor(cfg["spec_type"])
     return scale * (pre + dec) + REQUEST_S
 
 
@@ -186,16 +191,18 @@ def plan_n(cfgs: list[dict], prompts: list[dict], budget_s: float, scale: float 
 
 
 def fit_configs(cfgs: list[dict], prompts: list[dict], budget_s: float, target: int, scale: float = 1.0, first: bool = True,
-                floor: int = N_FLOOR) -> tuple[list[dict], dict]:
-    """plan_n that drops whole configs (DROP_ORDER) before it drops prompts: the configs are cut until every category keeps `target`
-    prompts (or all it has). Returns the kept configs and the plan, with plan["configs_dropped"] and plan["target_per_category"]."""
+                floor: int = N_FLOOR, drop_order: list[str] | None = None) -> tuple[list[dict], dict]:
+    """plan_n that drops whole configs (drop_order, default DROP_ORDER) before it drops prompts: the configs are cut until every
+    category keeps `target` prompts (or all it has). Returns the kept configs and the plan, with plan["configs_dropped"] and
+    plan["target_per_category"]."""
     kept, dropped = list(cfgs), []
+    order = DROP_ORDER if drop_order is None else drop_order
     have = _count(prompts)
     need = min([target] + list(have.values())) if have else 0
     while True:
         plan = plan_n(kept, prompts, budget_s, scale, first=first, floor=floor)
         low = min(plan["per_category"].get(c, 0) for c in have) if have else 0
-        victim = next((n for n in DROP_ORDER if any(c["name"] == n for c in kept)), None)
+        victim = next((n for n in order if any(c["name"] == n for c in kept)), None)
         if low >= need or victim is None:
             break
         kept = [c for c in kept if c["name"] != victim]
@@ -333,7 +340,7 @@ ACCEPT_DBG_RE = re.compile(r"accepted\s+(\d+)/\s*(\d+) draft tokens, new n_token
 ACCEPT_TRACE_RE = re.compile(r"accepted\s+(\d+)/\s*(\d+) draft tokens( \(restore checkpoint\))?\s*$")   # SLT_INF, only with LLAMA_TRACE > 0 (%2zu padded)
 
 
-def count_spec_events(text: str) -> dict:
+def count_spec_events(text: str, cfg: dict | None = None) -> dict:
     """Per-step events of a debug-level (-lv 5) log of the server. What the server prints:
     - a step with a draft makes a checkpoint when the target needs one (FULL path: every such step; RS path: only a draft longer
       than n_rs_seq). 'created speculative checkpoint' counts these steps.
@@ -382,9 +389,11 @@ def count_spec_events(text: str) -> dict:
 # ---------------------------------------------------------------- one server
 
 def run_config(cfg: dict, *, bin_dir, target: str, draft: str | None, prompts: list[dict], budget_s: float, notes: list, log_path: str,
-               ctx: int = CTX, on_row=None, keep_text: bool = True, gap_s: float = 0.0, env: dict | None = None) -> dict:
-    """Start one server, run the prompts in order within budget_s (startup included), stop it. Never raises. env: extra variables."""
-    cmd = config_cmd(bin_dir, target, draft, cfg, ctx=ctx)
+               ctx: int = CTX, on_row=None, keep_text: bool = True, gap_s: float = 0.0, env: dict | None = None,
+               cmd: list[str] | None = None) -> dict:
+    """Start one server, run the prompts in order within budget_s (startup included), stop it. Never raises. env: extra variables.
+    cmd: the server command when config_cmd does not build it (r2b_spec)."""
+    cmd = cmd or config_cmd(bin_dir, target, draft, cfg, ctx=ctx)
     res = {"name": cfg["name"], "spec_type": cfg["spec_type"], "k": cfg["k"], "cmd": cmd, "log": log_path, "rows": [], "error": None,
            "budget_s": budget_s, "planned": len(prompts), "desc": cfg.get("desc"), "draft": cfg.get("draft")}
     budget = common.Budget(budget_s / 60.0)
@@ -524,10 +533,12 @@ def clock_flags(runs: dict, tol: float = DRIFT_FLAG) -> dict:
     return out
 
 
-def run_matrix(*, args, bin_dir, target: str, draft: str, order: list[dict], budget_s: float, notes: list, gpu: str, on_update) -> dict:
+def run_matrix(*, args, bin_dir, target: str, draft: str, order: list[dict], budget_s: float, notes: list, gpu: str, on_update,
+               all_cfgs: list[dict] | None = None, cmd_for=None, drop_order: list[str] | None = None, exp: str = EXP) -> dict:
+    """all_cfgs, cmd_for(cfg) -> argv and drop_order replace the R2a configs and their command (r2b_spec); exp names the log files."""
     from infra.results import artifact_path
-    cfgs, plan = fit_configs(config_order(matrix_configs(args.configs), args.seed), order, max(budget_s - DRIFT_RESERVE_S, 0.0),
-                             MIN_N_CATEGORY + PLAN_SPARE)
+    cfgs, plan = fit_configs(config_order(all_cfgs if all_cfgs is not None else matrix_configs(args.configs), args.seed), order,
+                             max(budget_s - DRIFT_RESERVE_S, 0.0), MIN_N_CATEGORY + PLAN_SPARE, drop_order=drop_order)
     main = order[:plan["n"]]
     runs: dict = {}
     out: dict = {"seed": args.seed, "ctx": args.ctx, "n_predict": make_prompts.R2A_N_PREDICT, "order": [p["id"] for p in order],
@@ -572,7 +583,8 @@ def run_matrix(*, args, bin_dir, target: str, draft: str, order: list[dict], bud
                 last_save[0] = time.monotonic()
                 refresh()
         res = run_config(cfg, bin_dir=bin_dir, target=target, draft=draft, prompts=ps, budget_s=share, notes=notes, ctx=args.ctx,
-                         log_path=str(artifact_path(EXP, f"server-{cfg['name']}.log", gpu)), on_row=on_row)
+                         log_path=str(artifact_path(exp, f"server-{cfg['name']}.log", gpu)), on_row=on_row,
+                         cmd=cmd_for(cfg) if cmd_for else None)
         runs[cfg["name"]] = res
         notes.extend(config_notes(cfg["name"], res))
         if cfg["name"] == "base":
@@ -582,7 +594,7 @@ def run_matrix(*, args, bin_dir, target: str, draft: str, order: list[dict], bud
             if sc is not None and rest:
                 base_ok = [p for p in main if p["id"] in {r["id"] for r in res["rows"] if "error" not in r}]
                 kept, new = fit_configs(rest, base_ok, t_end - time.monotonic() - DRIFT_RESERVE_S, MIN_N_CATEGORY, scale=sc, first=False,
-                                        floor=min(N_FLOOR, len(base_ok)))
+                                        floor=min(N_FLOOR, len(base_ok)), drop_order=drop_order)
                 out["replan"] = new
                 if new["configs_dropped"]:
                     out["configs_dropped"] += new["configs_dropped"]
@@ -596,8 +608,10 @@ def run_matrix(*, args, bin_dir, target: str, draft: str, order: list[dict], bud
     drift_ids = [r["id"] for r in (runs.get("base") or {}).get("rows", []) if "error" not in r][:DRIFT_N]
     if drift_ids and len(runs) > 1 and t_end - time.monotonic() > 30:
         ps = [p for p in order if p["id"] in set(drift_ids)]
-        res = run_config(dict(matrix_configs(["base"])[0], name=DRIFT_NAME), bin_dir=bin_dir, target=target, draft=draft, prompts=ps, ctx=args.ctx,
-                         budget_s=max(t_end - time.monotonic(), 30.0), notes=notes, log_path=str(artifact_path(EXP, f"server-{DRIFT_NAME}.log", gpu)))
+        drift_cfg = dict(matrix_configs(["base"])[0], name=DRIFT_NAME)
+        res = run_config(drift_cfg, bin_dir=bin_dir, target=target, draft=draft, prompts=ps, ctx=args.ctx,
+                         budget_s=max(t_end - time.monotonic(), 30.0), notes=notes, log_path=str(artifact_path(exp, f"server-{DRIFT_NAME}.log", gpu)),
+                         cmd=cmd_for(drift_cfg) if cmd_for else None)
         runs[DRIFT_NAME] = res
         notes.extend(config_notes(DRIFT_NAME, res))
         out["drift"] = drift_summary(runs)
@@ -773,7 +787,7 @@ def run_control(*, bin_dir, target: str, draft: str, subset: list[dict], budget:
 # ---------------------------------------------------------------- part p
 
 def run_probe(*, bin_dir, target: str, draft: str, order: list[dict], budget: common.Budget, notes: list, gpu: str, ctx: int,
-              names: list[str]) -> dict:
+              names: list[str], all_cfgs: list[dict] | None = None, cmd_for=None, count_fn=None) -> dict:
     """One prompt per category, each config at -lv 5 with LLAMA_TRACE=1 (the counts include the 16-token warm-up request). The debug logs are written to a private dir (not the results
     dir, which the results server serves) and deleted after parsing, also when the run is cut."""
     ps = []
@@ -783,7 +797,8 @@ def run_probe(*, bin_dir, target: str, draft: str, order: list[dict], budget: co
             ps.append(dict(first, n_predict=PROBE_N_PREDICT[cat]))
     out: dict = {"prompt_ids": [p["id"] for p in ps], "n_predict": {p["id"]: p["n_predict"] for p in ps}, "configs": {}, "lv": PROBE_LV[1],
                  "llama_trace": PROBE_ENV["LLAMA_TRACE"], "note": "untimed: debug-level logging; counts only"}
-    cfgs = {c["name"]: c for c in matrix_configs(CONFIG_NAMES)}
+    cfgs = {c["name"]: c for c in (all_cfgs if all_cfgs is not None else matrix_configs(CONFIG_NAMES))}
+    count_fn = count_fn or count_spec_events
     wd = r1_step.private_workdir()
     try:
         for i, name in enumerate(names):
@@ -796,9 +811,9 @@ def run_probe(*, bin_dir, target: str, draft: str, order: list[dict], budget: co
             cfg = with_lv(cfgs[name], PROBE_LV)
             path = os.path.join(wd, f"server-probe-{name}.log")
             res = run_config(cfg, bin_dir=bin_dir, target=target, draft=draft, prompts=ps, budget_s=min(left / max(len(names) - i, 1), 120.0),
-                             notes=notes, ctx=ctx, log_path=path, keep_text=False, env=PROBE_ENV)
+                             notes=notes, ctx=ctx, log_path=path, keep_text=False, env=PROBE_ENV, cmd=cmd_for(cfg) if cmd_for else None)
             try:
-                ev = count_spec_events(pathlib.Path(path).read_text(errors="replace"))
+                ev = count_fn(pathlib.Path(path).read_text(errors="replace"), cfg)
             except OSError:
                 ev = {}
             out["configs"][name] = {"events": ev, "error": res.get("error"), "checks": res.get("checks"), "n_rows": len(res.get("rows") or []),

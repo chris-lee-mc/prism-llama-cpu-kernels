@@ -195,5 +195,28 @@
   "build_llama": true,
   "disk_gb": 80,
   "desc": "R2a long-context agentic prompts on one PRO 6000 (exps/data/prompts_r2a.jsonl: 40 code edits embedding one repo file of 2-8K tokens, the modified file from the edit on or a unified diff, and 20 multi-turn tool-call traces in the native tool format; n_predict 320 / 512 / 128, ctx 16384, every server with -lv 4): (m) target alone, draft-simple K=4 (Qwen3.5-0.8B BF16; K=2/3 opt-in via --configs), ngram-mod (default and short parameters) and ngram-map-k (short; default parameters and K=2/3 on a follow-up pod), seeded prompt and config order, base again at the end as a drift bound, per category and overall tok/s, speedup, r, alpha with bootstrap 95% CIs, greedy equality against target alone, spec path and rollback (n_rs_seq, seq_rm lines) from the logs, prompt count sized from a cost model (17 per category planned, cut evenly; whole configs are dropped before prompts fall below 15 per category); (c) same-pod overhead control: unprofiled K=4 on a fixed 10-prompt subset followed by the nsys capture of the same requests (allowlisted env, private dir, decode steps only); (p) -lv 5 probe (LLAMA_TRACE=1, private log dir) counting speculative checkpoint create/restore events and replay steps; needs --allow-long (failsafe 55 = clone, apt, torch and cold CUDA build ~14 + downloads <= 6 (fetch_models --timeout-min 6) + r2a 29 + end reserve 5; est 35 = downloads 6 + r2a 29)"
+ },
+ "r2b_mc": {
+  "cmd": "python3 -m exps.fetch_models --models pq2 --timeout-min 6 && python3 -m exps.r2b_multicol --budget-min 22",
+  "gpus": [
+   "rtx5090",
+   "pro6000"
+  ],
+  "est_min": 28,
+  "failsafe_min": 55,
+  "build_llama": true,
+  "disk_gb": 80,
+  "desc": "R2b multicol: PQ2_0 multi-column mat-vec (mmvq-pq2_0.cuh) on sm_120 behind GGML_CUDA_PQ2_MULTICOL=1 (default off), Bonsai 2 27B PQ2_0, configs off / on / on with GGML_CUDA_PDL=0: (t) test-backend-ops MUL_MAT filtered to pq2_0 against the CPU backend, (k) nsys kernel names of llama-bench -p 4 (the mc kernel must run only with the env; private dir, deleted), (b) llama-bench -p 1..9 -n 0 -r 5 and -p 0 -n 128 -r 5 in two rounds (ms per width, gain of on over off), (f) test-backend-ops perf MUL_MAT pq2_0 (us per op); needs --allow-long (failsafe 55 = clone, apt, torch and cold CUDA build ~14 + download <= 6 + run 22 + end reserve 5; est 28 = download 6 + run 22)"
+ },
+ "r2b_spec": {
+  "cmd": "python3 -m exps.fetch_models --models pq2,draft_bf16,draft_q8_0 --timeout-min 6 && python3 -m exps.r2b_spec --budget-min 22",
+  "gpus": [
+   "pro6000"
+  ],
+  "est_min": 28,
+  "failsafe_min": 55,
+  "build_llama": true,
+  "disk_gb": 80,
+  "desc": "R2b spec on one PRO 6000: a balanced R2a subset (8 prompts per category, the first 24 of the R2a seeded order, same prompts and order for every config, -lv 4): (m) target alone, draft-simple K=4 with the Qwen3.5-0.8B BF16 draft (anchor to R2a), K=4 with the ggml-org Q8_0 draft (HF API check, llama-quantize fallback), and --spec-type ngram-mod,draft-simple (ngram-mod fork defaults, K=4), base again at the end as a drift bound, per category and overall tok/s, speedup, r, alpha with bootstrap 95% CIs, greedy equality against target alone, anchor ratios against the R2a rows of the same prompts; (p) -lv 5 probe (LLAMA_TRACE=1, private log dir) of k4, ngram-mod (fork defaults), the two short n-gram configs and the combined type: which implementation drafted, draft lengths against n_rs_seq, truncation, checkpoints created and restored; needs --allow-long (failsafe 55 = clone, apt, torch and cold CUDA build ~14 + downloads <= 6 + run 22 + end reserve 5; est 28 = downloads 6 + run 22)"
  }
 }
