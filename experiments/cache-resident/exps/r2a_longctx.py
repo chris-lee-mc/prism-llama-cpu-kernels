@@ -9,20 +9,22 @@ diff) and 20 multi-turn tool-call traces in the model's native tool format (Open
 exps.make_prompts --longctx. Every record keeps its category and approximate tokens (chars / 3.5); the server's own tokenizer count
 (prompt_tokens, before the request) and prompt_n are stored per row, so the estimate can be checked, and a prompt that does not fit
 the context is skipped with an error row.
-The plan gives N about 43 (14-15 per category; MIN_N_CATEGORY is 15) at the 29 min budget, with the decode cost of K=4 taken from R1 (0.49-0.68x
-on code). The cut after base can lower it; a category below 15 paired prompts is exploratory only (n_ge_min is false) and gives no
-go / no-go. K=2 and K=3 are not in the default configs (a K=4 run costs about the same, and R1 left the n-gram question open);
-run them on a follow-up pod with --configs.
+The plan gives N about 52 (17-18 per category; MIN_N_CATEGORY is 15, the plan keeps 2 more for error rows) at the 29 min budget, with the
+decode cost of K=4 taken from R1 (0.49-0.68x on code). Configs go before prompts: when a category would get fewer than 17 prompts at the
+start (15 after base is measured), whole configs are dropped in DROP_ORDER and logged, never single prompts. A category below 15 paired
+prompts is exploratory only (n_ge_min is false) and gives no go / no-go. K=2, K=3 and ngram-map-k with the fork defaults are not in the
+default configs (a K=4 run costs about the same as K=2 or K=3, and R1 left the n-gram question open); run them on a follow-up pod with --configs.
 m  matrix. One llama-server per config, all on this pod and with -lv 4: target alone (base), draft-simple K=4 (Qwen3.5-0.8B
-   BF16), ngram-mod and ngram-map-k with the fork defaults and the R1 'short' parameters. Base runs first (every ratio is against
+   BF16), ngram-mod with the fork defaults, ngram-mod and ngram-map-k with the R1 'short' parameters. Base runs first (every ratio is against
    it); the other configs follow in an order shuffled with the seed, and base runs again at the end on its first prompts
    (base_end: a drift bound for clocks and temperature, reported as matrix.drift). The prompts are shuffled with the seed too,
    category balanced, so a prefix is balanced. n_predict 320 for full-file edits, 512 for diffs and 128 for tool calls, ctx 16384.
    Per config, per category and overall: tok/s, speedup, r, alpha with bootstrap 95% intervals (prompts resampled), and greedy
    output equality against base. The output text is kept in the rows.
-   Time: the prompt count N is fixed before any server starts from a cost model (plan_n). After base the model is rescaled with the
-   measured time per prompt and N is cut again if the rest does not fit. A cut drops the tail of the balanced order (so every
-   category loses about the same) and is logged in notes and in matrix.plan / matrix.replan with the dropped ids.
+   Time: the prompt count N is fixed before any server starts from a cost model (fit_configs, plan_n). After base the model is rescaled
+   with the measured time per prompt and N is cut again if the rest does not fit, but never below 15 per category: configs are
+   dropped first. A cut drops the tail of the balanced order (so every category loses about the same) and is logged in notes and in
+   matrix.plan / matrix.replan with the dropped ids; dropped configs are in matrix.configs_dropped.
    Spec path: -lv 4 makes the INFO line `n_rs_seq` and the lines about partial sequence removal visible (llama-internal INFO is a
    trace-level message in this fork). They give the rollback path per config: RS (in-batch rollback, draft-simple) or FULL
    (KV checkpoint plus replay on partial acceptance, what the n-gram types get because need_n_rs_seq() is 0 for them). The per-step
@@ -36,7 +38,7 @@ p  rollback probe. A short -lv 5 run (one prompt per category, 128 tokens for ed
    configs, with LLAMA_TRACE=1; counts the checkpoint created / restored lines and the replay steps. On the checkpoint (FULL) path
    the restore fraction is restored / created, and the original a/b of a restored step comes from the trace line. The debug logs
    live in a private 0700 dir outside the results dir and are deleted. Untimed.
-Parts run in the order m, c, p; each has a share of --budget-min (weights 21.5 : 5.5 : 2, unused time rolls forward) and the pod
+Parts run in the order m, c, p; each has a share of --budget-min (weights 22 : 5 : 2, unused time rolls forward) and the pod
 deadline caps all. The pod failsafe is 55 min: bootstrap with the cold build ~14, downloads <= 6, r2a 29, end reserve 5.
 An unhealthy host (clocks throttled under load, or a power cap without --allow-power-cap) skips m and c; p still runs.
 Partial results go to raw/partial.json, at most every 15 s while prompts run and after every part.
@@ -64,11 +66,13 @@ CTX = 16384
 LV = ["-lv", "4"]
 PROBE_LV = ["-lv", "5"]
 CONFIG_NAMES = ["base", "k2", "k3", "k4", "ngram_mod", "ngram_map_k", "ngram_mod_short", "ngram_map_k_short"]
-DEFAULT_CONFIGS = ["base", "k4", "ngram_mod", "ngram_map_k", "ngram_mod_short", "ngram_map_k_short"]     # k2 and k3: a follow-up pod
+DEFAULT_CONFIGS = ["base", "k4", "ngram_mod", "ngram_mod_short", "ngram_map_k_short"]     # k2, k3 and ngram_map_k (fork defaults): a follow-up pod
+DROP_ORDER = ["k2", "k3", "ngram_map_k", "ngram_mod", "ngram_map_k_short", "ngram_mod_short"]    # configs dropped (first to last) before any prompt; base and k4 stay
+PLAN_SPARE = 2              # prompts per category above MIN_N_CATEGORY at the start, for error rows
 DRIFT_NAME, DRIFT_N, DRIFT_RESERVE_S = "base_end", 5, 45.0   # base again on its first prompts, last; its time is kept out of the plan
 DRIFT_FLAG = 0.03           # a config whose median SM clock differs from base by more than this is flagged
 PROBE_CONFIGS = ["k4", "ngram_mod_short", "ngram_map_k_short"]
-WEIGHTS = {"m": 21.5, "c": 5.5, "p": 2.0}
+WEIGHTS = {"m": 22.0, "c": 5.0, "p": 2.0}
 PART_ORDER = "mcp"
 DEFAULT_TOTAL_MIN = 29.0
 END_RESERVE_S = 25.0
@@ -179,6 +183,25 @@ def plan_n(cfgs: list[dict], prompts: list[dict], budget_s: float, scale: float 
             "per_config_est_s": {c["name"]: config_cost_s(c, main, scale, first and i == 0) for i, c in enumerate(cfgs)},
             "per_category": _count(main), "n_total": len(prompts), "dropped": [p["id"] for p in dropped],
             "dropped_per_category": _count(dropped)}
+
+
+def fit_configs(cfgs: list[dict], prompts: list[dict], budget_s: float, target: int, scale: float = 1.0, first: bool = True,
+                floor: int = N_FLOOR) -> tuple[list[dict], dict]:
+    """plan_n that drops whole configs (DROP_ORDER) before it drops prompts: the configs are cut until every category keeps `target`
+    prompts (or all it has). Returns the kept configs and the plan, with plan["configs_dropped"] and plan["target_per_category"]."""
+    kept, dropped = list(cfgs), []
+    have = _count(prompts)
+    need = min([target] + list(have.values())) if have else 0
+    while True:
+        plan = plan_n(kept, prompts, budget_s, scale, first=first, floor=floor)
+        low = min(plan["per_category"].get(c, 0) for c in have) if have else 0
+        victim = next((n for n in DROP_ORDER if any(c["name"] == n for c in kept)), None)
+        if low >= need or victim is None:
+            break
+        kept = [c for c in kept if c["name"] != victim]
+        dropped.append(victim)
+    plan["configs_dropped"], plan["target_per_category"] = dropped, need
+    return kept, plan
 
 
 def measured_scale(cfg: dict, res: dict, prompts: list[dict]) -> float | None:
@@ -498,14 +521,17 @@ def clock_flags(runs: dict, tol: float = DRIFT_FLAG) -> dict:
 
 def run_matrix(*, args, bin_dir, target: str, draft: str, order: list[dict], budget_s: float, notes: list, gpu: str, on_update) -> dict:
     from infra.results import artifact_path
-    cfgs = config_order(matrix_configs(args.configs), args.seed)
-    plan = plan_n(cfgs, order, max(budget_s - DRIFT_RESERVE_S, 0.0))
+    cfgs, plan = fit_configs(config_order(matrix_configs(args.configs), args.seed), order, max(budget_s - DRIFT_RESERVE_S, 0.0),
+                             MIN_N_CATEGORY + PLAN_SPARE)
     main = order[:plan["n"]]
     runs: dict = {}
     out: dict = {"seed": args.seed, "ctx": args.ctx, "n_predict": make_prompts.R2A_N_PREDICT, "order": [p["id"] for p in order],
                  "config_order": [c["name"] for c in cfgs], "drift_config": DRIFT_NAME, "drift": None, "clocks": {}, "plan": plan,
-                 "replan": None, "runs": runs, "summary": {},
+                 "replan": None, "configs_dropped": list(plan["configs_dropped"]), "runs": runs, "summary": {},
                  "state_note": NGRAM_STATE_NOTE, "checkpoint_note": CHECKPOINT_NOTE}
+    if plan["configs_dropped"]:
+        notes.append(f"m: budget {budget_s:.0f} s does not give {plan['target_per_category']} prompts per category with all configs; "
+                     f"dropped configs {plan['configs_dropped']} (whole configs go before prompts)")
     if plan["dropped"]:
         notes.append(f"m: budget {budget_s:.0f} s fits {plan['n']} of {plan['n_total']} prompts at the start; dropped (evenly, tail of the "
                      f"balanced order) per category {plan['dropped_per_category']}: {plan['dropped']}")
@@ -520,16 +546,18 @@ def run_matrix(*, args, bin_dir, target: str, draft: str, order: list[dict], bud
         on_update(out)
 
     for i, cfg in enumerate(cfgs):
+        if cfg["name"] in out["configs_dropped"]:
+            continue
         left = t_end - time.monotonic() - DRIFT_RESERVE_S
         if left < 45:
-            notes.append(f"m: time budget used up; {[c['name'] for c in cfgs[i:]]} skipped")
+            notes.append(f"m: time budget used up; {[c['name'] for c in cfgs[i:] if c['name'] not in out['configs_dropped']]} skipped")
             break
         base_ids = {r["id"] for r in (runs.get("base") or {}).get("rows", []) if "error" not in r}
         ps = main if cfg["name"] == "base" else ([p for p in main if p["id"] in base_ids] if base_ids else main)
         if not ps:
             notes.append(f"m: {cfg['name']} has no prompts")
             continue
-        costs = [config_cost_s(cfg, ps)] + [config_cost_s(c, main) for c in cfgs[i + 1:]]
+        costs = [config_cost_s(cfg, ps)] + [config_cost_s(c, main) for c in cfgs[i + 1:] if c["name"] not in out["configs_dropped"]]
         share = e5_spec.time_shares(costs, left)[0]
         runs[cfg["name"]] = {"name": cfg["name"], "spec_type": cfg["spec_type"], "k": cfg["k"], "rows": [], "planned": len(ps), "partial": True}
 
@@ -548,8 +576,13 @@ def run_matrix(*, args, bin_dir, target: str, draft: str, order: list[dict], bud
             rest = cfgs[i + 1:]
             if sc is not None and rest:
                 base_ok = [p for p in main if p["id"] in {r["id"] for r in res["rows"] if "error" not in r}]
-                new = plan_n(rest, base_ok, t_end - time.monotonic() - DRIFT_RESERVE_S, scale=sc, first=False, floor=min(N_FLOOR, len(base_ok)))
+                kept, new = fit_configs(rest, base_ok, t_end - time.monotonic() - DRIFT_RESERVE_S, MIN_N_CATEGORY, scale=sc, first=False,
+                                        floor=min(N_FLOOR, len(base_ok)))
                 out["replan"] = new
+                if new["configs_dropped"]:
+                    out["configs_dropped"] += new["configs_dropped"]
+                    notes.append(f"m: after base (time per prompt x{sc:.2f} of the model) {MIN_N_CATEGORY} prompts per category do not fit all "
+                                 f"configs; dropped configs {new['configs_dropped']} (whole configs go before prompts)")
                 if new["n"] < len(base_ok):
                     main = base_ok[:new["n"]]
                     notes.append(f"m: after base (time per prompt x{sc:.2f} of the model) the other configs are cut from {len(base_ok)} to "
@@ -567,6 +600,7 @@ def run_matrix(*, args, bin_dir, target: str, draft: str, order: list[dict], bud
             notes.append(f"m: base at the end ran at {out['drift']['ratio']:.3f}x of base at the start: drift of more than {DRIFT_FLAG:.0%} in the speedups")
     elif len(runs) > 1:
         notes.append("m: no time left for the drift control (base again at the end)")
+    out["config_order"] = [c["name"] for c in cfgs if c["name"] not in out["configs_dropped"]]
     out["clocks"] = clock_flags(runs)
     for name, c in out["clocks"].items():
         if c["flag"]:
@@ -928,13 +962,16 @@ def plan_json(a) -> dict:
     bin_dir = e4_bonsai.llama_bin()
     rows = make_prompts.load_longctx(a.prompts)
     order = make_prompts.shuffled(rows, a.seed, stratify=True)[:a.limit]
-    cfgs = config_order(matrix_configs(a.configs), a.seed)
     parts = [p for p in PART_ORDER if p in a.parts]
     m_s = part_budget_s(a.budget_min * 60.0, "m", parts) if "m" in parts else 0.0
+    cfgs = config_order(matrix_configs(a.configs), a.seed)
+    m_plan = None
+    if m_s:
+        cfgs, m_plan = fit_configs(cfgs, order, max(m_s - DRIFT_RESERVE_S, 0.0), MIN_N_CATEGORY + PLAN_SPARE)
     probe_cfg = {c["name"]: with_lv(c, PROBE_LV) for c in matrix_configs(a.configs)}
     return {"exp": EXP, "parts": parts, "budget_min": a.budget_min, "weights": WEIGHTS, "seed": a.seed, "ctx": a.ctx,
             "prompt_set": make_prompts.longctx_stats(rows), "n_prompts": len(order), "n_predict": make_prompts.R2A_N_PREDICT,
-            "matrix": {"config_order": [c["name"] for c in cfgs], "plan": plan_n(cfgs, order, m_s) if m_s else None,
+            "matrix": {"config_order": [c["name"] for c in cfgs], "plan": m_plan,
                        "configs": [{"name": c["name"], "desc": c["desc"], "cmd": config_cmd(bin_dir, "<pq2.gguf>", "<draft_bf16.gguf>", c, ctx=a.ctx)}
                                    for c in cfgs]},
             "control": {"subset_ids": [p["id"] for p in control_subset(order, a.control_n)], "n_predict": a.nsys_n_predict,

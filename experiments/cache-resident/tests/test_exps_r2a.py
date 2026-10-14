@@ -103,7 +103,29 @@ def test_full_file_edit_is_inside_the_answer_window(rows):
     assert make_prompts.longctx_stats(rows)["full_file_edit_offset_tokens"]["max"] <= 100
     assert all(r["meta"]["edit_offset_tokens"] is None for r in rows if r["category"] == "edit_diff")
     lines = ["", "", "int a;", "", "void f() {", "}"]
-    assert make_prompts.start_line_of(lines, 4, 3) == 2 and make_prompts.start_line_of(lines, 1, 3) == 1 and make_prompts.start_line_of(lines, 4, 9) == 2
+
+def test_start_line_is_unique_in_its_file_and_near_the_edit(rows):
+    for r in (x for x in rows if x["category"] == "edit_full_file"):
+        m = r["meta"]
+        src = make_prompts.read_source(make_prompts.R2A_ROOT, m["file"])
+        if src is None or make_prompts.sha16(src) != m["sources"][m["file"]]:
+            continue                      # drift: the checks of the generator test cover it
+        anchor = src.split("\n")[m["start_line"]].strip()[:make_prompts.ANCHOR_SHOW]
+        assert len(anchor) >= make_prompts.ANCHOR_MIN_CHARS and src.count(anchor) == 1, (r["id"], anchor)
+        assert m["edit_line"] - m["start_line"] <= make_prompts.ANCHOR_MAX_BACK + 3
+    ff = [x["meta"]["edit_offset_tokens"] for x in rows if x["category"] == "edit_full_file"]
+    assert max(ff) <= make_prompts.ANCHOR_MAX_TOKENS
+
+
+def test_start_line_of_skips_blank_and_repeated_lines():
+    f = make_prompts.start_line_of
+    lines = ["", "", "int a = compute();", "", "    return 0;", "}", "int b = 1;", "}", "void f() {", "    x();"]
+    assert f(lines, 4, 3) == 2                                      # blank lines above; the unique line 2 is found on the way up to the edit
+    assert f(lines, 9, 3) == 6                                      # line 6 is unique
+    assert f(lines, 8, 1) == 6                                      # '}' at 7 is too short and repeats: walk back to 6
+    assert f(["    x();"] * 4, 3, 3) is None                        # nothing unique
+    far = ["unique_statement_here();"] + ["}"] * 31
+    assert f(far, 31, 3) is None                                    # the unique line is beyond the walk-back cap
 
 
 def test_prompts_fit_the_context_with_a_pessimistic_tokenizer(rows):
@@ -196,7 +218,7 @@ def test_configs_match_r1_and_all_carry_lv4():
     cfgs = {c["name"]: c for c in r2a.matrix_configs()}
     r1c = {c["name"]: c for c in e5_spec.matrix_configs()}
     assert list(cfgs) == r2a.CONFIG_NAMES == ["base", "k2", "k3", "k4", "ngram_mod", "ngram_map_k", "ngram_mod_short", "ngram_map_k_short"]
-    assert r2a.DEFAULT_CONFIGS == ["base", "k4", "ngram_mod", "ngram_map_k", "ngram_mod_short", "ngram_map_k_short"]
+    assert r2a.DEFAULT_CONFIGS == ["base", "k4", "ngram_mod", "ngram_mod_short", "ngram_map_k_short"]
     assert r2a.parse_args([]).configs == r2a.DEFAULT_CONFIGS and r2a.parse_args(["--configs", "base,k2,k3"]).configs == ["base", "k2", "k3"]
     for n, c in cfgs.items():
         cmd = r2a.config_cmd("/b", "/t.gguf", "/d.gguf", c)
@@ -227,18 +249,41 @@ def test_plan_fits_cuts_evenly_and_lists_what_it_dropped(rows):
     cfgs = r2a.config_order(r2a.matrix_configs(r2a.DEFAULT_CONFIGS))
     big = r2a.plan_n(cfgs, order, 3600.0)
     assert big["n"] == 60 and big["fits"] and big["dropped"] == [] and big["est_s"] <= 0.9 * 3600
-    p = r2a.plan_n(cfgs, order, 21.5 * 60 - r2a.DRIFT_RESERVE_S)
-    assert 42 <= p["n"] < 60 and p["fits"]                       # 14-15 per category at the default budget (exploratory below 15)
-    assert min(p["per_category"].values()) >= 14 and p["est_s"] <= 0.9 * (21.5 * 60 - r2a.DRIFT_RESERVE_S)
+    m_s = r2a.part_budget_s(29 * 60 - 30, "m", list("mcp")) - r2a.DRIFT_RESERVE_S         # 30 s for the host probe
+    p = r2a.plan_n(cfgs, order, m_s)
+    assert 50 <= p["n"] < 60 and p["fits"]                       # 17 per category at the default budget (MIN_N_CATEGORY + PLAN_SPARE)
+    assert min(p["per_category"].values()) >= r2a.MIN_N_CATEGORY + r2a.PLAN_SPARE and p["est_s"] <= 0.9 * m_s
     assert p["dropped"] == [r["id"] for r in order[p["n"]:]] and sum(p["dropped_per_category"].values()) == 60 - p["n"]
     assert max(p["per_category"].values()) - min(p["per_category"].values()) <= 1
     assert max(p["dropped_per_category"].values()) - min(p["dropped_per_category"].values()) <= 1
     tiny = r2a.plan_n(cfgs, order, 60.0)
     assert tiny["n"] == r2a.N_FLOOR and not tiny["fits"]
-    slow = r2a.plan_n(cfgs, order, 21.5 * 60, scale=2.0)
+    slow = r2a.plan_n(cfgs, order, m_s, scale=2.0)
     assert slow["n"] < p["n"]
     c = {x["name"]: x for x in r2a.matrix_configs()}
     assert r2a.config_cost_s(c["k4"], order[:30]) > 1.2 * r2a.config_cost_s(c["base"], order[:30])      # R1: K=4 ran at 0.5-0.7x on code (prefill dominates here)
+
+
+def test_fit_configs_drops_whole_configs_before_prompts(rows):
+    order = make_prompts.shuffled(rows, r2a.SEED, stratify=True)
+    full = r2a.config_order(r2a.matrix_configs())
+    want = r2a.MIN_N_CATEGORY + r2a.PLAN_SPARE
+    m_s = r2a.part_budget_s(29 * 60 - 30, "m", list("mcp")) - r2a.DRIFT_RESERVE_S
+    kept, pl = r2a.fit_configs(full, order, m_s, want)                  # all eight configs: k2, k3, ngram_map_k go first
+    assert pl["configs_dropped"] == ["k2", "k3", "ngram_map_k"] and sorted(c["name"] for c in kept) == sorted(r2a.DEFAULT_CONFIGS)
+    assert min(pl["per_category"].values()) >= want and kept[0]["name"] == "base" and pl["target_per_category"] == want
+    d = r2a.fit_configs(r2a.config_order(r2a.matrix_configs(r2a.DEFAULT_CONFIGS)), order, m_s, want)
+    assert d[1]["configs_dropped"] == [] and d[1]["n"] == pl["n"]
+    # a pod 1.5x slower than the model: the default set cannot give 15 per category, so ngram_mod (fork defaults) goes, not prompts
+    kept2, p2 = r2a.fit_configs(kept[1:], order, m_s * 0.8, r2a.MIN_N_CATEGORY, scale=1.5, first=False)
+    assert "ngram_mod" in p2["configs_dropped"] and min(p2["per_category"].values()) >= r2a.MIN_N_CATEGORY
+    assert all(c["name"] not in p2["configs_dropped"] for c in kept2) and "k4" in [c["name"] for c in kept2]
+    # base and k4 are never dropped: what is left is cut in prompts
+    only, p3 = r2a.fit_configs(r2a.config_order(r2a.matrix_configs(["base", "k4"])), order, 300.0, want)
+    assert p3["configs_dropped"] == [] and len(only) == 2 and p3["n"] < 60
+    # fewer prompts than the target: the target follows what exists, no config is dropped for it
+    _, p4 = r2a.fit_configs(full, order[:9], 3600.0, want)
+    assert p4["target_per_category"] == 3 and p4["configs_dropped"] == [] and p4["n"] == 9
 
 
 def test_measured_scale_and_part_budget(rows):
@@ -252,8 +297,8 @@ def test_measured_scale_and_part_budget(rows):
     assert r2a.measured_scale(cfg, {"rows": [], "wall_s": 5}, ps) is None
     m = r2a.part_budget_s(29 * 60, "m", list("mcp"))
     c = r2a.part_budget_s(29 * 60 - m, "c", list("cp"))
-    assert m + c + r2a.part_budget_s(29 * 60 - m - c, "p", list("p")) < 29 * 60 and c == pytest.approx((29 * 60 - m - 25) * 5.5 / 7.5)
-    assert r2a.part_budget_s(29 * 60, "m", list("mcp")) == pytest.approx((29 * 60 - 25) * 21.5 / 29.0)
+    assert m + c + r2a.part_budget_s(29 * 60 - m - c, "p", list("p")) < 29 * 60 and c == pytest.approx((29 * 60 - m - 25) * 5.0 / 7.0)
+    assert r2a.part_budget_s(29 * 60, "m", list("mcp")) == pytest.approx((29 * 60 - 25) * 22.0 / 29.0)
 
 
 # ---------------------------------------------------------------- logs
@@ -628,8 +673,32 @@ def test_r2a_end_to_end_with_fakes(pod):
     assert {"server-base.log", "server-base_end.log", "server-control-nsys.log"} <= {f.name.split("-", 1)[1] for f in raw.glob("*-server-*.log")}
 
 
-def test_r2a_cuts_the_prompt_count_evenly_and_logs_it(pod):
+def test_r2a_drops_configs_before_prompts_and_logs_it(pod):
     assert r2a.main(["--parts", "m", "--configs", "base,k2,k3,k4,ngram_mod,ngram_map_k,ngram_mod_short,ngram_map_k_short", "--budget-min", "9"]) == 0
+    d = _result(pod)["data"]
+    m = d["matrix"]
+    assert m["plan"]["configs_dropped"] and m["configs_dropped"][:len(m["plan"]["configs_dropped"])] == m["plan"]["configs_dropped"]
+    assert m["plan"]["configs_dropped"][:3] == ["k2", "k3", "ngram_map_k"] and "base" in m["config_order"] and "k4" in m["config_order"]
+    assert not set(m["config_order"]) & set(m["configs_dropped"]) and not set(m["runs"]) & (set(m["configs_dropped"]) - {"base_end"})
+    assert any("dropped configs" in n for n in d["notes"])
+
+
+def test_r2a_replan_after_base_drops_configs_not_prompts(pod, monkeypatch):
+    monkeypatch.setattr(r2a, "measured_scale", lambda cfg, res, ps: 2.2)           # base ran 2.2x slower than the model
+    assert r2a.main(["--parts", "m", "--configs", ",".join(r2a.DEFAULT_CONFIGS), "--budget-min", "29"]) == 0
+    d = _result(pod)["data"]
+    m = d["matrix"]
+    assert m["plan"]["configs_dropped"] == [] and m["plan"]["n"] == 60
+    rp = m["replan"]
+    assert rp["configs_dropped"] and min(rp["per_category"].values()) >= r2a.MIN_N_CATEGORY and m["configs_dropped"] == rp["configs_dropped"]
+    assert any("after base" in n and "dropped configs" in n for n in d["notes"])
+    ran = set(m["runs"]) - {"base_end"}
+    assert not ran & set(m["configs_dropped"]) and "base" in ran and "k4" in ran and ran == set(m["config_order"])
+    assert len(m["runs"]["base"]["rows"]) == 60 and len(m["runs"]["k4"]["rows"]) == rp["n"] >= 3 * r2a.MIN_N_CATEGORY
+
+
+def test_r2a_cuts_the_prompt_count_evenly_and_logs_it(pod):
+    assert r2a.main(["--parts", "m", "--configs", "base,k4", "--budget-min", "6"]) == 0
     d = _result(pod)["data"]
     m = d["matrix"]
     pl = m["plan"]

@@ -272,6 +272,8 @@ CHARS_PER_TOKEN = 3.5
 EDIT_TOKENS = (2000, 8000)
 TRACE_MIN_TOKENS = 2100        # estimated tokens (chars / 3.5) a trace is lengthened to, when its file is long enough
 START_BEFORE = 3            # lines of copy before the first edited line in an edit_full_file answer
+ANCHOR_MIN_CHARS, ANCHOR_SHOW = 8, 100     # the start line of a full_file answer is named by its text: at least 8 chars, shown up to 100
+ANCHOR_MAX_BACK, ANCHOR_MAX_TOKENS = 15, 60     # the walk back to a unique start line stops at 15 lines or 60 tokens
 EDIT_KINDS = ["rename", "add_param", "fix_bug", "add_logging", "refactor"]
 TRACE_TURNS = [3, 3, 3, 3, 3, 3, 3, 4, 4, 4, 4, 4, 4, 4, 5, 5, 5, 5, 5, 5]
 LANG_OF_EXT = {".py": "python", ".c": "c", ".cpp": "cpp", ".h": "cpp", ".cu": "cpp", ".cuh": "cpp"}
@@ -519,12 +521,23 @@ def edit_instruction(kind: str, text: str, lang: str, rng: random.Random) -> tup
     raise ValueError(kind)
 
 
-def start_line_of(lines: list[str], edit_line: int, before: int = START_BEFORE) -> int:
-    """0-based first line of a full_file answer: a few lines before the first edited line, never a blank one."""
-    start = max(0, edit_line - before)
-    while start < edit_line and not lines[start].strip():
-        start += 1
-    return start
+def start_line_of(lines: list[str], edit_line: int, before: int = START_BEFORE, text: str | None = None) -> int | None:
+    """0-based first line of a full_file answer. The prompt names this line by its text, so the text must occur once in the file.
+    Walk back from `before` lines above the edit to the nearest line of >= ANCHOR_MIN_CHARS chars that occurs once; the walk is capped
+    by ANCHOR_MAX_BACK lines and ANCHOR_MAX_TOKENS tokens. If none is found, try the lines from there up to the edit line. None when
+    no line is unique."""
+    text = "\n".join(lines) if text is None else text
+    top = max(0, edit_line - before)
+
+    def ok(i: int) -> bool:
+        a = lines[i].strip()[:ANCHOR_SHOW]
+        return len(a) >= ANCHOR_MIN_CHARS and text.count(a) == 1
+    for i in range(top, max(0, edit_line - ANCHOR_MAX_BACK) - 1, -1):
+        if approx_tokens(len("\n".join(lines[i:edit_line]))) > ANCHOR_MAX_TOKENS:
+            break
+        if ok(i):
+            return i
+    return next((i for i in range(top + 1, edit_line + 1) if ok(i)), None)
 
 
 def edit_prompt(path: str, text: str, kind: str, variant: str, lang: str, rng: random.Random) -> tuple[list[dict], dict] | None:
@@ -536,11 +549,13 @@ def edit_prompt(path: str, text: str, kind: str, variant: str, lang: str, rng: r
     meta["edit_offset_tokens"] = None
     if variant == "full_file":
         # a 320-token answer that starts at line 1 would only copy the file head (the edit is often thousands of tokens down),
-        # so the answer starts a few lines before the first edited line
+        # so the answer starts a few lines before the first edited line, at a line whose text occurs once in the file
         lines = text.split("\n")
-        start = start_line_of(lines, meta["edit_line"])
+        start = start_line_of(lines, meta["edit_line"], text=text)
+        if start is None:
+            return None
         shown = lines[start].strip()
-        shown = shown if len(shown) <= 100 else shown[:100] + "..."
+        shown = shown if len(shown) <= ANCHOR_SHOW else shown[:ANCHOR_SHOW] + "..."
         meta.update(start_line=start, edit_offset_tokens=approx_tokens(len("\n".join(lines[start:meta["edit_line"]]))))
         spec = (f"Output the modified file starting with the line `{shown}` (line {start + 1} of the original) and continuing to the "
                 f"last line of the file, in a single ```{fence} code block. Do not output the lines before it. Keep every unchanged "
