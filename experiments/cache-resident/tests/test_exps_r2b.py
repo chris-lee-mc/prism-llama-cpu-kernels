@@ -213,6 +213,14 @@ def test_multicol_failures_are_reported_and_a_blind_filter_runs_the_whole_op(pod
     assert any("reported failures" in n for n in d["notes"])
 
 
+def test_multicol_failure_with_the_env_set_stops_before_any_benchmark(pod, monkeypatch):
+    monkeypatch.setenv("FAKE_TBO_FAIL", "1")
+    assert mc.main(["--budget-min", "10"]) == 1
+    d = _result(pod, "r2b_mc", "rtx5090")["data"]
+    assert d["path"] is None and d["perf"] is None and d["bench"] == []
+    assert any(n.startswith("stop: test-backend-ops did not pass") and "on, on_pdl0" in n for n in d["notes"])
+
+
 def test_multicol_filter_that_matches_nothing_falls_back_to_the_whole_op(pod, monkeypatch):
     monkeypatch.setenv("FAKE_NO_FILTER", "1")
     assert mc.main(["--parts", "t", "--budget-min", "6"]) == 0

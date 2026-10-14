@@ -22,7 +22,7 @@ f  op timing. test-backend-ops perf -o MUL_MAT -b CUDA0 -p type_a=pq2_0, (widths
    us/run per (m, n, k) and the gain of on over off for n = 3..8.
 The kernel waits for the quantizer but never triggers launch completion for its successor (the generic kernel does), so the gain of
 on over off is a slight underestimate; the run adds a note on this.
-Parts run in the order t, k, b, f; each has a share of --budget-min (weights 5 : 4 : 10 : 5, unused time rolls forward).
+Parts run in the order t, k, b, f; a failed (or missing) test-backend-ops pass with the env set stops the run after t. Each has a share of --budget-min (weights 5 : 4 : 10 : 5, unused time rolls forward).
 Result: results/r2b_mc/<gpu>/<stamp>.json with data.tbo, data.path, data.perf, data.bench, data.summary.
 Time: pod failsafe 55 min = bootstrap with the cold build ~14 (test-backend-ops is built by bootstrap), download <= 6, run 22, reserve 5.
 Needs CR_LLAMA_BIN with llama-bench and test-backend-ops (CR_BUILD_LLAMA=1); nsys is optional (part k is skipped without it).
@@ -345,6 +345,12 @@ def run(args) -> int:
                     if any(not t.get("ok") for t in extra["tbo"]):
                         rc = 1
                         notes.append("test-backend-ops reported failures: see data.tbo[].fail_lines before reading any timing")
+                    bad_on = [t["config"] for t in extra["tbo"] if t.get("env") and (not t.get("ok") or t.get("n_fail"))]
+                    if bad_on or not any(t.get("env") and t.get("ok") for t in extra["tbo"]):
+                        notes.append("stop: test-backend-ops did not pass with %s set (%s); parts k, b, f not run" % (ENV_VAR, ", ".join(bad_on) or "no passing run"))
+                        cut["part"] = None
+                        save()
+                        break
                 elif p == "k":
                     extra["path"] = path_probe(e4_bonsai.find_nsys(), bin_dir, model, sub, notes)
                 elif p == "f":
