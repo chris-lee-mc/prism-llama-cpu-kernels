@@ -9,16 +9,19 @@ activation quantizer triggers programmatic launch completion at its start, so th
 Configs (environment of each process): off = variable unset (default), on = GGML_CUDA_PQ2_MULTICOL=1, on_pdl0 = on plus GGML_CUDA_PDL=0
 (control: PDL off for every kernel, so the sync cannot matter).
 t  correctness. test-backend-ops test -o MUL_MAT -b CUDA0 -p type_a=pq2_0, (every PQ2_0 case against the CPU backend; widths 1-32 at
-   K 1024 and 5120, the Bonsai 2 shapes with odd row counts, the 27B projections). off, on and on_pdl0. A filter that matches nothing
+   K 1024 and 5120, the Bonsai 2 shapes with odd row counts, the 27B projections). on, on_pdl0 and off, in that order (a short budget drops off first). A filter that matches nothing
    (an older test-backend-ops without -p) runs MUL_MAT whole.
 k  kernel path. nsys CUDA trace (no capture range, private 0700 dir, report deleted after parsing, never in the results dir) of
-   llama-bench -p 4 -n 0 -r 1: the kernel names for off and on. on must show mul_mat_vec_pq2_0_mc<4> and off must not.
+   llama-bench -p 4 -n 0 -r 1: the kernel names for off and on. on must show mul_mat_vec_pq2_0_mc<(int)4> and no generic
+   mul_mat_vec_q<(ggml_type)142, (int)4, ...>; off must show the generic one and no mc kernel.
 b  llama-bench on Bonsai 2 27B PQ2_0, f16 KV, -fa on, -ub 2048, depth 0: -p 1,2,3,4,5,6,7,8,9 -n 0 -r 5 (one batch of W tokens is what a
    K = W - 1 verify step costs) and -p 0 -n 128 -r 5 (decode, one column). Two rounds, the second in reverse config order, so a
    clock drift cancels in the median. Reported: ms per batch per width for each config, the gain of on over off in percent
    (ms_off / ms_on - 1), and the decode tok/s of each config (width 1 and 2 do not use the kernel: they are the control).
 f  op timing. test-backend-ops perf -o MUL_MAT -b CUDA0 -p type_a=pq2_0, (widths 1-32 at the 27B projection shapes), off and on:
    us/run per (m, n, k) and the gain of on over off for n = 3..8.
+The kernel waits for the quantizer but never triggers launch completion for its successor (the generic kernel does), so the gain of
+on over off is a slight underestimate; the run adds a note on this.
 Parts run in the order t, k, b, f; each has a share of --budget-min (weights 5 : 4 : 10 : 5, unused time rolls forward).
 Result: results/r2b_mc/<gpu>/<stamp>.json with data.tbo, data.path, data.perf, data.bench, data.summary.
 Time: pod failsafe 55 min = bootstrap with the cold build ~14 (test-backend-ops is built by bootstrap), download <= 6, run 22, reserve 5.
@@ -38,6 +41,7 @@ from exps import common, e4_bonsai, e4_pdl, e5_cost, hf_ids, r1_step
 EXP = "r2b_mc"
 ENV_VAR = "GGML_CUDA_PQ2_MULTICOL"
 CONFIGS = [("off", {}), ("on", {ENV_VAR: "1"}), ("on_pdl0", {ENV_VAR: "1", "GGML_CUDA_PDL": "0"})]
+TBO_ORDER = [CONFIGS[1], CONFIGS[2], CONFIGS[0]]    # part t: the new path first, so a short budget drops off, not on
 WIDTHS = list(range(1, 10))
 MC_WIDTHS = range(3, 9)               # the kernel handles 3-8 columns
 PQ2_FILTER = "type_a=pq2_0,"          # test-backend-ops -p: regex on the variant string of a case
@@ -46,8 +50,12 @@ ROUNDS = 2
 PARTS = "tkbf"
 WEIGHTS = {"t": 5.0, "k": 4.0, "b": 10.0, "f": 5.0}
 END_RESERVE_S = 25.0
-MC_KERNEL_RE = re.compile(r"mul_mat_vec_pq2_0_mc<(\d+)>")
+PDL_LC_NOTE = ("the mc kernel waits for the quantizer (ggml_cuda_pdl_sync) but never calls ggml_cuda_pdl_lc, unlike mul_mat_vec_q: with 'on' "
+               "the next kernel does not overlap its launch, so the gain of on over off is slightly understated; on_pdl0 vs on mixes this in")
+MC_KERNEL_RE = re.compile(r"mul_mat_vec_pq2_0_mc<(?:\(int\))?(\d+)>")       # nsys prints template ints as (int)N
+GEN_KERNEL_RE = re.compile(r"mul_mat_vec_q<\(ggml_type\)142,\s*(?:\(int\))?(\d+)\b")        # generic path for PQ2_0 (GGML_TYPE_PQ2_0 = 142)
 PERF_RE = re.compile(r"MUL_MAT\((type_a=pq2_0,[^)]*)\):\s+(\d+) runs -\s+([0-9.]+) us/run")
+ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
 TBO_FAIL_RE = re.compile(r"\bFAIL\b")
 
 
@@ -101,15 +109,18 @@ def perf_gain(off: list[dict], on: list[dict]) -> list[dict]:
 def parse_tbo(text: str) -> dict:
     """e4_pdl.parse_tbo plus the number of FAIL lines (ANSI-colored in the console output)."""
     out = e4_pdl.parse_tbo(text)
-    out["n_fail"] = sum(1 for ln in text.splitlines() if TBO_FAIL_RE.search(ln))
+    out["n_fail"] = sum(1 for ln in text.splitlines() if TBO_FAIL_RE.search(ANSI_RE.sub("", ln)))
     return out
 
 
 def mc_kernels(kerns: list[dict]) -> dict:
     """From nsys kernel rows ({name, time_ns, count}): the PQ2_0 multi-column launches and the top kernels by time."""
     mc = [k for k in kerns if MC_KERNEL_RE.search(k["name"])]
+    gen = [k for k in kerns if GEN_KERNEL_RE.search(k["name"])]
     return {"mc_kernel_instances": sum(k["count"] for k in mc),
             "mc_widths": sorted({int(MC_KERNEL_RE.search(k["name"]).group(1)) for k in mc}),
+            "generic_pq2_instances": sum(k["count"] for k in gen),
+            "generic_pq2_widths": sorted({int(GEN_KERNEL_RE.search(k["name"]).group(1)) for k in gen}),
             "top": [{"name": k["name"][:140], "count": k["count"], "time_ns": k["time_ns"]}
                     for k in sorted(kerns, key=lambda x: -x["time_ns"])[:6]]}
 
@@ -169,7 +180,7 @@ def tbo_part(bin_dir, budget: common.Budget, notes: list) -> list[dict]:
     if not (bin_dir / "test-backend-ops").exists():
         notes.append(f"{bin_dir / 'test-backend-ops'} not found; part t and f skipped")
         return out
-    for name, cenv in CONFIGS:
+    for name, cenv in TBO_ORDER:
         if budget.expired(60):
             notes.append(f"t: time budget used up, config {name} skipped")
             continue
@@ -219,8 +230,10 @@ def path_probe(nsys: str | None, bin_dir, model: str, budget: common.Budget, not
     if "mc_kernel_instances" in on and "mc_kernel_instances" in off:
         out["on_uses_mc_kernel"] = on["mc_kernel_instances"] > 0
         out["off_uses_mc_kernel"] = off["mc_kernel_instances"] > 0
-        if not out["on_uses_mc_kernel"] or out["off_uses_mc_kernel"]:
-            notes.append("k: the multi-column kernel is not on exactly in the 'on' config: read the timings of f and b with care")
+        out["off_uses_generic_w4"] = 4 in off.get("generic_pq2_widths", [])
+        out["on_uses_generic_w4"] = 4 in on.get("generic_pq2_widths", [])
+        if not out["on_uses_mc_kernel"] or out["off_uses_mc_kernel"] or not out["off_uses_generic_w4"] or out["on_uses_generic_w4"]:
+            notes.append("k: the multi-column kernel is not on exactly in the 'on' config (off: generic mul_mat_vec_q at 4 columns, on: mul_mat_vec_pq2_0_mc<4>): read the timings of f and b with care")
     return out
 
 
@@ -348,6 +361,7 @@ def run(args) -> int:
         extra["summary"] = summarize_bench(rows, [c for c, _ in CONFIGS])
         notes.extend(verdict_lines(extra["summary"]))
         notes.append("widths 1 and 2 do not use the multi-column kernel: their gain is the noise floor of the comparison")
+        notes.append(PDL_LC_NOTE)
         save(final=True)
     return rc
 

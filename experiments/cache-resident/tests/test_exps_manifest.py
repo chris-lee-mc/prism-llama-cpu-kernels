@@ -126,7 +126,7 @@ def test_r2b_entries_fit_one_session_each():
     from exps import r2b_multicol, r2b_spec
     for key, head, mod, budget in (("r2b_mc", "python3 -m exps.fetch_models --models pq2 --timeout-min 6 && python3 -m exps.r2b_multicol",
                                     "r2b_multicol", 22.0),
-                                   ("r2b_spec", "python3 -m exps.fetch_models --models pq2,draft_bf16,draft_q8_0 --timeout-min 6 && python3 -m exps.r2b_spec",
+                                   ("r2b_spec", "python3 -m exps.fetch_models --models pq2,draft_bf16 --timeout-min 6 && python3 -m exps.r2b_spec",
                                     "r2b_spec", r2b_spec.DEFAULT_TOTAL_MIN)):
         e = MAN[key]
         assert e["build_llama"] is True and e["failsafe_min"] == 55 and e["gpus"][-1] == "pro6000"

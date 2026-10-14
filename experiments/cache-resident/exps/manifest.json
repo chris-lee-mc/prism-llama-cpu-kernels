@@ -209,7 +209,7 @@
   "desc": "R2b multicol: PQ2_0 multi-column mat-vec (mmvq-pq2_0.cuh) on sm_120 behind GGML_CUDA_PQ2_MULTICOL=1 (default off), Bonsai 2 27B PQ2_0, configs off / on / on with GGML_CUDA_PDL=0: (t) test-backend-ops MUL_MAT filtered to pq2_0 against the CPU backend, (k) nsys kernel names of llama-bench -p 4 (the mc kernel must run only with the env; private dir, deleted), (b) llama-bench -p 1..9 -n 0 -r 5 and -p 0 -n 128 -r 5 in two rounds (ms per width, gain of on over off), (f) test-backend-ops perf MUL_MAT pq2_0 (us per op); needs --allow-long (failsafe 55 = clone, apt, torch and cold CUDA build ~14 + download <= 6 + run 22 + end reserve 5; est 28 = download 6 + run 22)"
  },
  "r2b_spec": {
-  "cmd": "python3 -m exps.fetch_models --models pq2,draft_bf16,draft_q8_0 --timeout-min 6 && python3 -m exps.r2b_spec --budget-min 22",
+  "cmd": "python3 -m exps.fetch_models --models pq2,draft_bf16 --timeout-min 6 && python3 -m exps.r2b_spec --budget-min 22",
   "gpus": [
    "pro6000"
   ],

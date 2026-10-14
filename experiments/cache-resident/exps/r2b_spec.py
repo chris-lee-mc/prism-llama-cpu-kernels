@@ -1,6 +1,6 @@
 """R2b spec: draft precision and n-gram + draft combined, on a balanced subset of the R2a prompts, one PRO 6000 pod session.
 
-  python -m exps.fetch_models --models pq2,draft_bf16,draft_q8_0 --timeout-min 6 && python -m exps.r2b_spec [--parts m,p] [--budget-min 22]
+  python -m exps.fetch_models --models pq2,draft_bf16 --timeout-min 6 && python -m exps.r2b_spec [--parts m,p] [--budget-min 22]
 
 R2a (exps.r2a_longctx) ran 53 long-context agentic prompts. This run keeps its prompt file, seed, ctx, n_predict, -lv 4, metrics and
 bootstrap intervals, and takes the first 8 prompts of each category from the same seeded stratified order (24 prompts, a prefix of
@@ -8,8 +8,8 @@ what R2a ran, so every prompt has an R2a row to anchor to). Every config runs th
 m  matrix. One llama-server per config, base first and the rest in a seeded shuffled order, base again at the end (drift bound):
    base     target alone
    k4       draft-simple K=4, Qwen3.5-0.8B BF16 (the R2a config: anchor)
-   k4_q8    draft-simple K=4, Qwen3.5-0.8B Q8_0 (ggml-org/Qwen3.5-0.8B-GGUF, file checked with the HF API; llama-quantize of the BF16
-            file on the pod when the repo or the file is missing)
+   k4_q8    draft-simple K=4, Qwen3.5-0.8B Q8_0 (ggml-org/Qwen3.5-0.8B-GGUF, file checked with the HF API and downloaded by
+            this script, not by fetch_models; llama-quantize of the BF16 file on the pod when the repo or the file is missing)
    combo    --spec-type ngram-mod,draft-simple, ngram-mod fork defaults (n_match 24, n_min 48, n_max 64), draft K=4 BF16
    Per config, per category and overall: tok/s, speedup, r, alpha (draft-simple only) with bootstrap 95% intervals (prompts
    resampled) and greedy output equality against base. 8 prompts per category is below R2a's MIN_N_CATEGORY, so n_ge_min is false

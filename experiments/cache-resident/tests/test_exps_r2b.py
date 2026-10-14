@@ -100,9 +100,11 @@ def test_summarize_bench_median_over_complete_rounds_and_gain():
 
 
 def test_mc_kernels_from_nsys_rows():
-    k = mc.mc_kernels([{"name": "void mul_mat_vec_pq2_0_mc<4>(void const*, void const*, float*, int, int, int, int, int)", "time_ns": 5.0, "count": 12},
-                       {"name": "void mul_mat_vec_q<(ggml_type)40, 4, false, false>(...)", "time_ns": 9.0, "count": 3}])
+    k = mc.mc_kernels([{"name": "void mul_mat_vec_pq2_0_mc<(int)4>(const void *, const void *, float *, int, int, int, int, int)", "time_ns": 5.0, "count": 12},
+                       {"name": "void mul_mat_vec_q<(ggml_type)142, (int)4, (bool)0, (bool)0>(const void *, const void *, const int *, float *, int)", "time_ns": 9.0, "count": 3},
+                       {"name": "void mul_mat_vec_q<(ggml_type)8, (int)4, (bool)0, (bool)0>(...)", "time_ns": 1.0, "count": 7}])
     assert k["mc_kernel_instances"] == 12 and k["mc_widths"] == [4] and k["top"][0]["count"] == 3
+    assert k["generic_pq2_instances"] == 3 and k["generic_pq2_widths"] == [4]            # other types (here 8) are not counted
     assert mc.mc_kernels([])["mc_kernel_instances"] == 0
 
 
@@ -135,7 +137,7 @@ if a[1] == "perf":
         print("  MUL_MAT(type_a=pq2_0,type_b=f32,m=17408,n=%d,k=5120,bs=[1,1],nr=[1,1],per=[0,1,2,3],k_v=0,o=1):  1000 runs -  %.2f us/run - 1 MFLOP/run" % (n, us))
 else:
     print("  MUL_MAT(type_a=pq2_0,type_b=f32,m=97,n=4,k=1024): OK")
-    print("  1/1 tests passed" if not os.environ.get("FAKE_TBO_FAIL") else "  FAIL MUL_MAT(type_a=pq2_0,n=4)\\n  0/1 tests passed")
+    print("  1/1 tests passed" if not os.environ.get("FAKE_TBO_FAIL") else "  \\033[1;31mFAIL\\033[0m MUL_MAT(type_a=pq2_0,n=4)\\n  0/1 tests passed")
     sys.exit(1 if os.environ.get("FAKE_TBO_FAIL") else 0)
 """
 
@@ -151,8 +153,8 @@ elif a[1] == "stats":
     rep = a[-1]
     on = open(os.path.join(os.path.dirname(rep), "mc_env.txt")).read() == "1"
     print("Time (%),Total Time (ns),Instances,Avg (ns),Name")
-    print('50,500,12,40,"void mul_mat_vec_pq2_0_mc<4>(void const*, void const*, float*, int, int, int, int, int)"' if on else
-          '50,500,12,40,"void mul_mat_vec_q<(ggml_type)40, 4, false, false>(void const*)"')
+    print('50,500,12,40,"void mul_mat_vec_pq2_0_mc<(int)4>(const void *, const void *, float *, int, int, int, int, int)"' if on else
+          '50,500,12,40,"void mul_mat_vec_q<(ggml_type)142, (int)4, (bool)0, (bool)0>(const void *, const void *, const int *, float *, int)"')
 """
 
 
@@ -185,10 +187,11 @@ def _result(tmp, exp, gpu):
 def test_multicol_end_to_end_with_fakes(pod):
     assert mc.main(["--budget-min", "10"]) == 0
     d = _result(pod, "r2b_mc", "rtx5090")["data"]
-    assert [t["config"] for t in d["tbo"]] == ["off", "on", "on_pdl0"] and all(t["ok"] and t["passed"] == 1 == t["total"] for t in d["tbo"])
-    assert d["tbo"][1]["env"] == {mc.ENV_VAR: "1"} and d["tbo"][0]["cmd"][-2:] == ["-p", "type_a=pq2_0,"]
+    assert [t["config"] for t in d["tbo"]] == ["on", "on_pdl0", "off"] and all(t["ok"] and t["passed"] == 1 == t["total"] for t in d["tbo"])
+    assert d["tbo"][0]["env"] == {mc.ENV_VAR: "1"} and d["tbo"][0]["cmd"][-2:] == ["-p", "type_a=pq2_0,"]
     p = d["path"]
     assert p["on_uses_mc_kernel"] is True and p["off_uses_mc_kernel"] is False and p["configs"]["on"]["mc_widths"] == [4]
+    assert p["off_uses_generic_w4"] is True and p["on_uses_generic_w4"] is False and not any("not on exactly" in n for n in d["notes"])
     assert p["configs"]["on"]["files_deleted"] == ["mc.nsys-rep", "mc_env.txt"] and not list(pod.rglob("*.nsys-rep"))      # deleted with the private dir
     g = {(x["n"]): x["gain_pct"] for x in d["perf"]["gain"]}
     assert g == {1: pytest.approx(0.0), 3: pytest.approx(100.0), 4: pytest.approx(100.0), 8: pytest.approx(100.0)}
@@ -198,7 +201,7 @@ def test_multicol_end_to_end_with_fakes(pod):
     assert s["pp"]["4"]["gain_pct_on"] == pytest.approx(100.0) and s["pp"]["2"]["gain_pct_on"] == pytest.approx(0.0)
     assert s["pp"]["4"]["ms"]["off"] == pytest.approx(10.0) and s["pp"]["4"]["gain_pct_on_pdl0"] == pytest.approx(80.0)
     assert s["pp"]["4"]["rounds"] == [0, 1] and s["tg"]["1"]["tok_s"]["off"] == 140.0
-    assert any("width 4" in n for n in d["notes"])
+    assert any("width 4" in n for n in d["notes"]) and any("ggml_cuda_pdl_lc" in n for n in d["notes"])
     assert "hf_secretsecret123" not in json.dumps(d) and not (pod / "results" / "r2b_mc" / "rtx5090" / "raw" / "partial.json").exists()
 
 
