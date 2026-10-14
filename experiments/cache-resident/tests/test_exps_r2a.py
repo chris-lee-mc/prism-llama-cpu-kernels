@@ -335,6 +335,20 @@ def test_log_checks_read_the_path_from_the_trace_lines():
     assert any("KV-checkpoint" in n and "replay" in n for n in notes)
 
 
+def test_log_checks_scan_the_whole_log(tmp_path):
+    # -lv 5 loader lines push the context lines past the head_tail window
+    path = tmp_path / "server.log"
+    path.write_text("0.00.0 D load_tensors: tensor x\n" * 20000 + LOG_RS + "0.03.0 D slot x: accepted 1/4 draft tokens\n" * 20000)
+    srv = e5_spec.Server.__new__(e5_spec.Server)
+    srv.log_path, srv.log = str(path), open(path, "a")
+    try:
+        assert r2a.log_checks(srv.head_tail(), "draft-simple")["rollback_path"] == "unknown"
+        a = r2a.log_checks(srv.grep(r2a.CHECK_LINE_RE), "draft-simple")
+    finally:
+        srv.log.close()
+    assert a["rollback_path"] == "in_batch" and a["seq_rm_types"] == ["RS", "RS"] and a["prompt_checkpoints_logged"] == 1
+
+
 FULL_STEPS = """slot x: created speculative checkpoint (pos_min = 1, pos_max = 9, n_tokens = 10, size = 1.0 MiB, draft = 0.0 MiB)
 slot x: accepted  4/ 4 draft tokens
 slot x: accepted 4/4 draft tokens, new n_tokens = 15

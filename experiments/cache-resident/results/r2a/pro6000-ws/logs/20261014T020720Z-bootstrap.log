@@ -1,0 +1,1459 @@
+[bootstrap 01:54:15] apt install: cmake ninja-build ccache
+debconf: delaying package configuration, since apt-utils is not installed
+Selecting previously unselected package libicu70:amd64.
+(Reading database ... (Reading database ... 5%(Reading database ... 10%(Reading database ... 15%(Reading database ... 20%(Reading database ... 25%(Reading database ... 30%(Reading database ... 35%(Reading database ... 40%(Reading database ... 45%(Reading database ... 50%(Reading database ... 55%(Reading database ... 60%(Reading database ... 65%(Reading database ... 70%(Reading database ... 75%(Reading database ... 80%(Reading database ... 85%(Reading database ... 90%(Reading database ... 95%(Reading database ... 100%(Reading database ... 18159 files and directories currently installed.)
+Preparing to unpack .../00-libicu70_70.1-2_amd64.deb ...
+Unpacking libicu70:amd64 (70.1-2) ...
+Selecting previously unselected package libxml2:amd64.
+Preparing to unpack .../01-libxml2_2.9.13+dfsg-1ubuntu0.14_amd64.deb ...
+Unpacking libxml2:amd64 (2.9.13+dfsg-1ubuntu0.14) ...
+Selecting previously unselected package libuv1:amd64.
+Preparing to unpack .../02-libuv1_1.43.0-1ubuntu0.1_amd64.deb ...
+Unpacking libuv1:amd64 (1.43.0-1ubuntu0.1) ...
+Selecting previously unselected package libhiredis0.14:amd64.
+Preparing to unpack .../03-libhiredis0.14_0.14.1-2_amd64.deb ...
+Unpacking libhiredis0.14:amd64 (0.14.1-2) ...
+Selecting previously unselected package ccache.
+Preparing to unpack .../04-ccache_4.5.1-1_amd64.deb ...
+Unpacking ccache (4.5.1-1) ...
+Selecting previously unselected package libarchive13:amd64.
+Preparing to unpack .../05-libarchive13_3.6.0-1ubuntu1.9_amd64.deb ...
+Unpacking libarchive13:amd64 (3.6.0-1ubuntu1.9) ...
+Selecting previously unselected package libjsoncpp25:amd64.
+Preparing to unpack .../06-libjsoncpp25_1.9.5-3_amd64.deb ...
+Unpacking libjsoncpp25:amd64 (1.9.5-3) ...
+Selecting previously unselected package librhash0:amd64.
+Preparing to unpack .../07-librhash0_1.4.2-1ubuntu1_amd64.deb ...
+Unpacking librhash0:amd64 (1.4.2-1ubuntu1) ...
+Selecting previously unselected package dh-elpa-helper.
+Preparing to unpack .../08-dh-elpa-helper_2.0.9ubuntu1_all.deb ...
+Unpacking dh-elpa-helper (2.0.9ubuntu1) ...
+Selecting previously unselected package emacsen-common.
+Preparing to unpack .../09-emacsen-common_3.0.4_all.deb ...
+Unpacking emacsen-common (3.0.4) ...
+Selecting previously unselected package cmake-data.
+Preparing to unpack .../10-cmake-data_3.22.1-1ubuntu1.22.04.2_all.deb ...
+Unpacking cmake-data (3.22.1-1ubuntu1.22.04.2) ...
+Selecting previously unselected package cmake.
+Preparing to unpack .../11-cmake_3.22.1-1ubuntu1.22.04.2_amd64.deb ...
+Unpacking cmake (3.22.1-1ubuntu1.22.04.2) ...
+Selecting previously unselected package ninja-build.
+Preparing to unpack .../12-ninja-build_1.10.1-1_amd64.deb ...
+Unpacking ninja-build (1.10.1-1) ...
+Setting up ninja-build (1.10.1-1) ...
+Setting up libuv1:amd64 (1.43.0-1ubuntu0.1) ...
+Setting up emacsen-common (3.0.4) ...
+Setting up dh-elpa-helper (2.0.9ubuntu1) ...
+Setting up libjsoncpp25:amd64 (1.9.5-3) ...
+Setting up librhash0:amd64 (1.4.2-1ubuntu1) ...
+Setting up cmake-data (3.22.1-1ubuntu1.22.04.2) ...
+Setting up libicu70:amd64 (70.1-2) ...
+Setting up libhiredis0.14:amd64 (0.14.1-2) ...
+Setting up ccache (4.5.1-1) ...
+Updating symlinks in /usr/lib/ccache ...
+Setting up libxml2:amd64 (2.9.13+dfsg-1ubuntu0.14) ...
+Setting up libarchive13:amd64 (3.6.0-1ubuntu1.9) ...
+Setting up cmake (3.22.1-1ubuntu1.22.04.2) ...
+Processing triggers for libc-bin (2.35-0ubuntu3.8) ...
+[bootstrap 01:54:19] installing torch (cu128)
+Looking in indexes: https://download.pytorch.org/whl/cu128
+Collecting torch
+  Downloading https://download-r2.pytorch.org/whl/cu128/torch-2.11.0%2Bcu128-cp310-cp310-manylinux_2_28_x86_64.whl (820.2 MB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 820.2/820.2 MB 4.3 MB/s eta 0:00:00
+Collecting filelock
+  Downloading filelock-3.32.3-py3-none-any.whl (98 kB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 98.9/98.9 KB 1.7 MB/s eta 0:00:00
+Collecting cuda-toolkit[cublas,cudart,cufft,cufile,cupti,curand,cusolver,cusparse,nvjitlink,nvrtc,nvtx]==12.8.1
+  Downloading https://pypi.nvidia.com/cuda-toolkit/cuda_toolkit-12.8.1-py2.py3-none-any.whl (2.3 kB)
+Collecting cuda-bindings<13,>=12.9.4
+  Downloading cuda_bindings-12.9.7-cp310-cp310-manylinux_2_24_x86_64.manylinux_2_28_x86_64.whl (7.7 MB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 7.7/7.7 MB 40.7 MB/s eta 0:00:00
+Collecting nvidia-nccl-cu12==2.28.9
+  Downloading https://pypi.nvidia.com/nvidia-nccl-cu12/nvidia_nccl_cu12-2.28.9-py3-none-manylinux_2_18_x86_64.whl (296.8 MB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 296.8/296.8 MB 107.2 MB/s eta 0:00:00
+Collecting fsspec>=0.8.5
+  Downloading fsspec-2026.7.0-py3-none-any.whl (206 kB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 206.6/206.6 KB 51.5 MB/s eta 0:00:00
+Collecting nvidia-cusparselt-cu12==0.7.1
+  Downloading https://pypi.nvidia.com/nvidia-cusparselt-cu12/nvidia_cusparselt_cu12-0.7.1-py3-none-manylinux2014_x86_64.whl (287.2 MB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 287.2/287.2 MB 108.4 MB/s eta 0:00:00
+Collecting typing-extensions>=4.10.0
+  Downloading typing_extensions-4.16.0-py3-none-any.whl (45 kB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 45.6/45.6 KB 1.1 MB/s eta 0:00:00
+Collecting triton==3.6.0
+  Downloading https://download-r2.pytorch.org/whl/triton-3.6.0-cp310-cp310-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl (188.1 MB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 188.1/188.1 MB 17.2 MB/s eta 0:00:00
+Collecting nvidia-nvshmem-cu12==3.4.5
+  Downloading https://pypi.nvidia.com/nvidia-nvshmem-cu12/nvidia_nvshmem_cu12-3.4.5-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64.whl (139.1 MB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 139.1/139.1 MB 152.4 MB/s eta 0:00:00
+Collecting nvidia-cudnn-cu12==9.19.0.56
+  Downloading https://pypi.nvidia.com/nvidia-cudnn-cu12/nvidia_cudnn_cu12-9.19.0.56-py3-none-manylinux_2_27_x86_64.whl (657.9 MB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 657.9/657.9 MB 68.4 MB/s eta 0:00:00
+Requirement already satisfied: setuptools<82 in /usr/lib/python3/dist-packages (from torch) (59.6.0)
+Collecting jinja2
+  Downloading https://download.pytorch.org/whl/jinja2-3.1.6-py3-none-any.whl (134 kB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 134.9/134.9 KB 26.1 MB/s eta 0:00:00
+Collecting sympy>=1.13.3
+  Downloading sympy-1.14.0-py3-none-any.whl (6.3 MB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 6.3/6.3 MB 113.5 MB/s eta 0:00:00
+Collecting networkx>=2.5.1
+  Downloading networkx-3.4.2-py3-none-any.whl (1.7 MB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 1.7/1.7 MB 152.8 MB/s eta 0:00:00
+Collecting nvidia-cuda-nvrtc-cu12==12.8.93.*
+  Downloading https://pypi.nvidia.com/nvidia-cuda-nvrtc-cu12/nvidia_cuda_nvrtc_cu12-12.8.93-py3-none-manylinux2010_x86_64.manylinux_2_12_x86_64.whl (88.0 MB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 88.0/88.0 MB 176.0 MB/s eta 0:00:00
+Collecting nvidia-curand-cu12==10.3.9.90.*
+  Downloading https://pypi.nvidia.com/nvidia-curand-cu12/nvidia_curand_cu12-10.3.9.90-py3-none-manylinux_2_27_x86_64.whl (63.6 MB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 63.6/63.6 MB 180.9 MB/s eta 0:00:00
+Collecting nvidia-cusparse-cu12==12.5.8.93.*
+  Downloading https://pypi.nvidia.com/nvidia-cusparse-cu12/nvidia_cusparse_cu12-12.5.8.93-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64.whl (288.2 MB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 288.2/288.2 MB 99.0 MB/s eta 0:00:00
+Collecting nvidia-cuda-cupti-cu12==12.8.90.*
+  Downloading https://pypi.nvidia.com/nvidia-cuda-cupti-cu12/nvidia_cuda_cupti_cu12-12.8.90-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64.whl (10.2 MB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 10.2/10.2 MB 204.5 MB/s eta 0:00:00
+Collecting nvidia-nvjitlink-cu12==12.8.93.*
+  Downloading https://pypi.nvidia.com/nvidia-nvjitlink-cu12/nvidia_nvjitlink_cu12-12.8.93-py3-none-manylinux2010_x86_64.manylinux_2_12_x86_64.whl (39.3 MB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 39.3/39.3 MB 194.0 MB/s eta 0:00:00
+Collecting nvidia-cuda-runtime-cu12==12.8.90.*
+  Downloading https://pypi.nvidia.com/nvidia-cuda-runtime-cu12/nvidia_cuda_runtime_cu12-12.8.90-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64.whl (954 kB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 954.8/954.8 KB 216.7 MB/s eta 0:00:00
+Collecting nvidia-cublas-cu12==12.8.4.1.*
+  Downloading https://pypi.nvidia.com/nvidia-cublas-cu12/nvidia_cublas_cu12-12.8.4.1-py3-none-manylinux_2_27_x86_64.whl (594.3 MB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 594.3/594.3 MB 73.8 MB/s eta 0:00:00
+Collecting nvidia-cufft-cu12==11.3.3.83.*
+  Downloading https://pypi.nvidia.com/nvidia-cufft-cu12/nvidia_cufft_cu12-11.3.3.83-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64.whl (193.1 MB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 193.1/193.1 MB 121.6 MB/s eta 0:00:00
+Collecting nvidia-nvtx-cu12==12.8.90.*
+  Downloading https://pypi.nvidia.com/nvidia-nvtx-cu12/nvidia_nvtx_cu12-12.8.90-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64.whl (89 kB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 90.0/90.0 KB 125.0 MB/s eta 0:00:00
+Collecting nvidia-cusolver-cu12==11.7.3.90.*
+  Downloading https://pypi.nvidia.com/nvidia-cusolver-cu12/nvidia_cusolver_cu12-11.7.3.90-py3-none-manylinux_2_27_x86_64.whl (267.5 MB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 267.5/267.5 MB 113.9 MB/s eta 0:00:00
+Collecting nvidia-cufile-cu12==1.13.1.3.*
+  Downloading https://pypi.nvidia.com/nvidia-cufile-cu12/nvidia_cufile_cu12-1.13.1.3-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64.whl (1.2 MB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 1.2/1.2 MB 209.2 MB/s eta 0:00:00
+Collecting cuda-pathfinder~=1.1
+  Downloading cuda_pathfinder-1.6.0-py3-none-any.whl (54 kB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 54.6/54.6 KB 7.4 MB/s eta 0:00:00
+Collecting mpmath<1.4,>=1.1.0
+  Downloading mpmath-1.3.0-py3-none-any.whl (536 kB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 536.2/536.2 KB 111.2 MB/s eta 0:00:00
+Collecting MarkupSafe>=2.0
+  Downloading https://download.pytorch.org/whl/markupsafe-3.0.3-cp310-cp310-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (20 kB)
+Installing collected packages: nvidia-cusparselt-cu12, mpmath, cuda-toolkit, typing-extensions, triton, sympy, nvidia-nvtx-cu12, nvidia-nvshmem-cu12, nvidia-nvjitlink-cu12, nvidia-nccl-cu12, nvidia-curand-cu12, nvidia-cufile-cu12, nvidia-cuda-runtime-cu12, nvidia-cuda-nvrtc-cu12, nvidia-cuda-cupti-cu12, nvidia-cublas-cu12, networkx, MarkupSafe, fsspec, filelock, cuda-pathfinder, nvidia-cusparse-cu12, nvidia-cufft-cu12, nvidia-cudnn-cu12, jinja2, cuda-bindings, nvidia-cusolver-cu12, torch
+Successfully installed MarkupSafe-3.0.3 cuda-bindings-12.9.7 cuda-pathfinder-1.6.0 cuda-toolkit-12.8.1 filelock-3.32.3 fsspec-2026.7.0 jinja2-3.1.6 mpmath-1.3.0 networkx-3.4.2 nvidia-cublas-cu12-12.8.4.1 nvidia-cuda-cupti-cu12-12.8.90 nvidia-cuda-nvrtc-cu12-12.8.93 nvidia-cuda-runtime-cu12-12.8.90 nvidia-cudnn-cu12-9.19.0.56 nvidia-cufft-cu12-11.3.3.83 nvidia-cufile-cu12-1.13.1.3 nvidia-curand-cu12-10.3.9.90 nvidia-cusolver-cu12-11.7.3.90 nvidia-cusparse-cu12-12.5.8.93 nvidia-cusparselt-cu12-0.7.1 nvidia-nccl-cu12-2.28.9 nvidia-nvjitlink-cu12-12.8.93 nvidia-nvshmem-cu12-3.4.5 nvidia-nvtx-cu12-12.8.90 sympy-1.14.0 torch-2.11.0+cu128 triton-3.6.0 typing-extensions-4.16.0
+WARNING: Running pip as the 'root' user can result in broken permissions and conflicting behaviour with the system package manager. It is recommended to use a virtual environment instead: https://pip.pypa.io/warnings/venv
+[bootstrap 01:55:39] pip install -r requirements-pod.txt
+Collecting cuda-python<13,>=12.8
+  Downloading cuda_python-12.9.7-py3-none-any.whl (7.6 kB)
+Collecting cupy-cuda12x
+  Downloading cupy_cuda12x-14.2.0-cp310-cp310-manylinux2014_x86_64.whl (135.3 MB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 135.3/135.3 MB 2.2 MB/s eta 0:00:00
+Collecting nvidia-ml-py
+  Downloading nvidia_ml_py-13.615.71-py3-none-any.whl (58 kB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 58.1/58.1 KB 2.7 MB/s eta 0:00:00
+Collecting numpy
+  Downloading numpy-2.2.6-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (16.8 MB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 16.8/16.8 MB 2.5 MB/s eta 0:00:00
+Collecting matplotlib
+  Downloading matplotlib-3.10.9-cp310-cp310-manylinux2014_x86_64.manylinux_2_17_x86_64.whl (8.8 MB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 8.8/8.8 MB 1.6 MB/s eta 0:00:00
+Collecting requests
+  Downloading requests-2.34.2-py3-none-any.whl (73 kB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 73.1/73.1 KB 1.3 MB/s eta 0:00:00
+Collecting pytest
+  Downloading pytest-9.1.1-py3-none-any.whl (386 kB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 386.5/386.5 KB 1.5 MB/s eta 0:00:00
+Collecting transformers==5.19.0
+  Downloading transformers-5.19.0-py3-none-any.whl (12.6 MB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 12.6/12.6 MB 1.8 MB/s eta 0:00:00
+Collecting accelerate
+  Downloading accelerate-1.15.0-py3-none-any.whl (394 kB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 394.3/394.3 KB 1.8 MB/s eta 0:00:00
+Collecting huggingface_hub[hf_transfer]
+  Downloading huggingface_hub-2.2.0-py3-none-any.whl (839 kB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 839.9/839.9 KB 1.7 MB/s eta 0:00:00
+Collecting einops
+  Downloading einops-0.8.2-py3-none-any.whl (65 kB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 65.6/65.6 KB 1.4 MB/s eta 0:00:00
+Collecting fla-core==0.5.2
+  Downloading fla_core-0.5.2-py3-none-any.whl (819 kB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 819.2/819.2 KB 1.9 MB/s eta 0:00:00
+Collecting regex>=2025.10.22
+  Downloading regex-2026.9.29-cp310-cp310-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (797 kB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 797.6/797.6 KB 2.1 MB/s eta 0:00:00
+Collecting pyyaml>=5.1
+  Downloading pyyaml-6.0.3-cp310-cp310-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (770 kB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 770.3/770.3 KB 1.8 MB/s eta 0:00:00
+Collecting typer
+  Downloading typer-0.27.3-py3-none-any.whl (123 kB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 123.3/123.3 KB 1.9 MB/s eta 0:00:00
+Collecting safetensors>=0.8.0
+  Downloading safetensors-0.8.0-cp310-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (516 kB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 516.0/516.0 KB 2.1 MB/s eta 0:00:00
+Collecting tqdm>=4.60
+  Downloading tqdm-4.70.1-py3-none-any.whl (80 kB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 80.2/80.2 KB 2.0 MB/s eta 0:00:00
+Collecting tokenizers<0.24.0,>=0.23.1
+  Downloading tokenizers-0.23.3-cp310-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (3.4 MB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 3.4/3.4 MB 1.9 MB/s eta 0:00:00
+Collecting packaging>=20.0
+  Downloading packaging-26.3-py3-none-any.whl (129 kB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 130.0/130.0 KB 1.2 MB/s eta 0:00:00
+Requirement already satisfied: cuda-bindings~=12.9.7 in /usr/local/lib/python3.10/dist-packages (from cuda-python<13,>=12.8->-r /workspace/repo/experiments/cache-resident/infra/requirements-pod.txt (line 3)) (12.9.7)
+Requirement already satisfied: cuda-pathfinder==1.*,>=1.3.4 in /usr/local/lib/python3.10/dist-packages (from cupy-cuda12x->-r /workspace/repo/experiments/cache-resident/infra/requirements-pod.txt (line 4)) (1.6.0)
+Collecting python-dateutil>=2.7
+  Downloading python_dateutil-2.9.0.post0-py2.py3-none-any.whl (229 kB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 229.9/229.9 KB 1.2 MB/s eta 0:00:00
+Collecting contourpy>=1.0.1
+  Downloading contourpy-1.3.2-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (325 kB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 325.0/325.0 KB 1.3 MB/s eta 0:00:00
+Collecting cycler>=0.10
+  Downloading cycler-0.12.1-py3-none-any.whl (8.3 kB)
+Collecting fonttools>=4.22.0
+  Downloading fonttools-4.65.0-cp310-cp310-manylinux2014_x86_64.manylinux_2_17_x86_64.whl (5.3 MB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 5.3/5.3 MB 1.7 MB/s eta 0:00:00
+Collecting pyparsing>=3
+  Downloading pyparsing-3.3.3-py3-none-any.whl (126 kB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 126.4/126.4 KB 1.1 MB/s eta 0:00:00
+Collecting pillow>=8
+  Downloading pillow-12.3.0-cp310-cp310-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl (6.9 MB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 6.9/6.9 MB 1.7 MB/s eta 0:00:00
+Collecting kiwisolver>=1.3.1
+  Downloading kiwisolver-1.5.1-cp310-cp310-manylinux_2_12_x86_64.manylinux2010_x86_64.whl (1.6 MB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 1.6/1.6 MB 2.1 MB/s eta 0:00:00
+Collecting urllib3<3,>=1.26
+  Downloading urllib3-2.8.0-py3-none-any.whl (135 kB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 135.7/135.7 KB 2.4 MB/s eta 0:00:00
+Collecting charset_normalizer<4,>=2
+  Downloading charset_normalizer-3.5.2-cp310-cp310-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (271 kB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 271.1/271.1 KB 2.1 MB/s eta 0:00:00
+Collecting certifi>=2023.5.7
+  Downloading certifi-2026.7.22-py3-none-any.whl (136 kB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 137.0/137.0 KB 1.8 MB/s eta 0:00:00
+Collecting idna<4,>=2.5
+  Downloading idna-3.20-py3-none-any.whl (69 kB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 69.6/69.6 KB 1.5 MB/s eta 0:00:00
+Collecting iniconfig>=1.0.1
+  Downloading iniconfig-2.3.1-py3-none-any.whl (7.6 kB)
+Collecting exceptiongroup>=1
+  Downloading exceptiongroup-1.3.1-py3-none-any.whl (16 kB)
+Collecting tomli>=1
+  Downloading tomli-2.5.0-py3-none-any.whl (14 kB)
+Collecting pygments>=2.7.2
+  Downloading pygments-2.21.0-py3-none-any.whl (1.3 MB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 1.3/1.3 MB 2.1 MB/s eta 0:00:00
+Collecting pluggy<2,>=1.5
+  Downloading pluggy-1.6.0-py3-none-any.whl (20 kB)
+Requirement already satisfied: torch>=2.0.0 in /usr/local/lib/python3.10/dist-packages (from accelerate->-r /workspace/repo/experiments/cache-resident/infra/requirements-pod.txt (line 11)) (2.11.0+cu128)
+Collecting psutil
+  Downloading psutil-7.2.2-cp36-abi3-manylinux2010_x86_64.manylinux_2_12_x86_64.manylinux_2_28_x86_64.whl (155 kB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 155.6/155.6 KB 2.2 MB/s eta 0:00:00
+WARNING: huggingface-hub 2.2.0 does not provide the extra 'hf_transfer'
+Requirement already satisfied: fsspec>=2023.5.0 in /usr/local/lib/python3.10/dist-packages (from huggingface_hub[hf_transfer]->-r /workspace/repo/experiments/cache-resident/infra/requirements-pod.txt (line 12)) (2026.7.0)
+Collecting hf-xet<2.0.0,>=1.6.0
+  Downloading hf_xet-1.7.0-cp38-abi3-manylinux2014_x86_64.manylinux_2_17_x86_64.whl (4.2 MB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 4.2/4.2 MB 3.0 MB/s eta 0:00:00
+Requirement already satisfied: filelock>=3.10.0 in /usr/local/lib/python3.10/dist-packages (from huggingface_hub[hf_transfer]->-r /workspace/repo/experiments/cache-resident/infra/requirements-pod.txt (line 12)) (3.32.3)
+Requirement already satisfied: typing-extensions>=4.1.0 in /usr/local/lib/python3.10/dist-packages (from huggingface_hub[hf_transfer]->-r /workspace/repo/experiments/cache-resident/infra/requirements-pod.txt (line 12)) (4.16.0)
+Collecting httpx2<3,>=2.0.0
+  Downloading httpx2-2.13.1-py3-none-any.whl (95 kB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 95.6/95.6 KB 3.2 MB/s eta 0:00:00
+Collecting click<9.0.0,>=8.4.2
+  Downloading click-8.5.0-py3-none-any.whl (125 kB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 125.3/125.3 KB 3.3 MB/s eta 0:00:00
+Collecting truststore>=0.10
+  Downloading truststore-0.10.5-py3-none-any.whl (19 kB)
+Collecting httpcore2==2.13.1
+  Downloading httpcore2-2.13.1-py3-none-any.whl (83 kB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 83.4/83.4 KB 2.9 MB/s eta 0:00:00
+Collecting anyio>=4.10
+  Downloading anyio-4.15.1-py3-none-any.whl (132 kB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 132.1/132.1 KB 3.1 MB/s eta 0:00:00
+Collecting h11>=0.16
+  Downloading h11-0.16.0-py3-none-any.whl (37 kB)
+Collecting six>=1.5
+  Downloading six-1.17.0-py2.py3-none-any.whl (11 kB)
+Requirement already satisfied: triton==3.6.0 in /usr/local/lib/python3.10/dist-packages (from torch>=2.0.0->accelerate->-r /workspace/repo/experiments/cache-resident/infra/requirements-pod.txt (line 11)) (3.6.0)
+Requirement already satisfied: jinja2 in /usr/local/lib/python3.10/dist-packages (from torch>=2.0.0->accelerate->-r /workspace/repo/experiments/cache-resident/infra/requirements-pod.txt (line 11)) (3.1.6)
+Requirement already satisfied: sympy>=1.13.3 in /usr/local/lib/python3.10/dist-packages (from torch>=2.0.0->accelerate->-r /workspace/repo/experiments/cache-resident/infra/requirements-pod.txt (line 11)) (1.14.0)
+Requirement already satisfied: cuda-toolkit[cublas,cudart,cufft,cufile,cupti,curand,cusolver,cusparse,nvjitlink,nvrtc,nvtx]==12.8.1 in /usr/local/lib/python3.10/dist-packages (from torch>=2.0.0->accelerate->-r /workspace/repo/experiments/cache-resident/infra/requirements-pod.txt (line 11)) (12.8.1)
+Requirement already satisfied: nvidia-cudnn-cu12==9.19.0.56 in /usr/local/lib/python3.10/dist-packages (from torch>=2.0.0->accelerate->-r /workspace/repo/experiments/cache-resident/infra/requirements-pod.txt (line 11)) (9.19.0.56)
+Requirement already satisfied: nvidia-nvshmem-cu12==3.4.5 in /usr/local/lib/python3.10/dist-packages (from torch>=2.0.0->accelerate->-r /workspace/repo/experiments/cache-resident/infra/requirements-pod.txt (line 11)) (3.4.5)
+Requirement already satisfied: nvidia-cusparselt-cu12==0.7.1 in /usr/local/lib/python3.10/dist-packages (from torch>=2.0.0->accelerate->-r /workspace/repo/experiments/cache-resident/infra/requirements-pod.txt (line 11)) (0.7.1)
+Requirement already satisfied: nvidia-nccl-cu12==2.28.9 in /usr/local/lib/python3.10/dist-packages (from torch>=2.0.0->accelerate->-r /workspace/repo/experiments/cache-resident/infra/requirements-pod.txt (line 11)) (2.28.9)
+Requirement already satisfied: setuptools<82 in /usr/lib/python3/dist-packages (from torch>=2.0.0->accelerate->-r /workspace/repo/experiments/cache-resident/infra/requirements-pod.txt (line 11)) (59.6.0)
+Requirement already satisfied: networkx>=2.5.1 in /usr/local/lib/python3.10/dist-packages (from torch>=2.0.0->accelerate->-r /workspace/repo/experiments/cache-resident/infra/requirements-pod.txt (line 11)) (3.4.2)
+Requirement already satisfied: nvidia-cuda-runtime-cu12==12.8.90.* in /usr/local/lib/python3.10/dist-packages (from cuda-toolkit[cublas,cudart,cufft,cufile,cupti,curand,cusolver,cusparse,nvjitlink,nvrtc,nvtx]==12.8.1->torch>=2.0.0->accelerate->-r /workspace/repo/experiments/cache-resident/infra/requirements-pod.txt (line 11)) (12.8.90)
+Requirement already satisfied: nvidia-cusolver-cu12==11.7.3.90.* in /usr/local/lib/python3.10/dist-packages (from cuda-toolkit[cublas,cudart,cufft,cufile,cupti,curand,cusolver,cusparse,nvjitlink,nvrtc,nvtx]==12.8.1->torch>=2.0.0->accelerate->-r /workspace/repo/experiments/cache-resident/infra/requirements-pod.txt (line 11)) (11.7.3.90)
+Requirement already satisfied: nvidia-cuda-nvrtc-cu12==12.8.93.* in /usr/local/lib/python3.10/dist-packages (from cuda-toolkit[cublas,cudart,cufft,cufile,cupti,curand,cusolver,cusparse,nvjitlink,nvrtc,nvtx]==12.8.1->torch>=2.0.0->accelerate->-r /workspace/repo/experiments/cache-resident/infra/requirements-pod.txt (line 11)) (12.8.93)
+Requirement already satisfied: nvidia-nvtx-cu12==12.8.90.* in /usr/local/lib/python3.10/dist-packages (from cuda-toolkit[cublas,cudart,cufft,cufile,cupti,curand,cusolver,cusparse,nvjitlink,nvrtc,nvtx]==12.8.1->torch>=2.0.0->accelerate->-r /workspace/repo/experiments/cache-resident/infra/requirements-pod.txt (line 11)) (12.8.90)
+Requirement already satisfied: nvidia-cublas-cu12==12.8.4.1.* in /usr/local/lib/python3.10/dist-packages (from cuda-toolkit[cublas,cudart,cufft,cufile,cupti,curand,cusolver,cusparse,nvjitlink,nvrtc,nvtx]==12.8.1->torch>=2.0.0->accelerate->-r /workspace/repo/experiments/cache-resident/infra/requirements-pod.txt (line 11)) (12.8.4.1)
+Requirement already satisfied: nvidia-cuda-cupti-cu12==12.8.90.* in /usr/local/lib/python3.10/dist-packages (from cuda-toolkit[cublas,cudart,cufft,cufile,cupti,curand,cusolver,cusparse,nvjitlink,nvrtc,nvtx]==12.8.1->torch>=2.0.0->accelerate->-r /workspace/repo/experiments/cache-resident/infra/requirements-pod.txt (line 11)) (12.8.90)
+Requirement already satisfied: nvidia-nvjitlink-cu12==12.8.93.* in /usr/local/lib/python3.10/dist-packages (from cuda-toolkit[cublas,cudart,cufft,cufile,cupti,curand,cusolver,cusparse,nvjitlink,nvrtc,nvtx]==12.8.1->torch>=2.0.0->accelerate->-r /workspace/repo/experiments/cache-resident/infra/requirements-pod.txt (line 11)) (12.8.93)
+Requirement already satisfied: nvidia-cufft-cu12==11.3.3.83.* in /usr/local/lib/python3.10/dist-packages (from cuda-toolkit[cublas,cudart,cufft,cufile,cupti,curand,cusolver,cusparse,nvjitlink,nvrtc,nvtx]==12.8.1->torch>=2.0.0->accelerate->-r /workspace/repo/experiments/cache-resident/infra/requirements-pod.txt (line 11)) (11.3.3.83)
+Requirement already satisfied: nvidia-cusparse-cu12==12.5.8.93.* in /usr/local/lib/python3.10/dist-packages (from cuda-toolkit[cublas,cudart,cufft,cufile,cupti,curand,cusolver,cusparse,nvjitlink,nvrtc,nvtx]==12.8.1->torch>=2.0.0->accelerate->-r /workspace/repo/experiments/cache-resident/infra/requirements-pod.txt (line 11)) (12.5.8.93)
+Requirement already satisfied: nvidia-cufile-cu12==1.13.1.3.* in /usr/local/lib/python3.10/dist-packages (from cuda-toolkit[cublas,cudart,cufft,cufile,cupti,curand,cusolver,cusparse,nvjitlink,nvrtc,nvtx]==12.8.1->torch>=2.0.0->accelerate->-r /workspace/repo/experiments/cache-resident/infra/requirements-pod.txt (line 11)) (1.13.1.3)
+Requirement already satisfied: nvidia-curand-cu12==10.3.9.90.* in /usr/local/lib/python3.10/dist-packages (from cuda-toolkit[cublas,cudart,cufft,cufile,cupti,curand,cusolver,cusparse,nvjitlink,nvrtc,nvtx]==12.8.1->torch>=2.0.0->accelerate->-r /workspace/repo/experiments/cache-resident/infra/requirements-pod.txt (line 11)) (10.3.9.90)
+Collecting shellingham>=1.3.0
+  Downloading shellingham-1.5.4-py2.py3-none-any.whl (9.8 kB)
+Collecting annotated-doc>=0.0.2
+  Downloading annotated_doc-0.0.5-py3-none-any.whl (5.3 kB)
+Collecting rich>=13.8.0
+  Downloading rich-15.0.0-py3-none-any.whl (310 kB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 310.7/310.7 KB 3.6 MB/s eta 0:00:00
+Collecting markdown-it-py>=2.2.0
+  Downloading markdown_it_py-4.2.0-py3-none-any.whl (91 kB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 91.7/91.7 KB 3.8 MB/s eta 0:00:00
+Requirement already satisfied: mpmath<1.4,>=1.1.0 in /usr/local/lib/python3.10/dist-packages (from sympy>=1.13.3->torch>=2.0.0->accelerate->-r /workspace/repo/experiments/cache-resident/infra/requirements-pod.txt (line 11)) (1.3.0)
+Requirement already satisfied: MarkupSafe>=2.0 in /usr/local/lib/python3.10/dist-packages (from jinja2->torch>=2.0.0->accelerate->-r /workspace/repo/experiments/cache-resident/infra/requirements-pod.txt (line 11)) (3.0.3)
+Collecting mdurl~=0.1
+  Downloading mdurl-0.1.2-py3-none-any.whl (10.0 kB)
+Installing collected packages: nvidia-ml-py, urllib3, truststore, tqdm, tomli, six, shellingham, safetensors, regex, pyyaml, pyparsing, pygments, psutil, pluggy, pillow, packaging, numpy, mdurl, kiwisolver, iniconfig, idna, hf-xet, h11, fonttools, exceptiongroup, einops, cycler, click, charset_normalizer, certifi, annotated-doc, requests, python-dateutil, pytest, markdown-it-py, httpcore2, fla-core, cupy-cuda12x, cuda-python, contourpy, anyio, rich, matplotlib, httpx2, typer, huggingface_hub, tokenizers, accelerate, transformers
+Successfully installed accelerate-1.15.0 annotated-doc-0.0.5 anyio-4.15.1 certifi-2026.7.22 charset_normalizer-3.5.2 click-8.5.0 contourpy-1.3.2 cuda-python-12.9.7 cupy-cuda12x-14.2.0 cycler-0.12.1 einops-0.8.2 exceptiongroup-1.3.1 fla-core-0.5.2 fonttools-4.65.0 h11-0.16.0 hf-xet-1.7.0 httpcore2-2.13.1 httpx2-2.13.1 huggingface_hub-2.2.0 idna-3.20 iniconfig-2.3.1 kiwisolver-1.5.1 markdown-it-py-4.2.0 matplotlib-3.10.9 mdurl-0.1.2 numpy-2.2.6 nvidia-ml-py-13.615.71 packaging-26.3 pillow-12.3.0 pluggy-1.6.0 psutil-7.2.2 pygments-2.21.0 pyparsing-3.3.3 pytest-9.1.1 python-dateutil-2.9.0.post0 pyyaml-6.0.3 regex-2026.9.29 requests-2.34.2 rich-15.0.0 safetensors-0.8.0 shellingham-1.5.4 six-1.17.0 tokenizers-0.23.3 tomli-2.5.0 tqdm-4.70.1 transformers-5.19.0 truststore-0.10.5 typer-0.27.3 urllib3-2.8.0
+WARNING: Running pip as the 'root' user can result in broken permissions and conflicting behaviour with the system package manager. It is recommended to use a virtual environment instead: https://pip.pypa.io/warnings/venv
+[bootstrap 02:00:09] transformers: 5.19.0
+[bootstrap 02:00:27] ncu: /usr/local/cuda/bin/ncu
+[bootstrap 02:00:27] apt install cuda-nsight-systems-12-8
+debconf: delaying package configuration, since apt-utils is not installed
+Selecting previously unselected package libmd0:amd64.
+(Reading database ... (Reading database ... 5%(Reading database ... 10%(Reading database ... 15%(Reading database ... 20%(Reading database ... 25%(Reading database ... 30%(Reading database ... 35%(Reading database ... 40%(Reading database ... 45%(Reading database ... 50%(Reading database ... 55%(Reading database ... 60%(Reading database ... 65%(Reading database ... 70%(Reading database ... 75%(Reading database ... 80%(Reading database ... 85%(Reading database ... 90%(Reading database ... 95%(Reading database ... 100%(Reading database ... 21346 files and directories currently installed.)
+Preparing to unpack .../00-libmd0_1.0.4-1build1_amd64.deb ...
+Unpacking libmd0:amd64 (1.0.4-1build1) ...
+Selecting previously unselected package libbsd0:amd64.
+Preparing to unpack .../01-libbsd0_0.11.5-1_amd64.deb ...
+Unpacking libbsd0:amd64 (0.11.5-1) ...
+Selecting previously unselected package libdbus-1-3:amd64.
+Preparing to unpack .../02-libdbus-1-3_1.12.20-2ubuntu4.1_amd64.deb ...
+Unpacking libdbus-1-3:amd64 (1.12.20-2ubuntu4.1) ...
+Selecting previously unselected package libglib2.0-0:amd64.
+Preparing to unpack .../03-libglib2.0-0_2.72.4-0ubuntu2.10_amd64.deb ...
+Unpacking libglib2.0-0:amd64 (2.72.4-0ubuntu2.10) ...
+Selecting previously unselected package ucf.
+Preparing to unpack .../04-ucf_3.0043_all.deb ...
+Moving old data out of the way
+Unpacking ucf (3.0043) ...
+Selecting previously unselected package xkb-data.
+Preparing to unpack .../05-xkb-data_2.33-1_all.deb ...
+Unpacking xkb-data (2.33-1) ...
+Selecting previously unselected package libdrm-common.
+Preparing to unpack .../06-libdrm-common_2.4.113-2~ubuntu0.22.04.1_all.deb ...
+Unpacking libdrm-common (2.4.113-2~ubuntu0.22.04.1) ...
+Selecting previously unselected package libdrm2:amd64.
+Preparing to unpack .../07-libdrm2_2.4.113-2~ubuntu0.22.04.1_amd64.deb ...
+Unpacking libdrm2:amd64 (2.4.113-2~ubuntu0.22.04.1) ...
+Selecting previously unselected package libpng16-16:amd64.
+Preparing to unpack .../08-libpng16-16_1.6.37-3ubuntu0.7_amd64.deb ...
+Unpacking libpng16-16:amd64 (1.6.37-3ubuntu0.7) ...
+Selecting previously unselected package libxau6:amd64.
+Preparing to unpack .../09-libxau6_1%3a1.0.9-1build5_amd64.deb ...
+Unpacking libxau6:amd64 (1:1.0.9-1build5) ...
+Selecting previously unselected package libxdmcp6:amd64.
+Preparing to unpack .../10-libxdmcp6_1%3a1.1.3-0ubuntu5_amd64.deb ...
+Unpacking libxdmcp6:amd64 (1:1.1.3-0ubuntu5) ...
+Selecting previously unselected package libxcb1:amd64.
+Preparing to unpack .../11-libxcb1_1.14-3ubuntu3_amd64.deb ...
+Unpacking libxcb1:amd64 (1.14-3ubuntu3) ...
+Selecting previously unselected package libx11-data.
+Preparing to unpack .../12-libx11-data_2%3a1.7.5-1ubuntu0.4_all.deb ...
+Unpacking libx11-data (2:1.7.5-1ubuntu0.4) ...
+Selecting previously unselected package libx11-6:amd64.
+Preparing to unpack .../13-libx11-6_2%3a1.7.5-1ubuntu0.4_amd64.deb ...
+Unpacking libx11-6:amd64 (2:1.7.5-1ubuntu0.4) ...
+Selecting previously unselected package libxext6:amd64.
+Preparing to unpack .../14-libxext6_2%3a1.3.4-1build1_amd64.deb ...
+Unpacking libxext6:amd64 (2:1.3.4-1build1) ...
+Selecting previously unselected package libxcb-xinerama0:amd64.
+Preparing to unpack .../15-libxcb-xinerama0_1.14-3ubuntu3_amd64.deb ...
+Unpacking libxcb-xinerama0:amd64 (1.14-3ubuntu3) ...
+Selecting previously unselected package libxcb-icccm4:amd64.
+Preparing to unpack .../16-libxcb-icccm4_0.4.1-1.1build2_amd64.deb ...
+Unpacking libxcb-icccm4:amd64 (0.4.1-1.1build2) ...
+Selecting previously unselected package libxcb-shm0:amd64.
+Preparing to unpack .../17-libxcb-shm0_1.14-3ubuntu3_amd64.deb ...
+Unpacking libxcb-shm0:amd64 (1.14-3ubuntu3) ...
+Selecting previously unselected package libxcb-util1:amd64.
+Preparing to unpack .../18-libxcb-util1_0.4.0-1build2_amd64.deb ...
+Unpacking libxcb-util1:amd64 (0.4.0-1build2) ...
+Selecting previously unselected package libxcb-image0:amd64.
+Preparing to unpack .../19-libxcb-image0_0.4.0-2_amd64.deb ...
+Unpacking libxcb-image0:amd64 (0.4.0-2) ...
+Selecting previously unselected package libxcb-keysyms1:amd64.
+Preparing to unpack .../20-libxcb-keysyms1_0.4.0-1build3_amd64.deb ...
+Unpacking libxcb-keysyms1:amd64 (0.4.0-1build3) ...
+Selecting previously unselected package libxcb-randr0:amd64.
+Preparing to unpack .../21-libxcb-randr0_1.14-3ubuntu3_amd64.deb ...
+Unpacking libxcb-randr0:amd64 (1.14-3ubuntu3) ...
+Selecting previously unselected package libxcb-render0:amd64.
+Preparing to unpack .../22-libxcb-render0_1.14-3ubuntu3_amd64.deb ...
+Unpacking libxcb-render0:amd64 (1.14-3ubuntu3) ...
+Selecting previously unselected package libxcb-render-util0:amd64.
+Preparing to unpack .../23-libxcb-render-util0_0.3.9-1build3_amd64.deb ...
+Unpacking libxcb-render-util0:amd64 (0.3.9-1build3) ...
+Selecting previously unselected package libxcb-xfixes0:amd64.
+Preparing to unpack .../24-libxcb-xfixes0_1.14-3ubuntu3_amd64.deb ...
+Unpacking libxcb-xfixes0:amd64 (1.14-3ubuntu3) ...
+Selecting previously unselected package libxcb-shape0:amd64.
+Preparing to unpack .../25-libxcb-shape0_1.14-3ubuntu3_amd64.deb ...
+Unpacking libxcb-shape0:amd64 (1.14-3ubuntu3) ...
+Selecting previously unselected package libxkbcommon0:amd64.
+Preparing to unpack .../26-libxkbcommon0_1.4.0-1_amd64.deb ...
+Unpacking libxkbcommon0:amd64 (1.4.0-1) ...
+Selecting previously unselected package libxcb-xkb1:amd64.
+Preparing to unpack .../27-libxcb-xkb1_1.14-3ubuntu3_amd64.deb ...
+Unpacking libxcb-xkb1:amd64 (1.14-3ubuntu3) ...
+Selecting previously unselected package libxkbcommon-x11-0:amd64.
+Preparing to unpack .../28-libxkbcommon-x11-0_1.4.0-1_amd64.deb ...
+Unpacking libxkbcommon-x11-0:amd64 (1.4.0-1) ...
+Selecting previously unselected package libxcb-xinput0:amd64.
+Preparing to unpack .../29-libxcb-xinput0_1.14-3ubuntu3_amd64.deb ...
+Unpacking libxcb-xinput0:amd64 (1.14-3ubuntu3) ...
+Selecting previously unselected package libxcb-cursor0:amd64.
+Preparing to unpack .../30-libxcb-cursor0_0.1.1-4ubuntu1_amd64.deb ...
+Unpacking libxcb-cursor0:amd64 (0.1.1-4ubuntu1) ...
+Selecting previously unselected package libfreetype6:amd64.
+Preparing to unpack .../31-libfreetype6_2.11.1+dfsg-1ubuntu0.4_amd64.deb ...
+Unpacking libfreetype6:amd64 (2.11.1+dfsg-1ubuntu0.4) ...
+Selecting previously unselected package fonts-dejavu-core.
+Preparing to unpack .../32-fonts-dejavu-core_2.37-2build1_all.deb ...
+Unpacking fonts-dejavu-core (2.37-2build1) ...
+Selecting previously unselected package fontconfig-config.
+Preparing to unpack .../33-fontconfig-config_2.13.1-4.2ubuntu5_all.deb ...
+Unpacking fontconfig-config (2.13.1-4.2ubuntu5) ...
+Selecting previously unselected package libfontconfig1:amd64.
+Preparing to unpack .../34-libfontconfig1_2.13.1-4.2ubuntu5_amd64.deb ...
+Unpacking libfontconfig1:amd64 (2.13.1-4.2ubuntu5) ...
+Selecting previously unselected package libnspr4:amd64.
+Preparing to unpack .../35-libnspr4_2%3a4.35-0ubuntu0.22.04.1_amd64.deb ...
+Unpacking libnspr4:amd64 (2:4.35-0ubuntu0.22.04.1) ...
+Selecting previously unselected package libnss3:amd64.
+Preparing to unpack .../36-libnss3_2%3a3.98-0ubuntu0.22.04.4_amd64.deb ...
+Unpacking libnss3:amd64 (2:3.98-0ubuntu0.22.04.4) ...
+Selecting previously unselected package libxcomposite1:amd64.
+Preparing to unpack .../37-libxcomposite1_1%3a0.4.5-1build2_amd64.deb ...
+Unpacking libxcomposite1:amd64 (1:0.4.5-1build2) ...
+Selecting previously unselected package libxdamage1:amd64.
+Preparing to unpack .../38-libxdamage1_1%3a1.1.5-2build2_amd64.deb ...
+Unpacking libxdamage1:amd64 (1:1.1.5-2build2) ...
+Selecting previously unselected package libxrender1:amd64.
+Preparing to unpack .../39-libxrender1_1%3a0.9.10-1build4_amd64.deb ...
+Unpacking libxrender1:amd64 (1:0.9.10-1build4) ...
+Selecting previously unselected package libxrandr2:amd64.
+Preparing to unpack .../40-libxrandr2_2%3a1.5.2-1build1_amd64.deb ...
+Unpacking libxrandr2:amd64 (2:1.5.2-1build1) ...
+Selecting previously unselected package x11-common.
+Preparing to unpack .../41-x11-common_1%3a7.7+23ubuntu2_all.deb ...
+Unpacking x11-common (1:7.7+23ubuntu2) ...
+Selecting previously unselected package libxtst6:amd64.
+Preparing to unpack .../42-libxtst6_2%3a1.2.3-1build4_amd64.deb ...
+Unpacking libxtst6:amd64 (2:1.2.3-1build4) ...
+Selecting previously unselected package libasound2-data.
+Preparing to unpack .../43-libasound2-data_1.2.6.1-1ubuntu1.2_all.deb ...
+Unpacking libasound2-data (1.2.6.1-1ubuntu1.2) ...
+Selecting previously unselected package libasound2:amd64.
+Preparing to unpack .../44-libasound2_1.2.6.1-1ubuntu1.2_amd64.deb ...
+Unpacking libasound2:amd64 (1.2.6.1-1ubuntu1.2) ...
+Selecting previously unselected package libglvnd0:amd64.
+Preparing to unpack .../45-libglvnd0_1.4.0-1_amd64.deb ...
+Unpacking libglvnd0:amd64 (1.4.0-1) ...
+Selecting previously unselected package libopengl0:amd64.
+Preparing to unpack .../46-libopengl0_1.4.0-1_amd64.deb ...
+Unpacking libopengl0:amd64 (1.4.0-1) ...
+Selecting previously unselected package libwayland-server0:amd64.
+Preparing to unpack .../47-libwayland-server0_1.20.0-1ubuntu0.1_amd64.deb ...
+Unpacking libwayland-server0:amd64 (1.20.0-1ubuntu0.1) ...
+Selecting previously unselected package libgbm1:amd64.
+Preparing to unpack .../48-libgbm1_23.2.1-1ubuntu3.1~22.04.4_amd64.deb ...
+Unpacking libgbm1:amd64 (23.2.1-1ubuntu3.1~22.04.4) ...
+Selecting previously unselected package libglapi-mesa:amd64.
+Preparing to unpack .../49-libglapi-mesa_23.2.1-1ubuntu3.1~22.04.4_amd64.deb ...
+Unpacking libglapi-mesa:amd64 (23.2.1-1ubuntu3.1~22.04.4) ...
+Selecting previously unselected package libwayland-client0:amd64.
+Preparing to unpack .../50-libwayland-client0_1.20.0-1ubuntu0.1_amd64.deb ...
+Unpacking libwayland-client0:amd64 (1.20.0-1ubuntu0.1) ...
+Selecting previously unselected package libx11-xcb1:amd64.
+Preparing to unpack .../51-libx11-xcb1_2%3a1.7.5-1ubuntu0.4_amd64.deb ...
+Unpacking libx11-xcb1:amd64 (2:1.7.5-1ubuntu0.4) ...
+Selecting previously unselected package libxcb-dri2-0:amd64.
+Preparing to unpack .../52-libxcb-dri2-0_1.14-3ubuntu3_amd64.deb ...
+Unpacking libxcb-dri2-0:amd64 (1.14-3ubuntu3) ...
+Selecting previously unselected package libxcb-dri3-0:amd64.
+Preparing to unpack .../53-libxcb-dri3-0_1.14-3ubuntu3_amd64.deb ...
+Unpacking libxcb-dri3-0:amd64 (1.14-3ubuntu3) ...
+Selecting previously unselected package libxcb-present0:amd64.
+Preparing to unpack .../54-libxcb-present0_1.14-3ubuntu3_amd64.deb ...
+Unpacking libxcb-present0:amd64 (1.14-3ubuntu3) ...
+Selecting previously unselected package libxcb-sync1:amd64.
+Preparing to unpack .../55-libxcb-sync1_1.14-3ubuntu3_amd64.deb ...
+Unpacking libxcb-sync1:amd64 (1.14-3ubuntu3) ...
+Selecting previously unselected package libxshmfence1:amd64.
+Preparing to unpack .../56-libxshmfence1_1.3-1build4_amd64.deb ...
+Unpacking libxshmfence1:amd64 (1.3-1build4) ...
+Selecting previously unselected package libegl-mesa0:amd64.
+Preparing to unpack .../57-libegl-mesa0_23.2.1-1ubuntu3.1~22.04.4_amd64.deb ...
+Unpacking libegl-mesa0:amd64 (23.2.1-1ubuntu3.1~22.04.4) ...
+Selecting previously unselected package libegl1:amd64.
+Preparing to unpack .../58-libegl1_1.4.0-1_amd64.deb ...
+Unpacking libegl1:amd64 (1.4.0-1) ...
+Selecting previously unselected package nsight-systems-2024.6.2.
+Preparing to unpack .../59-nsight-systems-2024.6.2_2024.6.2.225-246235244400v0_amd64.deb ...
+Unpacking nsight-systems-2024.6.2 (2024.6.2.225-246235244400v0) ...
+Selecting previously unselected package cuda-nsight-systems-12-8.
+Preparing to unpack .../60-cuda-nsight-systems-12-8_12.8.2-1_amd64.deb ...
+Unpacking cuda-nsight-systems-12-8 (12.8.2-1) ...
+Setting up libwayland-server0:amd64 (1.20.0-1ubuntu0.1) ...
+Setting up libxau6:amd64 (1:1.0.9-1build5) ...
+Setting up libglib2.0-0:amd64 (2.72.4-0ubuntu2.10) ...
+No schema files found: doing nothing.
+Setting up libglvnd0:amd64 (1.4.0-1) ...
+Setting up x11-common (1:7.7+23ubuntu2) ...
+invoke-rc.d: could not determine current runlevel
+invoke-rc.d: policy-rc.d denied execution of start.
+Setting up xkb-data (2.33-1) ...
+Setting up libopengl0:amd64 (1.4.0-1) ...
+Setting up libasound2-data (1.2.6.1-1ubuntu1.2) ...
+Setting up libx11-data (2:1.7.5-1ubuntu0.4) ...
+Setting up libnspr4:amd64 (2:4.35-0ubuntu0.22.04.1) ...
+Setting up libdbus-1-3:amd64 (1.12.20-2ubuntu4.1) ...
+Setting up libpng16-16:amd64 (1.6.37-3ubuntu0.7) ...
+Setting up fonts-dejavu-core (2.37-2build1) ...
+Setting up ucf (3.0043) ...
+Setting up libglapi-mesa:amd64 (23.2.1-1ubuntu3.1~22.04.4) ...
+Setting up libmd0:amd64 (1.0.4-1build1) ...
+Setting up libxshmfence1:amd64 (1.3-1build4) ...
+Setting up libasound2:amd64 (1.2.6.1-1ubuntu1.2) ...
+Setting up libbsd0:amd64 (0.11.5-1) ...
+Setting up libdrm-common (2.4.113-2~ubuntu0.22.04.1) ...
+Setting up libxkbcommon0:amd64 (1.4.0-1) ...
+Setting up libwayland-client0:amd64 (1.20.0-1ubuntu0.1) ...
+Setting up libxdmcp6:amd64 (1:1.1.3-0ubuntu5) ...
+Setting up libxcb1:amd64 (1.14-3ubuntu3) ...
+Setting up libxcb-xfixes0:amd64 (1.14-3ubuntu3) ...
+Setting up libxcb-xinput0:amd64 (1.14-3ubuntu3) ...
+Setting up libxcb-render0:amd64 (1.14-3ubuntu3) ...
+Setting up fontconfig-config (2.13.1-4.2ubuntu5) ...
+Setting up libxcb-keysyms1:amd64 (0.4.0-1build3) ...
+Setting up libxcb-shape0:amd64 (1.14-3ubuntu3) ...
+Setting up libxcb-render-util0:amd64 (0.3.9-1build3) ...
+Setting up libnss3:amd64 (2:3.98-0ubuntu0.22.04.4) ...
+Setting up libxcb-shm0:amd64 (1.14-3ubuntu3) ...
+Setting up libxcb-icccm4:amd64 (0.4.1-1.1build2) ...
+Setting up libxcb-util1:amd64 (0.4.0-1build2) ...
+Setting up libxcb-xkb1:amd64 (1.14-3ubuntu3) ...
+Setting up libxcb-image0:amd64 (0.4.0-2) ...
+Setting up libxcb-present0:amd64 (1.14-3ubuntu3) ...
+Setting up libxcb-xinerama0:amd64 (1.14-3ubuntu3) ...
+Setting up libfreetype6:amd64 (2.11.1+dfsg-1ubuntu0.4) ...
+Setting up libxcb-sync1:amd64 (1.14-3ubuntu3) ...
+Setting up libxcb-cursor0:amd64 (0.1.1-4ubuntu1) ...
+Setting up libxkbcommon-x11-0:amd64 (1.4.0-1) ...
+Setting up libxcb-dri2-0:amd64 (1.14-3ubuntu3) ...
+Setting up libdrm2:amd64 (2.4.113-2~ubuntu0.22.04.1) ...
+Setting up libxcb-randr0:amd64 (1.14-3ubuntu3) ...
+Setting up libx11-6:amd64 (2:1.7.5-1ubuntu0.4) ...
+Setting up libfontconfig1:amd64 (2.13.1-4.2ubuntu5) ...
+Setting up libxcomposite1:amd64 (1:0.4.5-1build2) ...
+Setting up libxcb-dri3-0:amd64 (1.14-3ubuntu3) ...
+Setting up libx11-xcb1:amd64 (2:1.7.5-1ubuntu0.4) ...
+Setting up libxdamage1:amd64 (1:1.1.5-2build2) ...
+Setting up libxrender1:amd64 (1:0.9.10-1build4) ...
+Setting up libgbm1:amd64 (23.2.1-1ubuntu3.1~22.04.4) ...
+Setting up libxext6:amd64 (2:1.3.4-1build1) ...
+Setting up libegl-mesa0:amd64 (23.2.1-1ubuntu3.1~22.04.4) ...
+Setting up libxrandr2:amd64 (2:1.5.2-1build1) ...
+Setting up libegl1:amd64 (1.4.0-1) ...
+Setting up libxtst6:amd64 (2:1.2.3-1build4) ...
+Setting up nsight-systems-2024.6.2 (2024.6.2.225-246235244400v0) ...
+update-alternatives: using /opt/nvidia/nsight-systems/2024.6.2/target-linux-x64/nsys to provide /usr/local/bin/nsys (nsys) in auto mode
+update-alternatives: using /opt/nvidia/nsight-systems/2024.6.2/host-linux-x64/nsys-ui to provide /usr/local/bin/nsys-ui (nsys-ui) in auto mode
+Setting up cuda-nsight-systems-12-8 (12.8.2-1) ...
+Processing triggers for libc-bin (2.35-0ubuntu3.8) ...
+[bootstrap 02:00:39] nsys: /usr/local/cuda/bin/nsys
+[bootstrap 02:00:39] building llama.cpp for sm_120
+-- The C compiler identification is GNU 11.4.0
+-- The CXX compiler identification is GNU 11.4.0
+-- Detecting C compiler ABI info
+-- Detecting C compiler ABI info - done
+-- Check for working C compiler: /usr/bin/cc - skipped
+-- Detecting C compile features
+-- Detecting C compile features - done
+-- Detecting CXX compiler ABI info
+-- Detecting CXX compiler ABI info - done
+-- Check for working CXX compiler: /usr/bin/c++ - skipped
+-- Detecting CXX compile features
+-- Detecting CXX compile features - done
+-- llama.cpp version: 0.2.0-dev
+CMAKE_BUILD_TYPE=Release
+-- Found Git: /usr/bin/git (found version "2.34.1") 
+-- The ASM compiler identification is GNU
+-- Found assembler: /usr/bin/cc
+-- Looking for pthread.h
+-- Looking for pthread.h - found
+-- Performing Test CMAKE_HAVE_LIBC_PTHREAD
+-- Performing Test CMAKE_HAVE_LIBC_PTHREAD - Success
+-- Found Threads: TRUE  
+-- CMAKE_SYSTEM_PROCESSOR: x86_64
+-- GGML_SYSTEM_ARCH: x86
+-- Found OpenMP_C: -fopenmp (found version "4.5") 
+-- Found OpenMP_CXX: -fopenmp (found version "4.5") 
+-- Found OpenMP: TRUE (found version "4.5")  
+-- Including CPU backend
+-- x86 detected
+-- Adding CPU backend variant ggml-cpu: -march=native 
+-- Found CUDAToolkit: /usr/local/cuda/include (found version "12.8.93") 
+-- CUDA Toolkit found
+-- The CUDA compiler identification is NVIDIA 12.8.93
+-- Detecting CUDA compiler ABI info
+-- Detecting CUDA compiler ABI info - done
+-- Check for working CUDA compiler: /usr/local/cuda/bin/nvcc - skipped
+-- Detecting CUDA compile features
+-- Detecting CUDA compile features - done
+-- Replacing 120 in CMAKE_CUDA_ARCHITECTURES with 120a
+-- Using CMAKE_CUDA_ARCHITECTURES=120a CMAKE_CUDA_ARCHITECTURES_NATIVE=
+-- FlashAttention K-V type combinations: f16-f16;q4_0-q4_0;q8_0-q8_0;bf16-bf16
+-- Found NCCL: /usr/lib/x86_64-linux-gnu/libnccl.so  
+-- CUDA host compiler is GNU 11.4.0
+-- Including CUDA backend
+-- ggml version: 0.21.0
+-- ggml commit:  a540fd1
+-- Could NOT find OpenSSL, try to set the path to OpenSSL root folder in the system variable OPENSSL_ROOT_DIR (missing: OPENSSL_CRYPTO_LIBRARY OPENSSL_INCLUDE_DIR) 
+CMake Warning at vendor/cpp-httplib/CMakeLists.txt:154 (message):
+  OpenSSL not found, HTTPS support disabled
+
+
+-- Generating embedded license file for target: llama-app
+-- Configuring done
+-- Generating done
+-- Build files have been written to: /workspace/repo/build-cuda
+[1/537] Building CXX object ggml/src/CMakeFiles/ggml-cpu.dir/ggml-cpu/hbm.cpp.o
+[2/537] Building CXX object ggml/src/CMakeFiles/ggml-base.dir/ggml.cpp.o
+[3/537] Building CXX object ggml/src/CMakeFiles/ggml-base.dir/ggml-threading.cpp.o
+[4/537] Building C object ggml/src/CMakeFiles/ggml-base.dir/ggml-alloc.c.o
+[5/537] Building CXX object ggml/src/CMakeFiles/ggml.dir/ggml-backend-dl.cpp.o
+[6/537] Building CXX object ggml/src/CMakeFiles/ggml-cpu.dir/ggml-cpu/traits.cpp.o
+[7/537] Building CXX object ggml/src/CMakeFiles/ggml-cpu.dir/ggml-cpu/vec.cpp.o
+[8/537] Building CXX object ggml/src/CMakeFiles/ggml-cpu.dir/ggml-cpu/amx/amx.cpp.o
+[9/537] Building CXX object ggml/src/CMakeFiles/ggml-cpu.dir/ggml-cpu/amx/mmq.cpp.o
+[10/537] Building C object ggml/src/CMakeFiles/ggml-cpu.dir/ggml-cpu/arch/x86/quants.c.o
+[11/537] Building C object ggml/src/CMakeFiles/ggml-cpu.dir/ggml-cpu/ggml-cpu.c.o
+[12/537] Building CXX object ggml/src/CMakeFiles/ggml-base.dir/ggml-opt.cpp.o
+[13/537] Building CXX object ggml/src/CMakeFiles/ggml-cpu.dir/ggml-cpu/ggml-cpu.cpp.o
+[14/537] Building CXX object ggml/src/CMakeFiles/ggml-base.dir/ggml-backend.cpp.o
+[15/537] Building CXX object ggml/src/CMakeFiles/ggml.dir/ggml-backend-reg.cpp.o
+[16/537] Building C object ggml/src/CMakeFiles/ggml-cpu.dir/ggml-cpu/quants.c.o
+[17/537] Building C object ggml/src/CMakeFiles/ggml-base.dir/ggml.c.o
+[18/537] Building CXX object ggml/src/CMakeFiles/ggml-cpu.dir/ggml-cpu/binary-ops.cpp.o
+[19/537] Building CXX object ggml/src/CMakeFiles/ggml-base.dir/gguf.cpp.o
+[20/537] Building CXX object ggml/src/CMakeFiles/ggml-cpu.dir/ggml-cpu/arch/x86/repack.cpp.o
+[21/537] Building CXX object ggml/src/CMakeFiles/ggml-cpu.dir/ggml-cpu/unary-ops.cpp.o
+[22/537] Building CXX object ggml/src/CMakeFiles/ggml-base.dir/ggml-backend-meta.cpp.o
+[23/537] Building CXX object ggml/src/CMakeFiles/ggml-cpu.dir/ggml-cpu/llamafile/sgemm.cpp.o
+[24/537] Building C object ggml/src/CMakeFiles/ggml-base.dir/ggml-quants.c.o
+[25/537] Linking CXX shared library bin/libggml-base.so.0.21.0
+[26/537] Creating library symlink bin/libggml-base.so.0 bin/libggml-base.so
+[27/537] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/arange.cu.o
+[28/537] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/add-id.cu.o
+[29/537] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/pool2d.cu.o
+[30/537] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/fill.cu.o
+[31/537] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/acc.cu.o
+[32/537] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/tsembd.cu.o
+[33/537] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/gla.cu.o
+[34/537] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/clamp.cu.o
+[35/537] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/softcap.cu.o
+[36/537] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/conv2d-dw.cu.o
+[37/537] Building CXX object ggml/src/CMakeFiles/ggml-cpu.dir/ggml-cpu/ops.cpp.o
+[38/537] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/count-equal.cu.o
+[39/537] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/conv2d.cu.o
+[40/537] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/dsv4-hc.cu.o
+[41/537] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/opt-step-sgd.cu.o
+[42/537] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/mmf.cu.o
+[43/537] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/pad.cu.o
+[44/537] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/fattn-tile.cu.o
+[45/537] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/argmax.cu.o
+[46/537] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/conv-transpose-1d.cu.o
+[47/537] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/diagmask.cu.o
+[48/537] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/im2col.cu.o
+[49/537] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/pool1d.cu.o
+[50/537] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/out-prod.cu.o
+[51/537] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/wkv.cu.o
+[52/537] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/col2im-1d.cu.o
+[53/537] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/mmid.cu.o
+[54/537] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/roll.cu.o
+[55/537] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/snake.cu.o
+[56/537] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/mmq-hopper-q1.cu.o
+[57/537] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/allreduce.cu.o
+[58/537] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/opt-step-adamw.cu.o
+[59/537] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/conv2d-transpose.cu.o
+[60/537] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/pad_reflect_1d.cu.o
+[61/537] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/sumrows.cu.o
+[62/537] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/set.cu.o
+[63/537] Building CXX object src/CMakeFiles/llama.dir/models/starcoder2.cpp.o
+[64/537] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/scale.cu.o
+[65/537] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/diag.cu.o
+[66/537] Building CXX object ggml/src/CMakeFiles/ggml-cpu.dir/ggml-cpu/repack.cpp.o
+[67/537] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/upscale.cu.o
+[68/537] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/cross-entropy-loss.cu.o
+[69/537] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/tri.cu.o
+[70/537] Linking CXX shared library bin/libggml-cpu.so.0.21.0
+[71/537] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/concat.cu.o
+[72/537] Creating library symlink bin/libggml-cpu.so.0 bin/libggml-cpu.so
+[73/537] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/moe-reduce.cu.o
+[74/537] Building CXX object examples/speculative-simple/CMakeFiles/llama-speculative-simple.dir/speculative-simple.cpp.o
+[75/537] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/unary.cu.o
+[76/537] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/topk-moe.cu.o
+[77/537] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/set-rows.cu.o
+[78/537] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/gated_delta_net.cu.o
+[79/537] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/ssm-conv.cu.o
+[80/537] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/cpy.cu.o
+[81/537] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/norm.cu.o
+[82/537] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/softmax.cu.o
+[83/537] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/rope.cu.o
+[84/537] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-tile-instance-dkq320-dv256.cu.o
+[85/537] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/solve_tri.cu.o
+[86/537] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/sum.cu.o
+[87/537] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/cumsum.cu.o
+[88/537] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/convert.cu.o
+[89/537] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/top-k.cu.o
+[90/537] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/mmq.cu.o
+[91/537] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/lightning-indexer.cu.o
+[92/537] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/ggml-cuda.cu.o
+In static member function ‘static _Tp* std::__copy_move<_IsMove, true, std::random_access_iterator_tag>::__copy_m(const _Tp*, const _Tp*, _Tp*) [with _Tp = ggml_op; bool _IsMove = false]’,
+    inlined from ‘_OI std::__copy_move_a2(_II, _II, _OI) [with bool _IsMove = false; _II = const ggml_op*; _OI = ggml_op*]’ at /usr/include/c++/11/bits/stl_algobase.h:494:141,
+    inlined from ‘_OI std::__copy_move_a1(_II, _II, _OI) [with bool _IsMove = false; _II = const ggml_op*; _OI = ggml_op*]’ at /usr/include/c++/11/bits/stl_algobase.h:522:40,
+    inlined from ‘_OI std::__copy_move_a(_II, _II, _OI) [with bool _IsMove = false; _II = const ggml_op*; _OI = ggml_op*]’ at /usr/include/c++/11/bits/stl_algobase.h:529:25,
+    inlined from ‘_OI std::copy(_II, _II, _OI) [with _II = const ggml_op*; _OI = ggml_op*]’ at /usr/include/c++/11/bits/stl_algobase.h:619:64,
+    inlined from ‘static _ForwardIterator std::__uninitialized_copy<true>::__uninit_copy(_InputIterator, _InputIterator, _ForwardIterator) [with _InputIterator = const ggml_op*; _ForwardIterator = ggml_op*]’ at /usr/include/c++/11/bits/stl_uninitialized.h:110:19,
+    inlined from ‘_ForwardIterator std::uninitialized_copy(_InputIterator, _InputIterator, _ForwardIterator) [with _InputIterator = const ggml_op*; _ForwardIterator = ggml_op*]’ at /usr/include/c++/11/bits/stl_uninitialized.h:148:131,
+    inlined from ‘_ForwardIterator std::__uninitialized_copy_a(_InputIterator, _InputIterator, _ForwardIterator, std::allocator<_Tp>&) [with _InputIterator = const ggml_op*; _ForwardIterator = ggml_op*; _Tp = ggml_op]’ at /usr/include/c++/11/bits/stl_uninitialized.h:333:33,
+    inlined from ‘void std::vector<_Tp, _Alloc>::_M_range_insert(std::vector<_Tp, _Alloc>::iterator, _ForwardIterator, _ForwardIterator, std::forward_iterator_tag) [with _ForwardIterator = const ggml_op*; _Tp = ggml_op; _Alloc = std::allocator<ggml_op>]’ at /usr/include/c++/11/bits/vector.tcc:751:28,
+    inlined from ‘std::vector<_Tp, _Alloc>::iterator std::vector<_Tp, _Alloc>::insert(std::vector<_Tp, _Alloc>::const_iterator, std::initializer_list<_Tp>) [with _Tp = ggml_op; _Alloc = std::allocator<ggml_op>]’ at /usr/include/c++/11/bits/stl_vector.h:1313:16,
+    inlined from ‘int ggml_cuda_try_fuse(ggml_backend_cuda_context*, ggml_cgraph*, int)’ at /workspace/repo/ggml/src/ggml-cuda/ggml-cuda.cu:3804:11:
+/usr/include/c++/11/bits/stl_algobase.h:431:25: warning: ‘void* __builtin_memcpy(void*, const void*, long unsigned int)’ writing 20 bytes into a region of size 4 overflows the destination [-Wstringop-overflow=]
+  431 |             __builtin_memmove(__result, __first, sizeof(_Tp) * _Num);
+      |             ~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/usr/include/c++/11/ext/new_allocator.h: In function ‘int ggml_cuda_try_fuse(ggml_backend_cuda_context*, ggml_cgraph*, int)’:
+/usr/include/c++/11/ext/new_allocator.h:127:49: note: at offset [24, 28] into destination object of size [24, 28] allocated by ‘operator new’
+  127 |         return static_cast<_Tp*>(::operator new(__n * sizeof(_Tp)));
+      |                                   ~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~
+/usr/include/c++/11/ext/new_allocator.h:127:49: note: at offset [20, 24] into destination object of size [20, 24] allocated by ‘operator new’
+  127 |         return static_cast<_Tp*>(::operator new(__n * sizeof(_Tp)));
+      |                                   ~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~
+[93/537] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/mean.cu.o
+[94/537] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-mma-f16-instance-ncols1_4-ncols2_16.cu.o
+[95/537] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/fwht.cu.o
+[96/537] Building CXX object common/CMakeFiles/llama-common.dir/imatrix-loader.cpp.o
+[97/537] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/ssm-scan.cu.o
+[98/537] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-mma-f16-instance-ncols1_1-ncols2_16.cu.o
+[99/537] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-mma-f16-instance-ncols1_1-ncols2_32.cu.o
+[100/537] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-mma-f16-instance-ncols1_2-ncols2_32.cu.o
+[101/537] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-mma-f16-instance-ncols1_2-ncols2_16.cu.o
+[102/537] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/getrows.cu.o
+[103/537] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-mma-f16-instance-q4_0-ncols1_1-ncols2_8.cu.o
+[104/537] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-tile-instance-dkq192-dv128.cu.o
+[105/537] Building CXX object common/CMakeFiles/llama-common.dir/json.cpp.o
+[106/537] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-mma-f16-instance-q8_0-ncols1_1-ncols2_8.cu.o
+[107/537] Building CXX object src/CMakeFiles/llama.dir/llama-memory.cpp.o
+[108/537] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-tile-instance-dkq40-dv40.cu.o
+[109/537] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-mma-f16-instance-q4_0-ncols1_2-ncols2_4.cu.o
+[110/537] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-mma-f16-instance-q4_0-ncols1_16-ncols2_1.cu.o
+[111/537] Building CXX object common/CMakeFiles/llama-common.dir/json-schema-to-grammar.cpp.o
+[112/537] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-mma-f16-instance-q8_0-ncols1_4-ncols2_4.cu.o
+[113/537] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-mma-f16-instance-q8_0-ncols1_2-ncols2_4.cu.o
+[114/537] Building CXX object src/CMakeFiles/llama.dir/llama.cpp.o
+[115/537] Building CXX object src/CMakeFiles/llama.dir/llama-cparams.cpp.o
+[116/537] Building CXX object src/CMakeFiles/llama.dir/llama-arch.cpp.o
+[117/537] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-mma-f16-instance-q4_0-ncols1_4-ncols2_8.cu.o
+[118/537] Building CXX object src/CMakeFiles/llama.dir/llama-io.cpp.o
+[119/537] Building CXX object src/CMakeFiles/llama.dir/llama-hparams.cpp.o
+[120/537] Building CXX object src/CMakeFiles/llama.dir/llama-adapter.cpp.o
+[121/537] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-mma-f16-instance-q4_0-ncols1_2-ncols2_8.cu.o
+[122/537] Building CXX object src/CMakeFiles/llama.dir/llama-impl.cpp.o
+[123/537] Building CXX object src/CMakeFiles/llama.dir/llama-batch.cpp.o
+[124/537] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/mmf-instance-ncols_2.cu.o
+[125/537] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-mma-f16-instance-q8_0-ncols1_4-ncols2_8.cu.o
+[126/537] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-mma-f16-instance-q4_0-ncols1_4-ncols2_4.cu.o
+[127/537] Building CXX object src/CMakeFiles/llama.dir/llama-chat.cpp.o
+[128/537] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-mma-f16-instance-q8_0-ncols1_16-ncols2_1.cu.o
+[129/537] Building CXX object src/CMakeFiles/llama.dir/llama-mmap.cpp.o
+[130/537] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-mma-f16-instance-q4_0-ncols1_16-ncols2_2.cu.o
+[131/537] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-mma-f16-instance-q4_0-ncols1_8-ncols2_2.cu.o
+[132/537] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-mma-f16-instance-q8_0-ncols1_2-ncols2_8.cu.o
+[133/537] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/mmf-instance-ncols_3.cu.o
+[134/537] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/fattn.cu.o
+[135/537] Building CXX object src/CMakeFiles/llama.dir/llama-kv-cache-dsa.cpp.o
+[136/537] Building CXX object src/CMakeFiles/llama.dir/llama-model-saver.cpp.o
+[137/537] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-mma-f16-instance-q4_0-ncols1_8-ncols2_4.cu.o
+[138/537] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-mma-f16-instance-q8_0-ncols1_8-ncols2_2.cu.o
+[139/537] Building CXX object src/CMakeFiles/llama.dir/llama-kv-cache-dsa-iswa.cpp.o
+[140/537] Building CXX object src/CMakeFiles/llama.dir/llama-kv-cache-iswa.cpp.o
+[141/537] Building CXX object src/CMakeFiles/llama.dir/llama-kv-cache-msa.cpp.o
+[142/537] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-tile-instance-dkq80-dv80.cu.o
+[143/537] Building CXX object src/CMakeFiles/llama.dir/llama-memory-hybrid.cpp.o
+[144/537] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-mma-f16-instance-q4_0-ncols1_8-ncols2_1.cu.o
+[145/537] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-mma-f16-instance-q4_0-ncols1_4-ncols2_2.cu.o
+[146/537] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-tile-instance-dkq64-dv64.cu.o
+[147/537] Building CXX object src/CMakeFiles/llama.dir/unicode-data.cpp.o
+[148/537] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-mma-f16-instance-q8_0-ncols1_16-ncols2_2.cu.o
+[149/537] Building CXX object src/CMakeFiles/llama.dir/llama-kv-cache-dsv4.cpp.o
+[150/537] Building CXX object src/CMakeFiles/llama.dir/models/apertus.cpp.o
+[151/537] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-mma-f16-instance-q4_0-ncols1_32-ncols2_2.cu.o
+[152/537] Building CXX object src/CMakeFiles/llama.dir/llama-memory-recurrent.cpp.o
+[153/537] Building CXX object src/CMakeFiles/llama.dir/llama-memory-hybrid-iswa.cpp.o
+[154/537] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-mma-f16-instance-q8_0-ncols1_4-ncols2_2.cu.o
+[155/537] Building CXX object src/CMakeFiles/llama.dir/models/bailingmoe2.cpp.o
+[156/537] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-mma-f16-instance-q8_0-ncols1_8-ncols2_4.cu.o
+[157/537] Building CXX object src/CMakeFiles/llama.dir/llama-graph.cpp.o
+[158/537] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-mma-f16-instance-q8_0-ncols1_8-ncols2_1.cu.o
+[159/537] Building CXX object src/CMakeFiles/llama.dir/models/arcee.cpp.o
+[160/537] Building CXX object src/CMakeFiles/llama.dir/models/afmoe.cpp.o
+[161/537] Building CXX object src/CMakeFiles/llama.dir/models/arwkv7.cpp.o
+[162/537] Building CXX object src/CMakeFiles/llama.dir/models/baichuan.cpp.o
+[163/537] Building CXX object src/CMakeFiles/llama.dir/models/arctic.cpp.o
+[164/537] Building CXX object src/CMakeFiles/llama.dir/models/bert.cpp.o
+[165/537] Building CXX object src/CMakeFiles/llama.dir/models/chameleon.cpp.o
+[166/537] Building CXX object src/CMakeFiles/llama.dir/models/bailingmoe3.cpp.o
+[167/537] Building CXX object src/CMakeFiles/llama.dir/models/bailingmoe.cpp.o
+[168/537] Building CXX object src/CMakeFiles/llama.dir/models/command-r.cpp.o
+[169/537] Building CXX object src/CMakeFiles/llama.dir/models/clip.cpp.o
+[170/537] Building CXX object src/CMakeFiles/llama.dir/models/bitnet.cpp.o
+[171/537] Building CXX object src/CMakeFiles/llama.dir/models/bloom.cpp.o
+[172/537] Building CXX object src/CMakeFiles/llama.dir/models/chatglm.cpp.o
+[173/537] Building CXX object src/CMakeFiles/llama.dir/models/dbrx.cpp.o
+[174/537] Building CXX object src/CMakeFiles/llama.dir/models/cohere2moe.cpp.o
+[175/537] Building CXX object src/CMakeFiles/llama.dir/models/codeshell.cpp.o
+[176/537] Building CXX object src/CMakeFiles/llama.dir/models/deepseek.cpp.o
+[177/537] Building CXX object src/CMakeFiles/llama.dir/models/cogvlm.cpp.o
+[178/537] Building CXX object src/CMakeFiles/llama.dir/models/cohere2.cpp.o
+[179/537] Building CXX object src/CMakeFiles/llama.dir/models/deepseek2ocr.cpp.o
+[180/537] Building CXX object src/CMakeFiles/llama.dir/models/dream.cpp.o
+[181/537] Building CXX object src/CMakeFiles/llama.dir/models/deci.cpp.o
+[182/537] Building CXX object src/CMakeFiles/llama.dir/models/deepseek2.cpp.o
+[183/537] Building CXX object src/CMakeFiles/llama.dir/models/deepseek32.cpp.o
+[184/537] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-vec-instance-f16-f16.cu.o
+[185/537] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-mma-f16-instance-q4_0-ncols1_32-ncols2_1.cu.o
+[186/537] Building CXX object src/CMakeFiles/llama.dir/llama-context.cpp.o
+[187/537] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-mma-f16-instance-q8_0-ncols1_32-ncols2_1.cu.o
+[188/537] Building CXX object src/CMakeFiles/llama.dir/models/delta-net-base.cpp.o
+[189/537] Building CXX object src/CMakeFiles/llama.dir/models/dots1.cpp.o
+[190/537] Building CXX object src/CMakeFiles/llama.dir/models/dspark.cpp.o
+[191/537] Building CXX object src/CMakeFiles/llama.dir/models/exaone-moe.cpp.o
+[192/537] Building CXX object src/CMakeFiles/llama.dir/models/dots3note.cpp.o
+[193/537] Building CXX object src/CMakeFiles/llama.dir/models/ernie4-5-moe.cpp.o
+[194/537] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-mma-f16-instance-q8_0-ncols1_32-ncols2_2.cu.o
+[195/537] Building CXX object src/CMakeFiles/llama.dir/models/eagle3.cpp.o
+[196/537] Building CXX object src/CMakeFiles/llama.dir/models/gemma-embedding.cpp.o
+[197/537] Building CXX object src/CMakeFiles/llama.dir/models/gemma2.cpp.o
+[198/537] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-tile-instance-dkq576-dv512.cu.o
+[199/537] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-mma-f16-instance-q8_0-ncols1_8-ncols2_8.cu.o
+[200/537] Building CXX object src/CMakeFiles/llama.dir/models/ernie4-5.cpp.o
+[201/537] Building CXX object src/CMakeFiles/llama.dir/models/gemma4-assistant.cpp.o
+[202/537] Building CXX object src/CMakeFiles/llama.dir/models/eurobert.cpp.o
+[203/537] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-tile-instance-dkq72-dv72.cu.o
+[204/537] Building CXX object src/CMakeFiles/llama.dir/models/exaone.cpp.o
+[205/537] Building CXX object src/CMakeFiles/llama.dir/models/falcon.cpp.o
+[206/537] Building CXX object src/CMakeFiles/llama.dir/models/dflash.cpp.o
+[207/537] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-mma-f16-instance-q8_0-ncols1_16-ncols2_4.cu.o
+[208/537] Building CXX object src/CMakeFiles/llama.dir/models/gemma.cpp.o
+[209/537] Building CXX object src/CMakeFiles/llama.dir/models/falcon-h1.cpp.o
+[210/537] Building CXX object src/CMakeFiles/llama.dir/models/exaone4.cpp.o
+[211/537] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-mma-f16-instance-q4_0-ncols1_64-ncols2_1.cu.o
+[212/537] Building CXX object src/CMakeFiles/llama.dir/models/gptneox.cpp.o
+[213/537] Building CXX object src/CMakeFiles/llama.dir/models/deepseek4.cpp.o
+[214/537] Building CXX object src/CMakeFiles/llama.dir/models/glm-dsa.cpp.o
+[215/537] Building CXX object src/CMakeFiles/llama.dir/models/gemma3.cpp.o
+[216/537] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/mmf-instance-ncols_1.cu.o
+[217/537] Building CXX object src/CMakeFiles/llama.dir/models/gemma3n.cpp.o
+[218/537] Building CXX object src/CMakeFiles/llama.dir/models/grok.cpp.o
+[219/537] Building CXX object src/CMakeFiles/llama.dir/models/granite-switch.cpp.o
+[220/537] Building CXX object src/CMakeFiles/llama.dir/models/gemma4.cpp.o
+[221/537] Building CXX object src/CMakeFiles/llama.dir/llama-model-loader.cpp.o
+[222/537] Building CXX object src/CMakeFiles/llama.dir/models/granite.cpp.o
+[223/537] Building CXX object src/CMakeFiles/llama.dir/models/glm4.cpp.o
+[224/537] Building CXX object src/CMakeFiles/llama.dir/models/glm4-moe.cpp.o
+[225/537] Building CXX object src/CMakeFiles/llama.dir/models/granite-moe.cpp.o
+[226/537] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-vec-instance-q8_0-q8_0.cu.o
+[227/537] Building CXX object src/CMakeFiles/llama.dir/models/gpt2.cpp.o
+[228/537] Building CXX object src/CMakeFiles/llama.dir/models/granite-hybrid.cpp.o
+[229/537] Building CXX object src/CMakeFiles/llama.dir/models/hy-v3.cpp.o
+[230/537] Building CXX object src/CMakeFiles/llama.dir/models/hunyuan-dense.cpp.o
+[231/537] Building CXX object src/CMakeFiles/llama.dir/models/grovemoe.cpp.o
+[232/537] Building CXX object src/CMakeFiles/llama.dir/models/hunyuan-moe.cpp.o
+[233/537] Building CXX object src/CMakeFiles/llama.dir/models/jais.cpp.o
+[234/537] Building CXX object src/CMakeFiles/llama.dir/models/internlm2.cpp.o
+[235/537] Building CXX object src/CMakeFiles/llama.dir/models/granite-swa.cpp.o
+[236/537] Building CXX object src/CMakeFiles/llama.dir/models/kimi-linear.cpp.o
+[237/537] Building CXX object src/CMakeFiles/llama.dir/models/hunyuan-vl.cpp.o
+[238/537] Building CXX object src/CMakeFiles/llama.dir/llama-sampler.cpp.o
+[239/537] Building CXX object src/CMakeFiles/llama.dir/models/jina-bert-v3.cpp.o
+[240/537] Building CXX object src/CMakeFiles/llama.dir/models/jina-bert-v2.cpp.o
+[241/537] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-mma-f16-instance-q4_0-ncols1_16-ncols2_4.cu.o
+[242/537] Building CXX object src/CMakeFiles/llama.dir/models/jais2.cpp.o
+[243/537] Building CXX object src/CMakeFiles/llama.dir/models/jamba.cpp.o
+[244/537] Building CXX object src/CMakeFiles/llama.dir/models/llada.cpp.o
+[245/537] Building CXX object src/CMakeFiles/llama.dir/models/llama-embed.cpp.o
+[246/537] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-tile-instance-dkq96-dv96.cu.o
+[247/537] Building CXX object src/CMakeFiles/llama.dir/llama-grammar.cpp.o
+[248/537] Building CXX object src/CMakeFiles/llama.dir/models/llada-moe.cpp.o
+[249/537] Building CXX object src/CMakeFiles/llama.dir/llama-kv-cache.cpp.o
+[250/537] Building CXX object src/CMakeFiles/llama.dir/models/laguna.cpp.o
+[251/537] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-tile-instance-dkq112-dv112.cu.o
+[252/537] Building CXX object src/CMakeFiles/llama.dir/models/llama.cpp.o
+[253/537] Building CXX object src/CMakeFiles/llama.dir/models/mamba2.cpp.o
+[254/537] Building CXX object src/CMakeFiles/llama.dir/models/maincoder.cpp.o
+[255/537] Building CXX object src/CMakeFiles/llama.dir/models/lfm2moe.cpp.o
+[256/537] Building CXX object src/CMakeFiles/llama.dir/models/llama4.cpp.o
+[257/537] Building CXX object src/CMakeFiles/llama.dir/models/lfm2.cpp.o
+[258/537] Building CXX object src/CMakeFiles/llama.dir/models/kimi-k3.cpp.o
+[259/537] Building CXX object src/CMakeFiles/llama.dir/models/mamba-base.cpp.o
+[260/537] Building CXX object src/CMakeFiles/llama.dir/models/mamba.cpp.o
+[261/537] Building CXX object src/CMakeFiles/llama.dir/models/modern-bert.cpp.o
+[262/537] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-mma-f16-instance-q4_0-ncols1_8-ncols2_8.cu.o
+[263/537] Building CXX object src/CMakeFiles/llama.dir/models/muse-glimmer.cpp.o
+[264/537] Building CXX object src/CMakeFiles/llama.dir/models/mellum.cpp.o
+[265/537] Building CXX object src/CMakeFiles/llama.dir/models/minicpm3.cpp.o
+[266/537] Building CXX object src/CMakeFiles/llama.dir/models/minicpm.cpp.o
+[267/537] Building CXX object src/CMakeFiles/llama.dir/models/mistral4.cpp.o
+[268/537] Building CXX object src/CMakeFiles/llama.dir/models/olmoe.cpp.o
+[269/537] Building CXX object src/CMakeFiles/llama.dir/models/minimax-01.cpp.o
+[270/537] Building CXX object src/CMakeFiles/llama.dir/models/nomic-bert-moe.cpp.o
+[271/537] Building CXX object src/CMakeFiles/llama.dir/models/minimax-m2.cpp.o
+[272/537] Building CXX object src/CMakeFiles/llama.dir/models/mimo2.cpp.o
+[273/537] Building CXX object src/CMakeFiles/llama.dir/models/mistral3.cpp.o
+[274/537] Building CXX object src/CMakeFiles/llama.dir/models/mpt.cpp.o
+[275/537] Building CXX object src/CMakeFiles/llama.dir/models/olmo.cpp.o
+[276/537] Building CXX object src/CMakeFiles/llama.dir/models/nemotron-h-moe.cpp.o
+[277/537] Building CXX object src/CMakeFiles/llama.dir/models/nemotron.cpp.o
+[278/537] Building CXX object src/CMakeFiles/llama.dir/models/olmo2.cpp.o
+[279/537] Building CXX object src/CMakeFiles/llama.dir/models/nanbeige.cpp.o
+[280/537] Building CXX object src/CMakeFiles/llama.dir/models/minimax-m3.cpp.o
+[281/537] Building CXX object src/CMakeFiles/llama.dir/models/orion.cpp.o
+[282/537] Building CXX object src/CMakeFiles/llama.dir/models/nemotron-h.cpp.o
+[283/537] Building CXX object src/CMakeFiles/llama.dir/models/neo-bert.cpp.o
+[284/537] Building CXX object src/CMakeFiles/llama.dir/models/plamo.cpp.o
+[285/537] Building CXX object src/CMakeFiles/llama.dir/models/paddleocr.cpp.o
+[286/537] Building CXX object src/CMakeFiles/llama.dir/models/nomic-bert.cpp.o
+[287/537] Building CXX object src/CMakeFiles/llama.dir/models/phi2.cpp.o
+[288/537] Building CXX object src/CMakeFiles/llama.dir/models/openai-moe.cpp.o
+[289/537] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-mma-f16-instance-ncols1_8-ncols2_2.cu.o
+[290/537] Building CXX object src/CMakeFiles/llama.dir/models/openelm.cpp.o
+[291/537] Building CXX object src/CMakeFiles/llama.dir/models/plm.cpp.o
+[292/537] Building CXX object vendor/hash/CMakeFiles/vendor-hash.dir/sha1/sha1.c.o
+[293/537] Building CXX object src/CMakeFiles/llama.dir/llama-quant.cpp.o
+[294/537] Building CXX object vendor/hash/CMakeFiles/vendor-hash.dir/hash.cpp.o
+[295/537] Building CXX object src/CMakeFiles/llama.dir/models/phimoe.cpp.o
+[296/537] Building CXX object src/CMakeFiles/llama.dir/models/pangu-embed.cpp.o
+[297/537] Building CXX object common/CMakeFiles/llama-common-base.dir/build-info.cpp.o
+[298/537] Building C object vendor/hash/CMakeFiles/vendor-hash.dir/sha256/sha256.c.o
+[299/537] Linking CXX static library common/libllama-common-base.a
+[300/537] Building CXX object src/CMakeFiles/llama.dir/models/qwen3.cpp.o
+[301/537] Building CXX object src/CMakeFiles/llama.dir/llama-vocab.cpp.o
+[302/537] Building CXX object src/CMakeFiles/llama.dir/models/qwen35moe.cpp.o
+[303/537] Building CXX object src/CMakeFiles/llama.dir/models/phi3.cpp.o
+[304/537] Building CXX object src/CMakeFiles/llama.dir/models/plamo3.cpp.o
+[305/537] Building CXX object src/CMakeFiles/llama.dir/models/plamo2.cpp.o
+[306/537] Building CXX object src/CMakeFiles/llama.dir/models/pockettts.cpp.o
+[307/537] Building CXX object src/CMakeFiles/llama.dir/models/qwen2.cpp.o
+[308/537] Building CXX object src/CMakeFiles/llama.dir/models/qwen.cpp.o
+[309/537] Building CXX object src/CMakeFiles/llama.dir/models/qwen2vl.cpp.o
+[310/537] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/binbcast.cu.o
+[311/537] Building CXX object src/CMakeFiles/llama.dir/models/qwen2moe.cpp.o
+[312/537] Building CXX object src/CMakeFiles/llama.dir/models/qwen3vlmoe.cpp.o
+[313/537] Building CXX object src/CMakeFiles/llama.dir/models/qwen3tts.cpp.o
+[314/537] Building CXX object src/CMakeFiles/llama.dir/models/rnd1.cpp.o
+[315/537] Building CXX object src/CMakeFiles/llama.dir/models/qwen3vl.cpp.o
+[316/537] Building CXX object src/CMakeFiles/llama.dir/models/rwkv7-base.cpp.o
+[317/537] Building CXX object src/CMakeFiles/llama.dir/models/smallthinker.cpp.o
+[318/537] Building CXX object src/CMakeFiles/llama.dir/models/refact.cpp.o
+[319/537] Building CXX object src/CMakeFiles/llama.dir/models/qwen3moe.cpp.o
+[320/537] Building CXX object src/CMakeFiles/llama.dir/models/rwkv6.cpp.o
+[321/537] Building CXX object common/CMakeFiles/llama-common.dir/ngram-mod.cpp.o
+[322/537] Building CXX object src/CMakeFiles/llama.dir/models/rwkv6qwen2.cpp.o
+[323/537] Building CXX object common/CMakeFiles/llama-common.dir/kv-mean-center.cpp.o
+[324/537] Building CXX object src/CMakeFiles/llama.dir/models/starcoder.cpp.o
+[325/537] Building CXX object src/CMakeFiles/llama.dir/models/rwkv6-base.cpp.o
+[326/537] Building CXX object src/CMakeFiles/llama.dir/models/t5encoder.cpp.o
+[327/537] Building CXX object src/CMakeFiles/llama.dir/llama-model.cpp.o
+[328/537] Building CXX object src/CMakeFiles/llama.dir/models/stablelm.cpp.o
+[329/537] Building CXX object src/CMakeFiles/llama.dir/models/smollm3.cpp.o
+[330/537] Building CXX object tools/llama-bench/CMakeFiles/llama-bench.dir/main.cpp.o
+[331/537] Building CXX object src/CMakeFiles/llama.dir/models/qwen35.cpp.o
+[332/537] Building CXX object tools/quantize/CMakeFiles/llama-quantize.dir/main.cpp.o
+[333/537] Building CXX object tools/perplexity/CMakeFiles/llama-perplexity.dir/main.cpp.o
+[334/537] Building CXX object src/CMakeFiles/llama.dir/models/seed-oss.cpp.o
+[335/537] Building C object vendor/hash/CMakeFiles/vendor-hash.dir/xxhash/xxhash.c.o
+[336/537] Building CXX object src/CMakeFiles/llama.dir/models/rwkv7.cpp.o
+[337/537] Linking CXX static library vendor/hash/libvendor-hash.a
+[338/537] Building CXX object src/CMakeFiles/llama.dir/models/qwen3next.cpp.o
+[339/537] Building CXX object src/CMakeFiles/llama.dir/models/t5.cpp.o
+[340/537] Building CXX object src/CMakeFiles/llama.dir/models/wavtokenizer-dec.cpp.o
+[341/537] Building CXX object common/CMakeFiles/llama-common.dir/subproc.cpp.o
+[342/537] Building CXX object common/CMakeFiles/llama-common.dir/unicode.cpp.o
+[343/537] Building CXX object src/CMakeFiles/llama.dir/models/xverse.cpp.o
+[344/537] Building CXX object common/CMakeFiles/llama-common.dir/llguidance.cpp.o
+[345/537] Building CXX object src/CMakeFiles/llama.dir/models/talkie.cpp.o
+[346/537] Building CXX object src/CMakeFiles/llama.dir/models/step35.cpp.o
+[347/537] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-vec-instance-bf16-bf16.cu.o
+[348/537] Building CXX object common/CMakeFiles/llama-common.dir/trie.cpp.o
+[349/537] Building CXX object common/CMakeFiles/llama-common.dir/ngram-map.cpp.o
+[350/537] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-mma-f16-instance-ncols1_16-ncols2_1.cu.o
+[351/537] Building CXX object common/CMakeFiles/llama-common.dir/log.cpp.o
+[352/537] Building CXX object common/CMakeFiles/llama-common.dir/reasoning-budget.cpp.o
+[353/537] Building CXX object common/CMakeFiles/llama-common.dir/console.cpp.o
+[354/537] Building CXX object common/CMakeFiles/llama-common.dir/ngram-cache.cpp.o
+[355/537] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-mma-f16-instance-ncols1_2-ncols2_8.cu.o
+[356/537] Building CXX object common/CMakeFiles/llama-common.dir/jinja/string.cpp.o
+[357/537] Building CXX object tools/mtmd/CMakeFiles/mtmd.dir/models/cogvlm.cpp.o
+[358/537] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-mma-f16-instance-ncols1_4-ncols2_2.cu.o
+[359/537] Building CXX object src/CMakeFiles/llama.dir/unicode.cpp.o
+[360/537] Building CXX object common/CMakeFiles/llama-common.dir/jinja/lexer.cpp.o
+[361/537] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-mma-f16-instance-q8_0-ncols1_64-ncols2_1.cu.o
+[362/537] Building CXX object tools/mtmd/CMakeFiles/mtmd.dir/models/conformer.cpp.o
+[363/537] Building CXX object tools/mtmd/CMakeFiles/mtmd.dir/models/dots3note.cpp.o
+[364/537] Building CUDA object common/CMakeFiles/llama-common.dir/dspark-markov.cu.o
+[365/537] Building CXX object tools/ui/CMakeFiles/llama-ui-embed.dir/embed.cpp.o
+[366/537] Linking CXX executable tools/ui/llama-ui-embed
+[367/537] Building CXX object common/CMakeFiles/llama-common.dir/chat-auto-parser-helpers.cpp.o
+[368/537] Building CXX object tools/mtmd/CMakeFiles/mtmd.dir/models/dotsocr.cpp.o
+[369/537] Building CXX object tools/mtmd/CMakeFiles/mtmd.dir/models/granite-speech.cpp.o
+[370/537] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-mma-f16-instance-ncols1_1-ncols2_8.cu.o
+[371/537] Building CXX object common/CMakeFiles/llama-common.dir/fit.cpp.o
+[372/537] Building CXX object tools/mtmd/CMakeFiles/mtmd.dir/mtmd-image.cpp.o
+[373/537] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-mma-f16-instance-ncols1_4-ncols2_8.cu.o
+[374/537] Building CXX object tools/mtmd/CMakeFiles/mtmd.dir/models/gemma4a.cpp.o
+[375/537] Building CXX object common/CMakeFiles/llama-common.dir/debug.cpp.o
+[376/537] Building CXX object tools/mtmd/CMakeFiles/mtmd.dir/models/glm4v.cpp.o
+[377/537] Building CXX object common/CMakeFiles/llama-common.dir/chat-auto-parser-generator.cpp.o
+[378/537] Building CXX object tools/mtmd/CMakeFiles/mtmd.dir/models/exaone4_5.cpp.o
+[379/537] Building CXX object tools/mtmd/CMakeFiles/mtmd.dir/models/gemma4uv.cpp.o
+[380/537] Building CXX object tools/mtmd/CMakeFiles/mtmd.dir/models/gemma4ua.cpp.o
+[381/537] Building CXX object tools/mtmd/CMakeFiles/mtmd.dir/models/gemma4v.cpp.o
+[382/537] Building CXX object common/CMakeFiles/llama-common.dir/sampling.cpp.o
+[383/537] Building CXX object tools/quantize/CMakeFiles/llama-quantize-impl.dir/quantize.cpp.o
+[384/537] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/mmf-instance-ncols_13.cu.o
+[385/537] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/mmf-instance-ncols_6.cu.o
+[386/537] Building CXX object tools/mtmd/CMakeFiles/mtmd.dir/mtmd-helper-gen.cpp.o
+[387/537] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-mma-f16-instance-ncols1_16-ncols2_2.cu.o
+[388/537] Building CXX object tools/mtmd/CMakeFiles/mtmd.dir/models/internvl.cpp.o
+[389/537] Provisioning UI assets
+-- UI: npm not found, skipping npm build
+-- UI: downloading from b1: https://huggingface.co/buckets/ggml-org/llama-ui/resolve/b1/dist.tar.gz
+-- UI: download dist.tar.gz from b1 failed: "HTTP response code said error"
+-- UI: downloading from latest: https://huggingface.co/buckets/ggml-org/llama-ui/resolve/latest/dist.tar.gz
+-- UI: archive verified and extracted
+-- UI: HF download succeeded, stamp updated (latest)
+-- UI: gzip compression applied (/workspace/repo/build-cuda/tools/ui/dist/_gzip)
+embed: write output file /workspace/repo/build-cuda/tools/ui/ui.h
+embed: write output file /workspace/repo/build-cuda/tools/ui/ui.cpp
+[390/537] Building CXX object tools/mtmd/CMakeFiles/mtmd.dir/models/qwen2vl.cpp.o
+[391/537] Building CXX object tools/mtmd/CMakeFiles/mtmd.dir/models/hunyuanvl.cpp.o
+[392/537] Building CXX object tools/mtmd/CMakeFiles/mtmd.dir/models/kimik25.cpp.o
+[393/537] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/mmf-instance-ncols_11.cu.o
+[394/537] Building CXX object tools/mtmd/CMakeFiles/mtmd.dir/models/granite4-vision.cpp.o
+[395/537] Building CXX object tools/cli/CMakeFiles/llama-cli.dir/main.cpp.o
+[396/537] Building CXX object tools/mtmd/CMakeFiles/mtmd.dir/models/kimivl.cpp.o
+[397/537] Building CXX object tools/mtmd/CMakeFiles/mtmd.dir/models/nemotron-v2-vl.cpp.o
+[398/537] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/mmf-instance-ncols_5.cu.o
+[399/537] Building CXX object tools/mtmd/CMakeFiles/mtmd.dir/models/muse-glimmer.cpp.o
+[400/537] Building CXX object tools/server/CMakeFiles/llama-server.dir/main.cpp.o
+[401/537] Building CXX object common/CMakeFiles/llama-common.dir/jinja/caps.cpp.o
+[402/537] Building CXX object tools/mtmd/CMakeFiles/mtmd.dir/models/llama4.cpp.o
+[403/537] Building CXX object tools/mtmd/CMakeFiles/mtmd.dir/mtmd-audio.cpp.o
+[404/537] Building CXX object tools/mtmd/CMakeFiles/mtmd.dir/models/qwen3a.cpp.o
+[405/537] Building CXX object tools/mtmd/CMakeFiles/mtmd.dir/models/minicpmv.cpp.o
+[406/537] Building CXX object tools/mtmd/CMakeFiles/mtmd.dir/models/mimovl.cpp.o
+[407/537] Building CXX object tools/mtmd/CMakeFiles/mtmd.dir/models/paddleocr.cpp.o
+[408/537] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/mmf-instance-ncols_12.cu.o
+[409/537] Building CXX object tools/mtmd/CMakeFiles/mtmd.dir/models/pixtral.cpp.o
+[410/537] Building CXX object tools/mtmd/CMakeFiles/mtmd.dir/models/qwen3vl.cpp.o
+[411/537] Building CXX object tools/mtmd/CMakeFiles/mtmd.dir/models/qwen3tts-spkenc.cpp.o
+[412/537] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-vec-instance-q4_0-q4_0.cu.o
+[413/537] Building CXX object tools/mtmd/CMakeFiles/mtmd.dir/models/minimax-m3.cpp.o
+[414/537] Building CXX object tools/mtmd/CMakeFiles/mtmd.dir/models/llava.cpp.o
+[415/537] Building CXX object tools/mtmd/CMakeFiles/mtmd.dir/models/pockettts-seanet.cpp.o
+[416/537] Building CXX object tools/mtmd/CMakeFiles/mtmd.dir/models/step3vl.cpp.o
+[417/537] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-mma-f16-instance-ncols1_32-ncols2_1.cu.o
+[418/537] Building CXX object tools/mtmd/CMakeFiles/mtmd.dir/models/mimo-audio.cpp.o
+[419/537] Building CXX object tools/mtmd/CMakeFiles/mtmd.dir/models/deepseekocr.cpp.o
+[420/537] Building CXX object tools/mtmd/CMakeFiles/mtmd.dir/models/pockettts-spkenc.cpp.o
+[421/537] Building CXX object common/CMakeFiles/llama-common.dir/hf-cache.cpp.o
+[422/537] Building CXX object tools/mtmd/CMakeFiles/mtmd.dir/models/whisper-enc.cpp.o
+[423/537] Building CXX object common/CMakeFiles/llama-common.dir/jinja/parser.cpp.o
+[424/537] Building CXX object tools/mtmd/CMakeFiles/mtmd.dir/models/siglip.cpp.o
+[425/537] Building CXX object tools/mtmd/CMakeFiles/mtmd.dir/models/pockettts-gen.cpp.o
+[426/537] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-mma-f16-instance-ncols1_2-ncols2_4.cu.o
+[427/537] Building CXX object common/CMakeFiles/llama-common.dir/jinja/runtime.cpp.o
+[428/537] Building CXX object tools/mtmd/CMakeFiles/mtmd.dir/models/youtuvl.cpp.o
+[429/537] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/mmf-instance-ncols_7.cu.o
+[430/537] Building CXX object tools/mtmd/CMakeFiles/mtmd.dir/models/mobilenetv5.cpp.o
+[431/537] Building CXX object tools/mtmd/CMakeFiles/mtmd.dir/models/deepseekocr2.cpp.o
+[432/537] Building CXX object tools/server/CMakeFiles/server-context.dir/server-chat.cpp.o
+[433/537] Building CXX object common/CMakeFiles/llama-common.dir/chat-diff-analyzer.cpp.o
+[434/537] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/mmf-instance-ncols_15.cu.o
+[435/537] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/mmf-instance-ncols_9.cu.o
+[436/537] Building CXX object tools/mtmd/CMakeFiles/mtmd.dir/models/yasa2.cpp.o
+[437/537] Building CXX object tools/mtmd/CMakeFiles/mtmd.dir/models/qwen3tts-gen.cpp.o
+[438/537] Building CXX object tools/server/CMakeFiles/server-context.dir/server-stream.cpp.o
+[439/537] Building CXX object tools/mtmd/CMakeFiles/mtmd.dir/models/parakeet.cpp.o
+[440/537] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/mmf-instance-ncols_4.cu.o
+[441/537] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/mmf-instance-ncols_14.cu.o
+[442/537] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/mmf-instance-ncols_10.cu.o
+[443/537] Building CXX object tools/perplexity/CMakeFiles/llama-perplexity-impl.dir/perplexity.cpp.o
+[444/537] Building CXX object common/CMakeFiles/llama-common.dir/preset.cpp.o
+[445/537] Building CXX object tools/server/CMakeFiles/server-context.dir/server-mcp.cpp.o
+[446/537] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-mma-f16-instance-ncols1_32-ncols2_2.cu.o
+[447/537] Building CXX object common/CMakeFiles/llama-common.dir/chat-peg-parser.cpp.o
+[448/537] Building CXX object tools/server/CMakeFiles/server-context.dir/server-queue.cpp.o
+[449/537] Building CXX object tools/mtmd/CMakeFiles/mtmd.dir/mtmd.cpp.o
+[450/537] Building CXX object common/CMakeFiles/llama-common.dir/download.cpp.o
+[451/537] Building CXX object tools/server/CMakeFiles/server-context.dir/server-schema.cpp.o
+[452/537] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-mma-f16-instance-ncols1_4-ncols2_4.cu.o
+[453/537] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-mma-f16-instance-ncols1_8-ncols2_4.cu.o
+[454/537] Building CXX object common/CMakeFiles/llama-common.dir/speculative.cpp.o
+[455/537] Building CXX object common/CMakeFiles/llama-common.dir/common.cpp.o
+[456/537] Building CXX object tools/cli/CMakeFiles/llama-cli-impl.dir/cli.cpp.o
+[457/537] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/mmf-instance-ncols_8.cu.o
+[458/537] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/mmq-instance-mxfp4.cu.o
+/workspace/repo/ggml/src/ggml-cuda/template-instances/../mmq.cuh(937): warning #177-D: variable "tile_y_next" was declared but never referenced
+      int * tile_y_next = tile_y + tile_y_stride;
+            ^
+          detected during:
+            instantiation of "void mul_mat_q<type,J,fallback>(const char *, const int *, const int32_t *, const int32_t *, float *, float *, const float *, uint3, int, int, int, int, int, uint3, uint3, int, int, int, uint3, uint3, int, int, int, uint3) [with type=GGML_TYPE_MXFP4, J=8, fallback=false]" at line 1511
+            instantiation of "void launch_mul_mat_q<type,J,fallback>(ggml_backend_cuda_context &, const mmq_args &, cudaStream_t) [with type=GGML_TYPE_MXFP4, J=8, fallback=false]" at line 1608
+            instantiation of "void mul_mat_q_switch_J<type,fallback>(ggml_backend_cuda_context &, const mmq_args &, cudaStream_t) [with type=GGML_TYPE_MXFP4, fallback=false]" at line 1666
+            instantiation of "void mul_mat_q_case<type>(ggml_backend_cuda_context &, const mmq_args &, cudaStream_t) [with type=GGML_TYPE_MXFP4]" at line 5 of /workspace/repo/ggml/src/ggml-cuda/template-instances/mmq-instance-mxfp4.cu
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+[459/537] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-mma-f16-instance-ncols1_16-ncols2_4.cu.o
+[460/537] Building CXX object tools/cli/CMakeFiles/llama-cli-impl.dir/cli-client.cpp.o
+[461/537] Building CXX object tools/server/CMakeFiles/server-context.dir/server-common.cpp.o
+[462/537] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/quantize.cu.o
+[463/537] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/mmf-instance-ncols_16.cu.o
+[464/537] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/mmq-instance-iq3_xxs.cu.o
+/workspace/repo/ggml/src/ggml-cuda/template-instances/../mmq.cuh(937): warning #177-D: variable "tile_y_next" was declared but never referenced
+      int * tile_y_next = tile_y + tile_y_stride;
+            ^
+          detected during:
+            instantiation of "void mul_mat_q<type,J,fallback>(const char *, const int *, const int32_t *, const int32_t *, float *, float *, const float *, uint3, int, int, int, int, int, uint3, uint3, int, int, int, uint3, uint3, int, int, int, uint3) [with type=GGML_TYPE_IQ3_XXS, J=8, fallback=false]" at line 1511
+            instantiation of "void launch_mul_mat_q<type,J,fallback>(ggml_backend_cuda_context &, const mmq_args &, cudaStream_t) [with type=GGML_TYPE_IQ3_XXS, J=8, fallback=false]" at line 1608
+            instantiation of "void mul_mat_q_switch_J<type,fallback>(ggml_backend_cuda_context &, const mmq_args &, cudaStream_t) [with type=GGML_TYPE_IQ3_XXS, fallback=false]" at line 1666
+            instantiation of "void mul_mat_q_case<type>(ggml_backend_cuda_context &, const mmq_args &, cudaStream_t) [with type=GGML_TYPE_IQ3_XXS]" at line 5 of /workspace/repo/ggml/src/ggml-cuda/template-instances/mmq-instance-iq3_xxs.cu
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+[465/537] Building CXX object common/CMakeFiles/llama-common.dir/jinja/value.cpp.o
+[466/537] Building CXX object tools/ui/CMakeFiles/llama-ui.dir/ui.cpp.o
+[467/537] Linking CXX static library tools/ui/libllama-ui.a
+[468/537] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-mma-f16-instance-ncols1_8-ncols2_1.cu.o
+[469/537] Building CXX object common/CMakeFiles/llama-common.dir/peg-parser.cpp.o
+[470/537] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/mmq-instance-q1_0.cu.o
+/workspace/repo/ggml/src/ggml-cuda/template-instances/../mmq.cuh(937): warning #177-D: variable "tile_y_next" was declared but never referenced
+      int * tile_y_next = tile_y + tile_y_stride;
+            ^
+          detected during:
+            instantiation of "void mul_mat_q<type,J,fallback>(const char *, const int *, const int32_t *, const int32_t *, float *, float *, const float *, uint3, int, int, int, int, int, uint3, uint3, int, int, int, uint3, uint3, int, int, int, uint3) [with type=GGML_TYPE_Q1_0, J=8, fallback=false]" at line 1511
+            instantiation of "void launch_mul_mat_q<type,J,fallback>(ggml_backend_cuda_context &, const mmq_args &, cudaStream_t) [with type=GGML_TYPE_Q1_0, J=8, fallback=false]" at line 1608
+            instantiation of "void mul_mat_q_switch_J<type,fallback>(ggml_backend_cuda_context &, const mmq_args &, cudaStream_t) [with type=GGML_TYPE_Q1_0, fallback=false]" at line 1666
+            instantiation of "void mul_mat_q_case<type>(ggml_backend_cuda_context &, const mmq_args &, cudaStream_t) [with type=GGML_TYPE_Q1_0]" at line 5 of /workspace/repo/ggml/src/ggml-cuda/template-instances/mmq-instance-q1_0.cu
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+[471/537] Building CXX object tools/cli/CMakeFiles/llama-cli-impl.dir/cli-context.cpp.o
+[472/537] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/mmvf.cu.o
+[473/537] Building CXX object tools/server/CMakeFiles/llama-server-impl.dir/server-http.cpp.o
+[474/537] Building CXX object tools/server/CMakeFiles/server-context.dir/server-task.cpp.o
+[475/537] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/mmq-instance-iq2_xxs.cu.o
+/workspace/repo/ggml/src/ggml-cuda/template-instances/../mmq.cuh(937): warning #177-D: variable "tile_y_next" was declared but never referenced
+      int * tile_y_next = tile_y + tile_y_stride;
+            ^
+          detected during:
+            instantiation of "void mul_mat_q<type,J,fallback>(const char *, const int *, const int32_t *, const int32_t *, float *, float *, const float *, uint3, int, int, int, int, int, uint3, uint3, int, int, int, uint3, uint3, int, int, int, uint3) [with type=GGML_TYPE_IQ2_XXS, J=8, fallback=false]" at line 1511
+            instantiation of "void launch_mul_mat_q<type,J,fallback>(ggml_backend_cuda_context &, const mmq_args &, cudaStream_t) [with type=GGML_TYPE_IQ2_XXS, J=8, fallback=false]" at line 1608
+            instantiation of "void mul_mat_q_switch_J<type,fallback>(ggml_backend_cuda_context &, const mmq_args &, cudaStream_t) [with type=GGML_TYPE_IQ2_XXS, fallback=false]" at line 1666
+            instantiation of "void mul_mat_q_case<type>(ggml_backend_cuda_context &, const mmq_args &, cudaStream_t) [with type=GGML_TYPE_IQ2_XXS]" at line 5 of /workspace/repo/ggml/src/ggml-cuda/template-instances/mmq-instance-iq2_xxs.cu
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+[476/537] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/mmq-instance-pq2_0.cu.o
+/workspace/repo/ggml/src/ggml-cuda/template-instances/../mmq.cuh(937): warning #177-D: variable "tile_y_next" was declared but never referenced
+      int * tile_y_next = tile_y + tile_y_stride;
+            ^
+          detected during:
+            instantiation of "void mul_mat_q<type,J,fallback>(const char *, const int *, const int32_t *, const int32_t *, float *, float *, const float *, uint3, int, int, int, int, int, uint3, uint3, int, int, int, uint3, uint3, int, int, int, uint3) [with type=GGML_TYPE_PQ2_0, J=8, fallback=false]" at line 1511
+            instantiation of "void launch_mul_mat_q<type,J,fallback>(ggml_backend_cuda_context &, const mmq_args &, cudaStream_t) [with type=GGML_TYPE_PQ2_0, J=8, fallback=false]" at line 1608
+            instantiation of "void mul_mat_q_switch_J<type,fallback>(ggml_backend_cuda_context &, const mmq_args &, cudaStream_t) [with type=GGML_TYPE_PQ2_0, fallback=false]" at line 1666
+            instantiation of "void mul_mat_q_case<type>(ggml_backend_cuda_context &, const mmq_args &, cudaStream_t) [with type=GGML_TYPE_PQ2_0]" at line 5 of /workspace/repo/ggml/src/ggml-cuda/template-instances/mmq-instance-pq2_0.cu
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+[477/537] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/mmq-instance-nvfp4.cu.o
+/workspace/repo/ggml/src/ggml-cuda/template-instances/../mmq.cuh(937): warning #177-D: variable "tile_y_next" was declared but never referenced
+      int * tile_y_next = tile_y + tile_y_stride;
+            ^
+          detected during:
+            instantiation of "void mul_mat_q<type,J,fallback>(const char *, const int *, const int32_t *, const int32_t *, float *, float *, const float *, uint3, int, int, int, int, int, uint3, uint3, int, int, int, uint3, uint3, int, int, int, uint3) [with type=GGML_TYPE_NVFP4, J=8, fallback=false]" at line 1511
+            instantiation of "void launch_mul_mat_q<type,J,fallback>(ggml_backend_cuda_context &, const mmq_args &, cudaStream_t) [with type=GGML_TYPE_NVFP4, J=8, fallback=false]" at line 1608
+            instantiation of "void mul_mat_q_switch_J<type,fallback>(ggml_backend_cuda_context &, const mmq_args &, cudaStream_t) [with type=GGML_TYPE_NVFP4, fallback=false]" at line 1666
+            instantiation of "void mul_mat_q_case<type>(ggml_backend_cuda_context &, const mmq_args &, cudaStream_t) [with type=GGML_TYPE_NVFP4]" at line 5 of /workspace/repo/ggml/src/ggml-cuda/template-instances/mmq-instance-nvfp4.cu
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+[478/537] Building CXX object tools/server/CMakeFiles/llama-server-impl.dir/server.cpp.o
+[479/537] Building CXX object tools/llama-bench/CMakeFiles/llama-bench-impl.dir/llama-bench.cpp.o
+[480/537] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-tile-instance-dkq128-dv128.cu.o
+[481/537] Building CXX object common/CMakeFiles/llama-common.dir/chat.cpp.o
+[482/537] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/mmq-instance-iq4_xs.cu.o
+/workspace/repo/ggml/src/ggml-cuda/template-instances/../mmq.cuh(937): warning #177-D: variable "tile_y_next" was declared but never referenced
+      int * tile_y_next = tile_y + tile_y_stride;
+            ^
+          detected during:
+            instantiation of "void mul_mat_q<type,J,fallback>(const char *, const int *, const int32_t *, const int32_t *, float *, float *, const float *, uint3, int, int, int, int, int, uint3, uint3, int, int, int, uint3, uint3, int, int, int, uint3) [with type=GGML_TYPE_IQ4_XS, J=8, fallback=false]" at line 1511
+            instantiation of "void launch_mul_mat_q<type,J,fallback>(ggml_backend_cuda_context &, const mmq_args &, cudaStream_t) [with type=GGML_TYPE_IQ4_XS, J=8, fallback=false]" at line 1608
+            instantiation of "void mul_mat_q_switch_J<type,fallback>(ggml_backend_cuda_context &, const mmq_args &, cudaStream_t) [with type=GGML_TYPE_IQ4_XS, fallback=false]" at line 1666
+            instantiation of "void mul_mat_q_case<type>(ggml_backend_cuda_context &, const mmq_args &, cudaStream_t) [with type=GGML_TYPE_IQ4_XS]" at line 5 of /workspace/repo/ggml/src/ggml-cuda/template-instances/mmq-instance-iq4_xs.cu
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+[483/537] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/mmq-instance-q2_0.cu.o
+/workspace/repo/ggml/src/ggml-cuda/template-instances/../mmq.cuh(937): warning #177-D: variable "tile_y_next" was declared but never referenced
+      int * tile_y_next = tile_y + tile_y_stride;
+            ^
+          detected during:
+            instantiation of "void mul_mat_q<type,J,fallback>(const char *, const int *, const int32_t *, const int32_t *, float *, float *, const float *, uint3, int, int, int, int, int, uint3, uint3, int, int, int, uint3, uint3, int, int, int, uint3) [with type=GGML_TYPE_Q2_0, J=8, fallback=false]" at line 1511
+            instantiation of "void launch_mul_mat_q<type,J,fallback>(ggml_backend_cuda_context &, const mmq_args &, cudaStream_t) [with type=GGML_TYPE_Q2_0, J=8, fallback=false]" at line 1608
+            instantiation of "void mul_mat_q_switch_J<type,fallback>(ggml_backend_cuda_context &, const mmq_args &, cudaStream_t) [with type=GGML_TYPE_Q2_0, fallback=false]" at line 1666
+            instantiation of "void mul_mat_q_case<type>(ggml_backend_cuda_context &, const mmq_args &, cudaStream_t) [with type=GGML_TYPE_Q2_0]" at line 5 of /workspace/repo/ggml/src/ggml-cuda/template-instances/mmq-instance-q2_0.cu
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+[484/537] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/mmq-instance-iq4_nl.cu.o
+/workspace/repo/ggml/src/ggml-cuda/template-instances/../mmq.cuh(937): warning #177-D: variable "tile_y_next" was declared but never referenced
+      int * tile_y_next = tile_y + tile_y_stride;
+            ^
+          detected during:
+            instantiation of "void mul_mat_q<type,J,fallback>(const char *, const int *, const int32_t *, const int32_t *, float *, float *, const float *, uint3, int, int, int, int, int, uint3, uint3, int, int, int, uint3, uint3, int, int, int, uint3) [with type=GGML_TYPE_IQ4_NL, J=8, fallback=false]" at line 1511
+            instantiation of "void launch_mul_mat_q<type,J,fallback>(ggml_backend_cuda_context &, const mmq_args &, cudaStream_t) [with type=GGML_TYPE_IQ4_NL, J=8, fallback=false]" at line 1608
+            instantiation of "void mul_mat_q_switch_J<type,fallback>(ggml_backend_cuda_context &, const mmq_args &, cudaStream_t) [with type=GGML_TYPE_IQ4_NL, fallback=false]" at line 1666
+            instantiation of "void mul_mat_q_case<type>(ggml_backend_cuda_context &, const mmq_args &, cudaStream_t) [with type=GGML_TYPE_IQ4_NL]" at line 5 of /workspace/repo/ggml/src/ggml-cuda/template-instances/mmq-instance-iq4_nl.cu
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+[485/537] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/mmq-instance-q4_0.cu.o
+/workspace/repo/ggml/src/ggml-cuda/template-instances/../mmq.cuh(937): warning #177-D: variable "tile_y_next" was declared but never referenced
+      int * tile_y_next = tile_y + tile_y_stride;
+            ^
+          detected during:
+            instantiation of "void mul_mat_q<type,J,fallback>(const char *, const int *, const int32_t *, const int32_t *, float *, float *, const float *, uint3, int, int, int, int, int, uint3, uint3, int, int, int, uint3, uint3, int, int, int, uint3) [with type=GGML_TYPE_Q4_0, J=8, fallback=false]" at line 1511
+            instantiation of "void launch_mul_mat_q<type,J,fallback>(ggml_backend_cuda_context &, const mmq_args &, cudaStream_t) [with type=GGML_TYPE_Q4_0, J=8, fallback=false]" at line 1608
+            instantiation of "void mul_mat_q_switch_J<type,fallback>(ggml_backend_cuda_context &, const mmq_args &, cudaStream_t) [with type=GGML_TYPE_Q4_0, fallback=false]" at line 1666
+            instantiation of "void mul_mat_q_case<type>(ggml_backend_cuda_context &, const mmq_args &, cudaStream_t) [with type=GGML_TYPE_Q4_0]" at line 5 of /workspace/repo/ggml/src/ggml-cuda/template-instances/mmq-instance-q4_0.cu
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+[486/537] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-mma-f16-instance-ncols1_8-ncols2_8.cu.o
+[487/537] Building CXX object tools/server/CMakeFiles/server-context.dir/server-tools.cpp.o
+[488/537] Building CXX object tools/server/CMakeFiles/server-context.dir/server-context.cpp.o
+[489/537] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/mmq-instance-iq1_s.cu.o
+/workspace/repo/ggml/src/ggml-cuda/template-instances/../mmq.cuh(937): warning #177-D: variable "tile_y_next" was declared but never referenced
+      int * tile_y_next = tile_y + tile_y_stride;
+            ^
+          detected during:
+            instantiation of "void mul_mat_q<type,J,fallback>(const char *, const int *, const int32_t *, const int32_t *, float *, float *, const float *, uint3, int, int, int, int, int, uint3, uint3, int, int, int, uint3, uint3, int, int, int, uint3) [with type=GGML_TYPE_IQ1_S, J=8, fallback=false]" at line 1511
+            instantiation of "void launch_mul_mat_q<type,J,fallback>(ggml_backend_cuda_context &, const mmq_args &, cudaStream_t) [with type=GGML_TYPE_IQ1_S, J=8, fallback=false]" at line 1608
+            instantiation of "void mul_mat_q_switch_J<type,fallback>(ggml_backend_cuda_context &, const mmq_args &, cudaStream_t) [with type=GGML_TYPE_IQ1_S, fallback=false]" at line 1666
+            instantiation of "void mul_mat_q_case<type>(ggml_backend_cuda_context &, const mmq_args &, cudaStream_t) [with type=GGML_TYPE_IQ1_S]" at line 5 of /workspace/repo/ggml/src/ggml-cuda/template-instances/mmq-instance-iq1_s.cu
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+[490/537] Building CXX object tools/mtmd/CMakeFiles/mtmd.dir/mtmd-helper.cpp.o
+[491/537] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-mma-f16-instance-ncols1_64-ncols2_1.cu.o
+[492/537] Building CXX object tools/mtmd/CMakeFiles/mtmd.dir/clip.cpp.o
+[493/537] Building CXX object tools/server/CMakeFiles/llama-server-impl.dir/server-models.cpp.o
+[494/537] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-tile-instance-dkq512-dv512.cu.o
+[495/537] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/mmq-instance-q8_0.cu.o
+/workspace/repo/ggml/src/ggml-cuda/template-instances/../mmq.cuh(937): warning #177-D: variable "tile_y_next" was declared but never referenced
+      int * tile_y_next = tile_y + tile_y_stride;
+            ^
+          detected during:
+            instantiation of "void mul_mat_q<type,J,fallback>(const char *, const int *, const int32_t *, const int32_t *, float *, float *, const float *, uint3, int, int, int, int, int, uint3, uint3, int, int, int, uint3, uint3, int, int, int, uint3) [with type=GGML_TYPE_Q8_0, J=8, fallback=false]" at line 1511
+            instantiation of "void launch_mul_mat_q<type,J,fallback>(ggml_backend_cuda_context &, const mmq_args &, cudaStream_t) [with type=GGML_TYPE_Q8_0, J=8, fallback=false]" at line 1608
+            instantiation of "void mul_mat_q_switch_J<type,fallback>(ggml_backend_cuda_context &, const mmq_args &, cudaStream_t) [with type=GGML_TYPE_Q8_0, fallback=false]" at line 1666
+            instantiation of "void mul_mat_q_case<type>(ggml_backend_cuda_context &, const mmq_args &, cudaStream_t) [with type=GGML_TYPE_Q8_0]" at line 5 of /workspace/repo/ggml/src/ggml-cuda/template-instances/mmq-instance-q8_0.cu
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+[496/537] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/mmq-instance-iq3_s.cu.o
+/workspace/repo/ggml/src/ggml-cuda/template-instances/../mmq.cuh(937): warning #177-D: variable "tile_y_next" was declared but never referenced
+      int * tile_y_next = tile_y + tile_y_stride;
+            ^
+          detected during:
+            instantiation of "void mul_mat_q<type,J,fallback>(const char *, const int *, const int32_t *, const int32_t *, float *, float *, const float *, uint3, int, int, int, int, int, uint3, uint3, int, int, int, uint3, uint3, int, int, int, uint3) [with type=GGML_TYPE_IQ3_S, J=8, fallback=false]" at line 1511
+            instantiation of "void launch_mul_mat_q<type,J,fallback>(ggml_backend_cuda_context &, const mmq_args &, cudaStream_t) [with type=GGML_TYPE_IQ3_S, J=8, fallback=false]" at line 1608
+            instantiation of "void mul_mat_q_switch_J<type,fallback>(ggml_backend_cuda_context &, const mmq_args &, cudaStream_t) [with type=GGML_TYPE_IQ3_S, fallback=false]" at line 1666
+            instantiation of "void mul_mat_q_case<type>(ggml_backend_cuda_context &, const mmq_args &, cudaStream_t) [with type=GGML_TYPE_IQ3_S]" at line 5 of /workspace/repo/ggml/src/ggml-cuda/template-instances/mmq-instance-iq3_s.cu
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+[497/537] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/mmq-instance-ptq1_0.cu.o
+/workspace/repo/ggml/src/ggml-cuda/template-instances/../mmq.cuh(937): warning #177-D: variable "tile_y_next" was declared but never referenced
+      int * tile_y_next = tile_y + tile_y_stride;
+            ^
+          detected during:
+            instantiation of "void mul_mat_q<type,J,fallback>(const char *, const int *, const int32_t *, const int32_t *, float *, float *, const float *, uint3, int, int, int, int, int, uint3, uint3, int, int, int, uint3, uint3, int, int, int, uint3) [with type=GGML_TYPE_PTQ1_0, J=8, fallback=false]" at line 1511
+            instantiation of "void launch_mul_mat_q<type,J,fallback>(ggml_backend_cuda_context &, const mmq_args &, cudaStream_t) [with type=GGML_TYPE_PTQ1_0, J=8, fallback=false]" at line 1608
+            instantiation of "void mul_mat_q_switch_J<type,fallback>(ggml_backend_cuda_context &, const mmq_args &, cudaStream_t) [with type=GGML_TYPE_PTQ1_0, fallback=false]" at line 1666
+            instantiation of "void mul_mat_q_case<type>(ggml_backend_cuda_context &, const mmq_args &, cudaStream_t) [with type=GGML_TYPE_PTQ1_0]" at line 6 of /workspace/repo/ggml/src/ggml-cuda/template-instances/mmq-instance-ptq1_0.cu
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+[498/537] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/mmq-instance-q4_1.cu.o
+/workspace/repo/ggml/src/ggml-cuda/template-instances/../mmq.cuh(937): warning #177-D: variable "tile_y_next" was declared but never referenced
+      int * tile_y_next = tile_y + tile_y_stride;
+            ^
+          detected during:
+            instantiation of "void mul_mat_q<type,J,fallback>(const char *, const int *, const int32_t *, const int32_t *, float *, float *, const float *, uint3, int, int, int, int, int, uint3, uint3, int, int, int, uint3, uint3, int, int, int, uint3) [with type=GGML_TYPE_Q4_1, J=8, fallback=false]" at line 1511
+            instantiation of "void launch_mul_mat_q<type,J,fallback>(ggml_backend_cuda_context &, const mmq_args &, cudaStream_t) [with type=GGML_TYPE_Q4_1, J=8, fallback=false]" at line 1608
+            instantiation of "void mul_mat_q_switch_J<type,fallback>(ggml_backend_cuda_context &, const mmq_args &, cudaStream_t) [with type=GGML_TYPE_Q4_1, fallback=false]" at line 1666
+            instantiation of "void mul_mat_q_case<type>(ggml_backend_cuda_context &, const mmq_args &, cudaStream_t) [with type=GGML_TYPE_Q4_1]" at line 5 of /workspace/repo/ggml/src/ggml-cuda/template-instances/mmq-instance-q4_1.cu
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+[499/537] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/mmq-instance-q4_k.cu.o
+/workspace/repo/ggml/src/ggml-cuda/template-instances/../mmq.cuh(937): warning #177-D: variable "tile_y_next" was declared but never referenced
+      int * tile_y_next = tile_y + tile_y_stride;
+            ^
+          detected during:
+            instantiation of "void mul_mat_q<type,J,fallback>(const char *, const int *, const int32_t *, const int32_t *, float *, float *, const float *, uint3, int, int, int, int, int, uint3, uint3, int, int, int, uint3, uint3, int, int, int, uint3) [with type=GGML_TYPE_Q4_K, J=8, fallback=false]" at line 1511
+            instantiation of "void launch_mul_mat_q<type,J,fallback>(ggml_backend_cuda_context &, const mmq_args &, cudaStream_t) [with type=GGML_TYPE_Q4_K, J=8, fallback=false]" at line 1608
+            instantiation of "void mul_mat_q_switch_J<type,fallback>(ggml_backend_cuda_context &, const mmq_args &, cudaStream_t) [with type=GGML_TYPE_Q4_K, fallback=false]" at line 1666
+            instantiation of "void mul_mat_q_case<type>(ggml_backend_cuda_context &, const mmq_args &, cudaStream_t) [with type=GGML_TYPE_Q4_K]" at line 5 of /workspace/repo/ggml/src/ggml-cuda/template-instances/mmq-instance-q4_k.cu
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+[500/537] Building CXX object common/CMakeFiles/llama-common.dir/arg.cpp.o
+[501/537] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/mmq-instance-q5_k.cu.o
+/workspace/repo/ggml/src/ggml-cuda/template-instances/../mmq.cuh(937): warning #177-D: variable "tile_y_next" was declared but never referenced
+      int * tile_y_next = tile_y + tile_y_stride;
+            ^
+          detected during:
+            instantiation of "void mul_mat_q<type,J,fallback>(const char *, const int *, const int32_t *, const int32_t *, float *, float *, const float *, uint3, int, int, int, int, int, uint3, uint3, int, int, int, uint3, uint3, int, int, int, uint3) [with type=GGML_TYPE_Q5_K, J=8, fallback=false]" at line 1511
+            instantiation of "void launch_mul_mat_q<type,J,fallback>(ggml_backend_cuda_context &, const mmq_args &, cudaStream_t) [with type=GGML_TYPE_Q5_K, J=8, fallback=false]" at line 1608
+            instantiation of "void mul_mat_q_switch_J<type,fallback>(ggml_backend_cuda_context &, const mmq_args &, cudaStream_t) [with type=GGML_TYPE_Q5_K, fallback=false]" at line 1666
+            instantiation of "void mul_mat_q_case<type>(ggml_backend_cuda_context &, const mmq_args &, cudaStream_t) [with type=GGML_TYPE_Q5_K]" at line 5 of /workspace/repo/ggml/src/ggml-cuda/template-instances/mmq-instance-q5_k.cu
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+[502/537] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/mmq-instance-iq2_s.cu.o
+/workspace/repo/ggml/src/ggml-cuda/template-instances/../mmq.cuh(937): warning #177-D: variable "tile_y_next" was declared but never referenced
+      int * tile_y_next = tile_y + tile_y_stride;
+            ^
+          detected during:
+            instantiation of "void mul_mat_q<type,J,fallback>(const char *, const int *, const int32_t *, const int32_t *, float *, float *, const float *, uint3, int, int, int, int, int, uint3, uint3, int, int, int, uint3, uint3, int, int, int, uint3) [with type=GGML_TYPE_IQ2_S, J=8, fallback=false]" at line 1511
+            instantiation of "void launch_mul_mat_q<type,J,fallback>(ggml_backend_cuda_context &, const mmq_args &, cudaStream_t) [with type=GGML_TYPE_IQ2_S, J=8, fallback=false]" at line 1608
+            instantiation of "void mul_mat_q_switch_J<type,fallback>(ggml_backend_cuda_context &, const mmq_args &, cudaStream_t) [with type=GGML_TYPE_IQ2_S, fallback=false]" at line 1666
+            instantiation of "void mul_mat_q_case<type>(ggml_backend_cuda_context &, const mmq_args &, cudaStream_t) [with type=GGML_TYPE_IQ2_S]" at line 5 of /workspace/repo/ggml/src/ggml-cuda/template-instances/mmq-instance-iq2_s.cu
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+[503/537] Building CXX object vendor/cpp-httplib/CMakeFiles/cpp-httplib.dir/httplib.cpp.o
+[504/537] Linking CXX static library vendor/cpp-httplib/libcpp-httplib.a
+[505/537] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/mmq-instance-q5_0.cu.o
+/workspace/repo/ggml/src/ggml-cuda/template-instances/../mmq.cuh(937): warning #177-D: variable "tile_y_next" was declared but never referenced
+      int * tile_y_next = tile_y + tile_y_stride;
+            ^
+          detected during:
+            instantiation of "void mul_mat_q<type,J,fallback>(const char *, const int *, const int32_t *, const int32_t *, float *, float *, const float *, uint3, int, int, int, int, int, uint3, uint3, int, int, int, uint3, uint3, int, int, int, uint3) [with type=GGML_TYPE_Q5_0, J=8, fallback=false]" at line 1511
+            instantiation of "void launch_mul_mat_q<type,J,fallback>(ggml_backend_cuda_context &, const mmq_args &, cudaStream_t) [with type=GGML_TYPE_Q5_0, J=8, fallback=false]" at line 1608
+            instantiation of "void mul_mat_q_switch_J<type,fallback>(ggml_backend_cuda_context &, const mmq_args &, cudaStream_t) [with type=GGML_TYPE_Q5_0, fallback=false]" at line 1666
+            instantiation of "void mul_mat_q_case<type>(ggml_backend_cuda_context &, const mmq_args &, cudaStream_t) [with type=GGML_TYPE_Q5_0]" at line 5 of /workspace/repo/ggml/src/ggml-cuda/template-instances/mmq-instance-q5_0.cu
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+[506/537] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/mmq-instance-iq2_xs.cu.o
+/workspace/repo/ggml/src/ggml-cuda/template-instances/../mmq.cuh(937): warning #177-D: variable "tile_y_next" was declared but never referenced
+      int * tile_y_next = tile_y + tile_y_stride;
+            ^
+          detected during:
+            instantiation of "void mul_mat_q<type,J,fallback>(const char *, const int *, const int32_t *, const int32_t *, float *, float *, const float *, uint3, int, int, int, int, int, uint3, uint3, int, int, int, uint3, uint3, int, int, int, uint3) [with type=GGML_TYPE_IQ2_XS, J=8, fallback=false]" at line 1511
+            instantiation of "void launch_mul_mat_q<type,J,fallback>(ggml_backend_cuda_context &, const mmq_args &, cudaStream_t) [with type=GGML_TYPE_IQ2_XS, J=8, fallback=false]" at line 1608
+            instantiation of "void mul_mat_q_switch_J<type,fallback>(ggml_backend_cuda_context &, const mmq_args &, cudaStream_t) [with type=GGML_TYPE_IQ2_XS, fallback=false]" at line 1666
+            instantiation of "void mul_mat_q_case<type>(ggml_backend_cuda_context &, const mmq_args &, cudaStream_t) [with type=GGML_TYPE_IQ2_XS]" at line 5 of /workspace/repo/ggml/src/ggml-cuda/template-instances/mmq-instance-iq2_xs.cu
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+[507/537] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/mmq-instance-q3_k.cu.o
+/workspace/repo/ggml/src/ggml-cuda/template-instances/../mmq.cuh(937): warning #177-D: variable "tile_y_next" was declared but never referenced
+      int * tile_y_next = tile_y + tile_y_stride;
+            ^
+          detected during:
+            instantiation of "void mul_mat_q<type,J,fallback>(const char *, const int *, const int32_t *, const int32_t *, float *, float *, const float *, uint3, int, int, int, int, int, uint3, uint3, int, int, int, uint3, uint3, int, int, int, uint3) [with type=GGML_TYPE_Q3_K, J=8, fallback=false]" at line 1511
+            instantiation of "void launch_mul_mat_q<type,J,fallback>(ggml_backend_cuda_context &, const mmq_args &, cudaStream_t) [with type=GGML_TYPE_Q3_K, J=8, fallback=false]" at line 1608
+            instantiation of "void mul_mat_q_switch_J<type,fallback>(ggml_backend_cuda_context &, const mmq_args &, cudaStream_t) [with type=GGML_TYPE_Q3_K, fallback=false]" at line 1666
+            instantiation of "void mul_mat_q_case<type>(ggml_backend_cuda_context &, const mmq_args &, cudaStream_t) [with type=GGML_TYPE_Q3_K]" at line 5 of /workspace/repo/ggml/src/ggml-cuda/template-instances/mmq-instance-q3_k.cu
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+[508/537] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/mmq-instance-q6_k.cu.o
+/workspace/repo/ggml/src/ggml-cuda/template-instances/../mmq.cuh(937): warning #177-D: variable "tile_y_next" was declared but never referenced
+      int * tile_y_next = tile_y + tile_y_stride;
+            ^
+          detected during:
+            instantiation of "void mul_mat_q<type,J,fallback>(const char *, const int *, const int32_t *, const int32_t *, float *, float *, const float *, uint3, int, int, int, int, int, uint3, uint3, int, int, int, uint3, uint3, int, int, int, uint3) [with type=GGML_TYPE_Q6_K, J=8, fallback=false]" at line 1511
+            instantiation of "void launch_mul_mat_q<type,J,fallback>(ggml_backend_cuda_context &, const mmq_args &, cudaStream_t) [with type=GGML_TYPE_Q6_K, J=8, fallback=false]" at line 1608
+            instantiation of "void mul_mat_q_switch_J<type,fallback>(ggml_backend_cuda_context &, const mmq_args &, cudaStream_t) [with type=GGML_TYPE_Q6_K, fallback=false]" at line 1666
+            instantiation of "void mul_mat_q_case<type>(ggml_backend_cuda_context &, const mmq_args &, cudaStream_t) [with type=GGML_TYPE_Q6_K]" at line 5 of /workspace/repo/ggml/src/ggml-cuda/template-instances/mmq-instance-q6_k.cu
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+[509/537] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/mmq-instance-q5_1.cu.o
+/workspace/repo/ggml/src/ggml-cuda/template-instances/../mmq.cuh(937): warning #177-D: variable "tile_y_next" was declared but never referenced
+      int * tile_y_next = tile_y + tile_y_stride;
+            ^
+          detected during:
+            instantiation of "void mul_mat_q<type,J,fallback>(const char *, const int *, const int32_t *, const int32_t *, float *, float *, const float *, uint3, int, int, int, int, int, uint3, uint3, int, int, int, uint3, uint3, int, int, int, uint3) [with type=GGML_TYPE_Q5_1, J=8, fallback=false]" at line 1511
+            instantiation of "void launch_mul_mat_q<type,J,fallback>(ggml_backend_cuda_context &, const mmq_args &, cudaStream_t) [with type=GGML_TYPE_Q5_1, J=8, fallback=false]" at line 1608
+            instantiation of "void mul_mat_q_switch_J<type,fallback>(ggml_backend_cuda_context &, const mmq_args &, cudaStream_t) [with type=GGML_TYPE_Q5_1, fallback=false]" at line 1666
+            instantiation of "void mul_mat_q_case<type>(ggml_backend_cuda_context &, const mmq_args &, cudaStream_t) [with type=GGML_TYPE_Q5_1]" at line 5 of /workspace/repo/ggml/src/ggml-cuda/template-instances/mmq-instance-q5_1.cu
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+[510/537] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/argsort.cu.o
+[511/537] Building CXX object tests/CMakeFiles/test-backend-ops.dir/test-backend-ops.cpp.o
+[512/537] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/mmq-instance-q2_k.cu.o
+/workspace/repo/ggml/src/ggml-cuda/template-instances/../mmq.cuh(937): warning #177-D: variable "tile_y_next" was declared but never referenced
+      int * tile_y_next = tile_y + tile_y_stride;
+            ^
+          detected during:
+            instantiation of "void mul_mat_q<type,J,fallback>(const char *, const int *, const int32_t *, const int32_t *, float *, float *, const float *, uint3, int, int, int, int, int, uint3, uint3, int, int, int, uint3, uint3, int, int, int, uint3) [with type=GGML_TYPE_Q2_K, J=8, fallback=false]" at line 1511
+            instantiation of "void launch_mul_mat_q<type,J,fallback>(ggml_backend_cuda_context &, const mmq_args &, cudaStream_t) [with type=GGML_TYPE_Q2_K, J=8, fallback=false]" at line 1608
+            instantiation of "void mul_mat_q_switch_J<type,fallback>(ggml_backend_cuda_context &, const mmq_args &, cudaStream_t) [with type=GGML_TYPE_Q2_K, fallback=false]" at line 1666
+            instantiation of "void mul_mat_q_case<type>(ggml_backend_cuda_context &, const mmq_args &, cudaStream_t) [with type=GGML_TYPE_Q2_K]" at line 5 of /workspace/repo/ggml/src/ggml-cuda/template-instances/mmq-instance-q2_k.cu
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+[513/537] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-tile-instance-dkq256-dv256.cu.o
+[514/537] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/mmvq.cu.o
+[515/537] Linking CUDA shared library bin/libggml-cuda.so.0.21.0
+[516/537] Creating library symlink bin/libggml-cuda.so.0 bin/libggml-cuda.so
+[517/537] Linking CXX shared library bin/libggml.so.0.21.0
+[518/537] Creating library symlink bin/libggml.so.0 bin/libggml.so
+[519/537] Linking CXX shared library bin/libllama.so.0.2.0
+[520/537] Creating library symlink bin/libllama.so.0 bin/libllama.so
+[521/537] Linking CXX shared library bin/libmtmd.so.0.2.0
+[522/537] Creating library symlink bin/libmtmd.so.0 bin/libmtmd.so
+[523/537] Linking CXX shared library bin/libllama-common.so.0.2.0
+[524/537] Creating library symlink bin/libllama-common.so.0 bin/libllama-common.so
+[525/537] Linking CXX static library tools/server/libserver-context.a
+[526/537] Linking CXX shared library bin/libllama-quantize-impl.so
+[527/537] Linking CXX shared library bin/libllama-perplexity-impl.so
+[528/537] Linking CXX executable bin/llama-speculative-simple
+[529/537] Linking CXX shared library bin/libllama-bench-impl.so
+[530/537] Linking CXX executable bin/test-backend-ops
+[531/537] Linking CXX executable bin/llama-quantize
+[532/537] Linking CXX executable bin/llama-perplexity
+[533/537] Linking CXX executable bin/llama-bench
+[534/537] Linking CXX shared library bin/libllama-server-impl.so
+[535/537] Linking CXX shared library bin/libllama-cli-impl.so
+[536/537] Linking CXX executable bin/llama-server
+[537/537] Linking CXX executable bin/llama-cli
+[bootstrap 02:07:20] OK in 785s

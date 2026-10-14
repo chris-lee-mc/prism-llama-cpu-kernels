@@ -322,6 +322,11 @@ def log_checks(text: str, spec_type: str) -> dict:
     return out
 
 
+# every line log_checks reads; scanned over the whole log, not only its head and tail
+CHECK_LINE_RE = re.compile("n_rs_seq|partial sequence removal|speculative decoding|created context checkpoint|speculative implementation|"
+                           "KV checkpoints instead|" + e5_spec.BS_PROBLEM_RE.pattern, re.I)
+
+
 CREATED_RE = re.compile(r"created speculative checkpoint")
 RESTORED_RE = re.compile(r"restoring speculative checkpoint")
 ACCEPT_DBG_RE = re.compile(r"accepted\s+(\d+)/\s*(\d+) draft tokens, new n_tokens")           # SLT_DBG, printed after a step that did not restore
@@ -403,7 +408,7 @@ def run_config(cfg: dict, *, bin_dir, target: str, draft: str | None, prompts: l
     finally:
         log = srv.head_tail()
         res["spec_log"] = e5_spec.spec_log_lines(log, 8)
-        res["checks"] = log_checks(log, cfg["spec_type"])
+        res["checks"] = log_checks(srv.grep(CHECK_LINE_RE), cfg["spec_type"])
         res["log_lines"] = log.count("\n")
         srv.stop()
     res["wall_s"] = time.monotonic() - t0

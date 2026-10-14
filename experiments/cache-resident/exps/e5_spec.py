@@ -159,6 +159,15 @@ class Server:
             data = data[:head] + b"\n" + data[-tail:]
         return data.decode("utf-8", errors="replace")
 
+    def grep(self, pattern: re.Pattern) -> str:
+        """Lines of the whole log that match pattern, in order. A -lv 5 startup can push the context lines past the head_tail window."""
+        self.log.flush()
+        try:
+            with open(self.log_path, errors="replace") as f:
+                return "".join(ln for ln in f if pattern.search(ln))
+        except OSError:
+            return ""
+
     def wait_ready(self, timeout_s: float) -> tuple[bool, str | None]:
         t0 = time.monotonic()
         while time.monotonic() - t0 < timeout_s:
