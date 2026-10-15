@@ -8,6 +8,7 @@
 #include "ggml.h"
 #include "llama.h"
 
+#include <cstdlib>
 #include <set>
 #include <sstream>
 #include <string>
@@ -373,6 +374,20 @@ struct common_params_speculative_ngram_cache {
     std::string lookup_cache_dynamic; // path of dynamic ngram cache file for lookup decoding
 };
 
+// experiment: GGML_EXP_NGRAM_RS=N gives the n-gram types an in-batch rollback window of N tokens, longer n-gram drafts are cut to N
+static inline uint32_t common_exp_ngram_rs() {
+    static const uint32_t n = [] {
+        const char * env = getenv("GGML_EXP_NGRAM_RS");
+        return env != nullptr ? (uint32_t) std::max(0, atoi(env)) : 0u;
+    }();
+    return n;
+}
+
+static inline bool common_speculative_type_is_ngram(enum common_speculative_type t) {
+    return t == COMMON_SPECULATIVE_TYPE_NGRAM_SIMPLE || t == COMMON_SPECULATIVE_TYPE_NGRAM_MAP_K || t == COMMON_SPECULATIVE_TYPE_NGRAM_MAP_K4V ||
+           t == COMMON_SPECULATIVE_TYPE_NGRAM_MOD    || t == COMMON_SPECULATIVE_TYPE_NGRAM_CACHE;
+}
+
 struct common_params_speculative {
     std::vector<enum common_speculative_type> types = { COMMON_SPECULATIVE_TYPE_NONE };
 
@@ -395,7 +410,13 @@ struct common_params_speculative {
             return t == COMMON_SPECULATIVE_TYPE_DRAFT_SIMPLE || t == COMMON_SPECULATIVE_TYPE_DRAFT_MTP || t == COMMON_SPECULATIVE_TYPE_DRAFT_EAGLE3 || t == COMMON_SPECULATIVE_TYPE_DRAFT_DFLASH || t == COMMON_SPECULATIVE_TYPE_DRAFT_DSPARK;
         });
 
-        return needs_rs_seq ? draft.n_max : 0u;
+        const uint32_t n_rs_seq = needs_rs_seq ? draft.n_max : 0u;
+
+        if (common_exp_ngram_rs() > 0 && std::any_of(types.begin(), types.end(), common_speculative_type_is_ngram)) {
+            return std::max(n_rs_seq, common_exp_ngram_rs());
+        }
+
+        return n_rs_seq;
     }
 };
 

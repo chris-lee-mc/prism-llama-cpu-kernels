@@ -854,6 +854,8 @@ private:
     common_context_seq_rm_type ctx_tgt_seq_rm_type = COMMON_CONTEXT_SEQ_RM_TYPE_NO;
     common_context_seq_rm_type ctx_dft_seq_rm_type = COMMON_CONTEXT_SEQ_RM_TYPE_NO;
 
+    bool exp_skip_reeval = false; // env: GGML_EXP_SKIP_DRAFT_REEVAL (experiment)
+
     common_speculative_ptr spec;
 
     bool add_bos_token = true;
@@ -1201,6 +1203,20 @@ private:
 
         if (ctx_dft) {
             ctx_dft_seq_rm_type = common_context_can_seq_rm(ctx_dft);
+
+            // experiments: GGML_EXP_DRAFT_CKPT=1 restores the draft context from a checkpoint after drafting (reference for a correct draft state),
+            // GGML_EXP_SKIP_DRAFT_REEVAL=1 keeps the drafted tokens in the draft context instead of decoding the verify batch on it again
+            const char * env_ckpt = getenv("GGML_EXP_DRAFT_CKPT");
+            if (env_ckpt && atoi(env_ckpt) != 0 && ctx_dft_seq_rm_type == COMMON_CONTEXT_SEQ_RM_TYPE_RS) {
+                ctx_dft_seq_rm_type = COMMON_CONTEXT_SEQ_RM_TYPE_FULL;
+                SRV_INF("%s", "GGML_EXP_DRAFT_CKPT: the draft context uses checkpoints\n");
+            }
+
+            const char * env_skip = getenv("GGML_EXP_SKIP_DRAFT_REEVAL");
+            exp_skip_reeval = env_skip && atoi(env_skip) != 0 && ctx_dft_seq_rm_type == COMMON_CONTEXT_SEQ_RM_TYPE_RS;
+            if (exp_skip_reeval) {
+                SRV_INF("%s", "GGML_EXP_SKIP_DRAFT_REEVAL: the draft context keeps its drafted tokens\n");
+            }
         }
 
         std::vector<common_speculative_type> spec_types_requested;
@@ -2997,7 +3013,10 @@ private:
                     ckpt.load_dft(ctx_dft, slot.id, LLAMA_STATE_SEQ_FLAGS_PARTIAL_ONLY);
                 }
 
-                if (!llama_memory_seq_rm(llama_get_memory(ctx_dft), slot.id, ckpt.pos_max + 1, -1)) {
+                // GGML_EXP_SKIP_DRAFT_REEVAL: the drafted tokens are the start of the verify batch, keep them
+                const bool keep_dft = exp_skip_reeval && !draft.empty();
+
+                if (!keep_dft && !llama_memory_seq_rm(llama_get_memory(ctx_dft), slot.id, ckpt.pos_max + 1, -1)) {
                     GGML_ABORT("failed to remove sequence %d\n", slot.id);
                 }
             }

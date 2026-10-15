@@ -143,6 +143,15 @@ static bool common_speculative_are_compatible(
 
 using common_speculative_draft_params_vec = std::vector<common_speculative_draft_params>;
 
+// experiment: the draft context keeps its drafted tokens, so the verify batch is not decoded on it again [TAG_SPEC_AVOID_DRAFT_REEVAL]
+static bool common_exp_skip_draft_reeval() {
+    static const bool enabled = [] {
+        const char * env = std::getenv("GGML_EXP_SKIP_DRAFT_REEVAL");
+        return env != nullptr && std::atoi(env) != 0;
+    }();
+    return enabled;
+}
+
 // state of an implementation of speculative decoding
 //
 // each implementation has a unique type and a state that is implementation-specific
@@ -169,6 +178,12 @@ struct common_speculative_impl {
     int64_t t_begin_us  = 0; // total time spent in refresh of this implementation in microseconds.
     int64_t t_draft_us  = 0; // total time spent in generating drafts in this implementation in microseconds.
     int64_t t_accept_us = 0; // total time spent in accumulation of this implementation in microseconds.
+
+    // experiments, printed with the statistics
+    size_t n_exp_cut_drafts     = 0; // GGML_EXP_NGRAM_RS: n-gram drafts cut to the rollback window
+    size_t n_exp_cut_tokens     = 0;
+    size_t n_exp_skip_batches   = 0; // GGML_EXP_SKIP_DRAFT_REEVAL: verify batches not decoded on the draft context
+    size_t n_exp_catchup_tokens = 0; // tokens draft() decoded in front of id_last instead
 
     common_speculative_impl(common_speculative_type type, uint32_t n_seq) : type(type), n_seq(n_seq) {}
 
@@ -998,6 +1013,34 @@ struct common_speculative_impl_draft_simple : public common_speculative_impl {
         llama_batch batch_dft = batch;
         batch_dft.logits = nullptr;
 
+        if (common_exp_skip_draft_reeval() && batch.token && batch.pos && batch.seq_id && batch.n_tokens > 0) {
+            // a seq whose first token is already in the draft context is a verify batch of our own draft: skip it
+            auto * mem = llama_get_memory(ctx_dft);
+            std::vector<int> keep(n_seq, -1);
+            bool any_skip = false;
+            for (int i = 0; i < batch.n_tokens; ++i) {
+                const llama_seq_id s = batch.seq_id[i][0];
+                if (keep[s] < 0) {
+                    keep[s] = batch.pos[i] > llama_memory_seq_pos_max(mem, s) ? 1 : 0;
+                    any_skip = any_skip || keep[s] == 0;
+                }
+            }
+            if (any_skip) {
+                n_exp_skip_batches++;
+                common_batch_clear(this->batch);
+                for (int i = 0; i < batch.n_tokens; ++i) {
+                    if (keep[batch.seq_id[i][0]] == 1) {
+                        common_batch_add(this->batch, batch.token[i], batch.pos[i], { batch.seq_id[i][0] }, false);
+                    }
+                }
+                if (this->batch.n_tokens == 0) {
+                    return true;
+                }
+                batch_dft = this->batch;
+                batch_dft.logits = nullptr;
+            }
+        }
+
         const int ret = llama_decode(ctx_dft, batch_dft);
 
         if (ret != 0) {
@@ -1017,6 +1060,7 @@ struct common_speculative_impl_draft_simple : public common_speculative_impl {
         // keep track of which sequences are still drafting
         int n_drafting = 0;
         std::vector<bool> drafting(n_seq);
+        std::vector<int>  i_last(n_seq, -1);
 
         for (llama_seq_id seq_id = 0; seq_id < (llama_seq_id) n_seq; ++seq_id) {
             auto & dp = dparams[seq_id];
@@ -1029,7 +1073,19 @@ struct common_speculative_impl_draft_simple : public common_speculative_impl {
             drafting[seq_id] = true;
             common_sampler_reset(smpls[seq_id].get());
 
+            if (common_exp_skip_draft_reeval() && (llama_pos) dp.prompt->size() == dp.n_past) {
+                // the skipped verify batch can leave accepted tokens out (the last draft token on full acceptance): add them here
+                const llama_pos p0 = llama_memory_seq_pos_max(llama_get_memory(ctx_dft), seq_id) + 1;
+                if (p0 < dp.n_past && dp.n_past - p0 < (llama_pos) llama_n_batch(ctx_dft) - (llama_pos) n_seq) {
+                    for (llama_pos p = std::max<llama_pos>(p0, 0); p < dp.n_past; ++p) {
+                        common_batch_add(batch, dp.prompt->at(p), p, { seq_id }, false);
+                        n_exp_catchup_tokens++;
+                    }
+                }
+            }
+
             common_batch_add(batch, dp.id_last, dp.n_past, { seq_id }, true);
+            i_last[seq_id] = batch.n_tokens - 1;
         }
 
         int ret = llama_decode(ctx_dft, batch);
@@ -1052,7 +1108,7 @@ struct common_speculative_impl_draft_simple : public common_speculative_impl {
 
                 auto * smpl = smpls[seq_id].get();
 
-                common_sampler_sample(smpl, ctx_dft, i_batch, true);
+                common_sampler_sample(smpl, ctx_dft, i == 0 ? i_last[seq_id] : i_batch, true);
                 ++i_batch;
 
                 const auto * cur_p = common_sampler_get_candidates(smpl, true);
@@ -3091,6 +3147,14 @@ struct common_speculative_impl_ngram_mod : public common_speculative_impl {
         }
         result.resize(result.size() - n);
 
+        // GGML_EXP_NGRAM_RS: cut here, so the acceptance check in accept() sees the length that was sent
+        const size_t n_cut = common_exp_ngram_rs();
+        if (n_cut > 0 && result.size() > n_cut) {
+            n_exp_cut_drafts++;
+            n_exp_cut_tokens += result.size() - n_cut;
+            result.resize(n_cut);
+        }
+
         // store length of drafted n-gram for later acceptance analysis
         sinfo.n_draft_last = result.size();
     }
@@ -3846,6 +3910,13 @@ void common_speculative_draft(common_speculative * spec) {
             if (dp.drafting && !result.empty()) {
                 dp.drafting = false;
 
+                const size_t n_cut = common_exp_ngram_rs();
+                if (n_cut > 0 && common_speculative_type_is_ngram(impl->type) && result.size() > n_cut) {
+                    impl->n_exp_cut_drafts++;
+                    impl->n_exp_cut_tokens += result.size() - n_cut;
+                    result.resize(n_cut);
+                }
+
                 if (dp.n_max > 0) {
                     if (!result.empty() && (int) result.size() > dp.n_max) {
                         SPC_DBG("truncating draft to %d tokens\n", dp.n_max);
@@ -4000,6 +4071,15 @@ void common_speculative_print_stats(const common_speculative * spec) {
                 impl->n_acc_tokens,
                 str_stats.c_str(),
                 str_perf.c_str());
+
+        if (common_exp_ngram_rs() > 0 && common_speculative_type_is_ngram(impl->type)) {
+            SPC_TRC("exp ngram-rs     %16s: window = %u, cut drafts = %zu, cut tokens = %zu\n",
+                    common_speculative_type_to_str(impl->type).c_str(), common_exp_ngram_rs(), impl->n_exp_cut_drafts, impl->n_exp_cut_tokens);
+        }
+        if (common_exp_skip_draft_reeval() && impl->type == COMMON_SPECULATIVE_TYPE_DRAFT_SIMPLE) {
+            SPC_TRC("exp skip-reeval  %16s: skipped batches = %zu, catch-up tokens = %zu\n",
+                    common_speculative_type_to_str(impl->type).c_str(), impl->n_exp_skip_batches, impl->n_exp_catchup_tokens);
+        }
     }
 }
 
