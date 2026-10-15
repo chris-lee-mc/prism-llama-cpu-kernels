@@ -2,6 +2,12 @@
 
 *Companion to proposal v3.1. Sized to run on rented RunPod pods, with the RTX PRO 6000 Blackwell as the primary target and cheaper consumer cards used wherever the result transfers. Prices are RunPod on-demand as of Oct 2026; re-query before launching.*
 
+## Status (closed tracks)
+
+- L2-residency PR track (section 10, original goal): closed as a negative result. E1 best gain 17% vs the 20% gate (3090 control 0-1%), E3 no gain on a real 0.8B model, E3d at most about 1% end to end.
+- E6 (ternary draft training) dropped: the draft is latency bound, ternary saves about 0.1 ms per token, and Phase 2 never started.
+- Section 10 now points to the candidates that survived: the PQ2_0 multi-column kernel on sm_120 (fork PR, conditional on a 600 W PRO 6000 paired rerun, a llama-server spec run and a 4090 check) and two upstream investigations (in-batch rollback for n-gram types, skipping the draft re-eval; measure first, issue before code). Config guidance: CONFIG-GUIDANCE.md. Evidence: REPORT.html.
+
 ## 1. GPU matrix
 
 | GPU | Arch / SM | L2 | VRAM | BW | RunPod $/hr (community / secure) | Role |
@@ -109,6 +115,8 @@ def reset(dev=0):
 No purchase decision. RunPod is the primary platform for all runs, PRO 6000 included (cheaper than GCP). A PRO 6000 on GCP at work is the fallback only when RunPod has no PRO 6000 capacity.
 
 ## 10. PR track (end goal)
+
+Status: the L2-residency scope below is closed (see Status). Current candidates: (1) fork PR enabling the PQ2_0 multi-column kernel on sm_120 plus `ggml_cuda_pdl_sync()` before its first activation read (prototype: `GGML_CUDA_PQ2_MULTICOL` on this branch, reference only); (2) upstream investigations: in-batch rollback for n-gram types, and skipping the draft re-eval (upstream TODO `TAG_SPEC_AVOID_DRAFT_REEVAL`). The authorship rules below still apply. The remainder of this section is the original, closed L2 plan.
 
 Target: a PR to PrismML-Eng/llama.cpp `prism` with an L2-residency optimization for speculative decoding on large-L2 Blackwell cards, plus a matching draft model released as GGUF on Hugging Face (referenced from the PR, not included in it).
 
