@@ -12,7 +12,7 @@ EXP = pathlib.Path(__file__).resolve().parent.parent
 MAN = json.loads((EXP / "exps" / "manifest.json").read_text())
 KEYS = {"cmd", "gpus", "est_min", "failsafe_min", "build_llama", "disk_gb", "desc"}
 OPTIONAL_KEYS = {"result_exp", "min_power_frac", "power_tol"}    # result_exp: a chained entry, the exp dir of its first command
-LONG_FAILSAFE = {"e4_pdl": 70, "r1": 55, "r2a": 55, "r2b_mc": 55, "r2b_spec": 55, "wrap_a3": 55, "wrap_b": 55, "wrap_ab": 64}  # clone + cold build + downloads + the runs; launch needs --allow-long
+LONG_FAILSAFE = {"e4_pdl": 70, "r1": 55, "r2a": 55, "r2b_mc": 55, "r2b_spec": 55, "wrap_a": 55, "wrap_a3": 55, "wrap_b": 55, "wrap_ab": 64}  # clone + cold build + downloads + the runs; launch needs --allow-long
 EXPECTED = {"p0_smoke", "p0_l2", "e1", "e2_08b", "e2_2b", "e3", "e3d", "e4_pq2", "e4_ptq1", "e4_pdl", "e5_base", "e5_k4", "e5_k6", "e5_k8", "e5_cost", "r1", "r2a", "r2b_mc", "r2b_spec", "wrap_a", "wrap_a3", "wrap_b", "wrap_ab"}
 
 
@@ -144,7 +144,7 @@ def test_wrap_entries_fit_one_session_each():
     from exps import wrap_a, wrap_a3, wrap_b
     fetch = "python3 -m exps.fetch_models --models pq2,draft_q8_0 --timeout-min 6 && "
     for key, head, mod, budget, failsafe in (
-            ("wrap_a", fetch + "python3 -m exps.wrap_a", "wrap_a", wrap_a.DEFAULT_TOTAL_MIN, 40),
+            ("wrap_a", fetch + "python3 -m exps.wrap_a", "wrap_a", wrap_a.DEFAULT_TOTAL_MIN, 55),
             ("wrap_b", fetch + "python3 -m exps.wrap_b", "wrap_b", wrap_b.DEFAULT_TOTAL_MIN, 55),
             ("wrap_a3", "python3 -m exps.wrap_a3", "wrap_a3", wrap_a3.DEFAULT_TOTAL_MIN, 55)):
         e = MAN[key]
@@ -155,8 +155,9 @@ def test_wrap_entries_fit_one_session_each():
     # A1 and A2 must not land on a Max-Q; B is not PR evidence (Max-Q or 5090); A3 is the Ada check
     assert MAN["wrap_a"]["gpus"] == ["pro6000_600w"] and MAN["wrap_b"]["gpus"] == ["pro6000_maxq", "rtx5090"] and MAN["wrap_a3"]["gpus"] == ["rtx4090"]
     assert not any("Max-Q" in n for n in gpus.RUNPOD_CANDIDATES["pro6000_600w"])
-    # wrap_a at the trimmed budget stays inside the 40 min limit that needs no --allow-long
-    assert MAN["wrap_a"]["failsafe_min"] <= 40 and MAN["wrap_a"]["est_min"] == 20
+    # wrap_a: est 20 min is the usual run; the 55 min failsafe holds a part t with three timeouts (16 min) plus the 5 min localization
+    assert MAN["wrap_a"]["failsafe_min"] == 55 and MAN["wrap_a"]["est_min"] == 20
+    assert wrap_a.TBO_MIN_S == 960 and wrap_a.TBO_MIN_S / 60 + wrap_a.LOCALIZE_S / 60 + runpod.BOOTSTRAP_MIN + runpod.LLAMA_BUILD_MIN + 6 + 5 <= 55
 
 
 def test_wrap_ab_runs_both_in_one_600w_session():
@@ -182,6 +183,6 @@ def test_power_gates_of_the_pr_evidence_entries():
 
 def test_wrap_a_budget_gate_reserve_is_inside_the_stated_cost():
     from infra import runpod
-    # the gate reserves (failsafe + 5) min at the price cap: wrap_a about $1.3 worst case, the 4090 check well under a dollar
-    assert runpod.est_cost(runpod.DEFAULT_MAX_PRICE["pro6000_600w"], MAN["wrap_a"]["failsafe_min"]) < 1.35
+    # the gate reserves (failsafe + 5) min at the price cap: wrap_a about $1.75 worst case (the usual run ends at about $1.2), the 4090 check well under a dollar
+    assert runpod.est_cost(runpod.DEFAULT_MAX_PRICE["pro6000_600w"], MAN["wrap_a"]["failsafe_min"]) < 1.8
     assert runpod.est_cost(runpod.DEFAULT_MAX_PRICE["rtx4090"], MAN["wrap_a3"]["failsafe_min"]) < 0.9

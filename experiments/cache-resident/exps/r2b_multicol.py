@@ -9,7 +9,7 @@ activation quantizer triggers programmatic launch completion at its start, so th
 Configs (environment of each process): off = variable unset (default), on = GGML_CUDA_PQ2_MULTICOL=1, on_pdl0 = on plus GGML_CUDA_PDL=0
 (control: PDL off for every kernel, so the sync cannot matter).
 t  correctness. test-backend-ops test -o MUL_MAT -b CUDA0 -p type_a=pq2_0, (every PQ2_0 case against the CPU backend; widths 1-32 at
-   K 1024 and 5120, the Bonsai 2 shapes with odd row counts, the 27B projections). on, on_pdl0 and off, in that order (a short budget drops off first). A filter that matches nothing
+   K 1024 and 5120, the Bonsai 2 shapes with odd row counts, the 27B projections). on, on_pdl0 and off, in that order (a short budget drops off first). Every run streams its output to results/<exp>/<gpu>/raw/<stamp>-tbo-<config>.{out,err}.log, is sampled with nvidia-smi, and on a timeout keeps the partial output (last case, cases done, hang or slow diagnosis) and kills the process group. A filter that matches nothing
    (an older test-backend-ops without -p) runs MUL_MAT whole.
 k  kernel path. nsys CUDA trace (no capture range, private 0700 dir, report deleted after parsing, never in the results dir) of
    llama-bench -p 4 -n 0 -r 1: the kernel names for off and on. on must show mul_mat_vec_pq2_0_mc<(int)4> and no generic
@@ -30,12 +30,16 @@ Needs CR_LLAMA_BIN with llama-bench and test-backend-ops (CR_BUILD_LLAMA=1); nsy
 from __future__ import annotations
 
 import argparse
+import glob
 import os
 import pathlib
 import re
 import shutil
+import signal
 import subprocess
 import sys
+import tempfile
+import threading
 import time
 
 from exps import common, e4_bonsai, e4_pdl, e5_cost, hf_ids, r1, r1_step
@@ -62,6 +66,15 @@ TBO_FAIL_RE = re.compile(r"\bFAIL\b")
 GPU600_TAGS = ("pro6000-ws", "pro6000-server")     # the 600 W editions; a Max-Q (300 W) gives other timings
 GPU600_MIN_DEFAULT_W = 550.0
 POWER_TOL = 0.01                                    # PR evidence: power.limit must equal power.default_limit within this fraction
+TBO_TIMEOUT_S = 600.0                               # default limit of one test-backend-ops run (wrap_a passes 300)
+TBO_SMI_FIELDS = ("clocks.sm", "clocks.mem", "power.draw", "utilization.gpu", "utilization.memory", "memory.used")
+TBO_SMI_PERIOD_S = 5.0
+TBO_DIAG_WINDOW_S = 60.0                            # no progress over this long: GPU idle or pegged means a hang, else slow
+IDLE_UTIL, BUSY_UTIL = 5.0, 90.0                    # utilization.gpu in percent
+CASE_RE = re.compile(r"^\s*([A-Z][A-Z_0-9]*)\((.*?)\):\s*(.*)$")
+RACECHECK_RE = re.compile(r"RACECHECK SUMMARY:\s*(\d+) hazards? displayed \((\d+) errors?, (\d+) warnings?\)")
+SAN_RUN_S, CLB_RUN_S, LOCALIZE_MIN_S = 200.0, 300.0, 60.0    # limits of the racecheck run and of the launch-blocking run, time left that a run needs
+SAN_FILTER = r"type_a=pq2_0,type_b=f32,m=97,n=(3|4|8),k=(1024|5120),"       # 6 multi-column cases for compute-sanitizer
 BOOT_POWER_RE = re.compile(r"host check: power limit,default ([0-9.]+),([0-9.]+) W ok")
 
 
@@ -278,24 +291,190 @@ def gpu_mem() -> str | None:
     return p.stdout.strip() or p.stderr.strip()
 
 
-def run_tbo(cmd: list[str], env: dict, timeout: float) -> dict:
-    row = {"cmd": cmd}
+def tbo_progress(text: str) -> dict:
+    """Cases in the console output of test-backend-ops so far: the last case line, cases with a result, passed, failed."""
+    last, done, passed, failed, has_result = None, 0, 0, 0, True
+    for ln in ANSI_RE.sub("", text).splitlines():
+        m = CASE_RE.match(ln)
+        if not m:
+            continue
+        res = m.group(3).strip()
+        last, has_result = "%s(%s)" % (m.group(1), m.group(2)), bool(res)
+        if res.startswith("OK"):
+            done, passed = done + 1, passed + 1
+        elif res.startswith("FAIL"):
+            done, failed = done + 1, failed + 1
+        elif res:
+            done += 1
+    return {"last_case": last[:300] if last else None, "last_case_has_result": has_result, "cases_done": done, "passed_so_far": passed,
+            "fail_so_far": failed}
+
+
+def smi_tbo_sample() -> dict | None:
+    """One nvidia-smi sample (clocks, power, utilization, memory) of GPU 0; None when nvidia-smi fails or hangs."""
+    cmd = ["nvidia-smi", "--query-gpu=" + ",".join(TBO_SMI_FIELDS), "--format=csv,noheader,nounits", "-i", "0"]
     try:
-        p = subprocess.run(cmd, env=env, capture_output=True, text=True, timeout=max(1.0, timeout))
-    except subprocess.TimeoutExpired:
-        row.update(ok=False, error="timeout")
+        p = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    vals = [v.strip() for v in p.stdout.splitlines()[0].split(",")] if p.returncode == 0 and p.stdout.strip() else []
+    if len(vals) != len(TBO_SMI_FIELDS):
+        return None
+    out = {}
+    for k, v in zip(("sm_mhz", "mem_mhz", "power_w", "util", "mem_util", "mem_mib"), vals):
+        try:
+            out[k] = float(v)
+        except ValueError:
+            out[k] = None
+    return out
+
+
+def tbo_diagnosis(samples: list[dict], window_s: float | None = None) -> dict:
+    """Hang or slow, from the samples of a run that timed out (each has t, util, power_w, done = cases with a result).
+    slow_progress: cases finished in the last window. No case finished: idle_no_progress (GPU idle), pegged_no_progress (GPU busy
+    at >= 90%), partial_no_progress (between)."""
+    window_s = TBO_DIAG_WINDOW_S if window_s is None else window_s
+    ss = [s for s in samples if s.get("util") is not None]
+    if len(ss) < 3:
+        return {"verdict": "no_data", "n": len(ss)}
+    win = [s for s in ss if s["t"] >= ss[-1]["t"] - window_s]
+    win = win if len(win) >= 3 else ss[-3:]
+    prog = win[-1]["done"] - win[0]["done"]
+    util, power = common.median([s["util"] for s in win]), common.median([s.get("power_w") for s in win])
+    verdict = ("slow_progress" if prog > 0 else "idle_no_progress" if util <= IDLE_UTIL else
+               "pegged_no_progress" if util >= BUSY_UTIL else "partial_no_progress")
+    return {"verdict": verdict, "window_s": round(win[-1]["t"] - win[0]["t"], 1), "n": len(win), "cases_in_window": prog,
+            "util_med": util, "power_w_med": power}
+
+
+def smi_run_summary(samples: list[dict]) -> dict:
+    def col(k, f):
+        xs = [s[k] for s in samples if s.get(k) is not None]
+        return f(xs) if xs else None
+    return {"n": len(samples), "period_s": TBO_SMI_PERIOD_S, "util_med": col("util", common.median), "util_min": col("util", min),
+            "util_max": col("util", max), "power_w_med": col("power_w", common.median), "power_w_max": col("power_w", max),
+            "sm_mhz_med": col("sm_mhz", common.median), "sm_mhz_min": col("sm_mhz", min), "mem_mhz_med": col("mem_mhz", common.median),
+            "mem_mib_max": col("mem_mib", max)}
+
+
+def kill_group(proc: subprocess.Popen, grace_s: float = 10.0) -> str:
+    """SIGTERM to the process group, SIGKILL after grace_s; returns sigterm, sigkill or unkillable (a process stuck in the driver)."""
+    for sig, wait in ((signal.SIGTERM, grace_s), (signal.SIGKILL, 15.0)):
+        try:
+            os.killpg(proc.pid, sig)
+        except (ProcessLookupError, PermissionError):
+            pass
+        try:
+            proc.wait(timeout=wait)
+            if sig == signal.SIGTERM:
+                try:
+                    os.killpg(proc.pid, signal.SIGKILL)      # children that ignored the TERM
+                except (ProcessLookupError, PermissionError):
+                    pass
+            return "sigterm" if sig == signal.SIGTERM else "sigkill"
+        except subprocess.TimeoutExpired:
+            continue
+    return "unkillable"
+
+
+def _read(path: pathlib.Path) -> str:
+    try:
+        return path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return ""
+
+
+def run_tbo(cmd: list[str], env: dict, timeout: float, log_base: pathlib.Path | None = None) -> dict:
+    """Run one test-backend-ops (or sanitizer) command. stdout and stderr stream to <log_base>.out.log and .err.log (a temp dir when
+    log_base is None) and are kept on a timeout. nvidia-smi is sampled during the run. On a timeout the process group is killed and the
+    row has last_case, cases_done, elapsed_s and a hang-or-slow diagnosis."""
+    row: dict = {"cmd": cmd}
+    tmp = None if log_base else tempfile.mkdtemp(prefix="cr-tbo-")
+    base = log_base or pathlib.Path(tmp) / "tbo"
+    out_p, err_p = (base.with_name(base.name + ".%s.log" % k) for k in ("out", "err"))
+    row.update(log_out=out_p.name, log_err=err_p.name)
+    timeout = max(1.0, timeout)
+    samples: list[dict] = []
+    stop = threading.Event()
+    t0 = time.monotonic()
+    wrap = ["stdbuf", "-oL", "-eL"] if shutil.which("stdbuf") else []          # a hung run must not hold finished cases in a stdio buffer
+
+    def sampler():
+        while True:
+            s = smi_tbo_sample()
+            if s:
+                s.update(t=round(time.monotonic() - t0, 1), done=tbo_progress(_read(out_p))["cases_done"])
+                samples.append(s)
+            if stop.wait(TBO_SMI_PERIOD_S):
+                return
+    timed_out, killed, rc = False, None, None
+    try:
+        with open(out_p, "wb") as fo, open(err_p, "wb") as fe:
+            proc = subprocess.Popen(wrap + cmd, env=env, stdin=subprocess.DEVNULL, stdout=fo, stderr=fe, start_new_session=True)
+            th = threading.Thread(target=sampler, daemon=True)
+            th.start()
+            try:
+                rc = proc.wait(timeout=timeout)
+            except subprocess.TimeoutExpired:
+                row["elapsed_s"] = round(time.monotonic() - t0, 1)
+                timed_out, killed = True, kill_group(proc)
+            finally:
+                stop.set()
+                th.join(timeout=12)
+                if proc.poll() is None:
+                    kill_group(proc)
+    except OSError as e:
+        row.update(ok=False, error="%s: %s" % (type(e).__name__, e))
         return row
-    parsed = parse_tbo(p.stdout)
-    row.update(parsed, returncode=p.returncode, ok=p.returncode == 0 and parsed["total"] > 0)  # 0/0 tests (no CUDA) is not ok
+    finally:
+        stop.set()
+    row.setdefault("elapsed_s", round(time.monotonic() - t0, 1))
+    secrets = r1.secret_values()
+    out_t, err_t = _read(out_p), _read(err_p)
+    for path, text in ((out_p, out_t), (err_p, err_t)):
+        if r1.scrub(text, secrets) != text:                    # the logs ship with the results
+            path.write_text(r1.scrub(text, secrets), encoding="utf-8")
+    if tmp:
+        shutil.rmtree(tmp, ignore_errors=True)
+    row.update(tbo_progress(out_t), smi=smi_run_summary(samples), smi_samples=samples)
+    m = RACECHECK_RE.search(out_t + "\n" + err_t)
+    if m:
+        row["racecheck"] = {"hazards": int(m.group(1)), "errors": int(m.group(2)), "warnings": int(m.group(3))}
+    if timed_out:
+        text = ANSI_RE.sub("", out_t + "\n" + err_t)
+        row.update(ok=False, error="timeout", timeout_s=round(timeout, 1), killed=killed, diagnosis=tbo_diagnosis(samples),
+                   gpu_mem_after_kill=gpu_mem(), out_tail=r1.scrub(text[-3000:], secrets))
+        return row
+    parsed = parse_tbo(out_t)
+    row.update(parsed, returncode=rc, ok=rc == 0 and parsed["total"] > 0)  # 0/0 tests (no CUDA) is not ok
     if not row["ok"]:     # keep what failed: the console has no FAIL line for an allocation or setup error
-        text = ANSI_RE.sub("", (p.stdout or "") + "\n" + (p.stderr or ""))
+        text = ANSI_RE.sub("", (out_t or "") + "\n" + (err_t or ""))
         bad = [ln.strip()[:300] for ln in text.splitlines() if ln.strip() and not ln.rstrip().endswith(("OK", "not supported [CPU]"))]
-        row["problem_lines"] = r1.scrub(bad[:40], r1.secret_values())
-        row["out_tail"] = r1.scrub(text[-3000:], r1.secret_values())
+        row["problem_lines"] = r1.scrub(bad[:40], secrets)
+        row["out_tail"] = r1.scrub(text[-3000:], secrets)
     return row
 
 
-def tbo_part(bin_dir, budget: common.Budget, notes: list, order: list | None = None) -> list[dict]:
+def tbo_log_base(exp: str, gpu: str | None, name: str) -> pathlib.Path | None:
+    """results/<exp>/<gpu>/raw/<stamp>-tbo-<name>; None when the results dir is not writable (the logs then go to a temp dir)."""
+    try:
+        from infra.results import artifact_path
+        return artifact_path(exp, "tbo-" + name, gpu)
+    except (OSError, ValueError):
+        return None
+
+
+def tbo_line(name: str, row: dict, exp: str = EXP) -> str:
+    if row.get("error") == "timeout":
+        d = row.get("diagnosis") or {}
+        return "[%s] test-backend-ops %s TIMEOUT after %.0f s: %s cases done, last %s, %s" % (
+            exp, name, row.get("elapsed_s", 0), row.get("cases_done"), row.get("last_case"), d.get("verdict"))
+    return "[%s] test-backend-ops %s ok=%s %s/%s in %s s" % (exp, name, row.get("ok"), row.get("passed"), row.get("total"), row.get("elapsed_s"))
+
+
+def tbo_part(bin_dir, budget: common.Budget, notes: list, order: list | None = None, per_run_s: float = TBO_TIMEOUT_S,
+             exp: str = EXP, gpu: str | None = None) -> list[dict]:
+    """One run per config in order, each with its own timeout (per_run_s) and logs; a timeout or failure never skips the next run."""
     out = []
     if not (bin_dir / "test-backend-ops").exists():
         notes.append(f"{bin_dir / 'test-backend-ops'} not found; part t and f skipped")
@@ -304,13 +483,84 @@ def tbo_part(bin_dir, budget: common.Budget, notes: list, order: list | None = N
         if budget.expired(60):
             notes.append(f"t: time budget used up, config {name} skipped")
             continue
-        row = run_tbo(tbo_cmd(bin_dir), run_env(cenv), budget.timeout(600, reserve_s=30))
+        row = run_tbo(tbo_cmd(bin_dir), run_env(cenv), budget.timeout(per_run_s, reserve_s=30), tbo_log_base(exp, gpu, name))
         if not row.get("total") and row.get("returncode") == 0:        # the filter matched nothing: run MUL_MAT whole
             notes.append(f"t {name}: no test matched {PQ2_FILTER!r}; MUL_MAT run whole")
-            row = dict(run_tbo(tbo_cmd(bin_dir, filt=None), run_env(cenv), budget.timeout(900, reserve_s=30)), filter=None)
+            row = dict(run_tbo(tbo_cmd(bin_dir, filt=None), run_env(cenv), budget.timeout(per_run_s * 1.5, reserve_s=30),
+                               tbo_log_base(exp, gpu, name + "-whole")), filter=None)
         row.update(config=name, env=cenv)
+        if row.get("error") == "timeout":
+            notes.append("t %s: timeout after %.0f s, %s cases done, last case %s; diagnosis %s (logs in raw/)" % (
+                name, row.get("elapsed_s", 0), row.get("cases_done"), row.get("last_case"), (row.get("diagnosis") or {}).get("verdict")))
         out.append(row)
-        print("[r2b_mc] test-backend-ops %s ok=%s %s/%s" % (name, row.get("ok"), row.get("passed"), row.get("total")), flush=True)
+        print(tbo_line(name, row, exp), flush=True)
+    return out
+
+
+def nvcc_release() -> str | None:
+    """CUDA toolkit release of nvcc (the build), e.g. 12.8; None when nvcc is not found."""
+    nvcc = shutil.which("nvcc") or next(iter(sorted(glob.glob("/usr/local/cuda*/bin/nvcc"))[-1:]), None)
+    try:
+        p = subprocess.run([nvcc, "--version"], capture_output=True, text=True, timeout=15) if nvcc else None
+    except (OSError, subprocess.SubprocessError):
+        return None
+    m = re.search(r"release ([0-9.]+), (V[0-9.]+)", p.stdout) if p else None
+    return "%s (%s)" % m.groups() if m else None
+
+
+def host_info() -> dict:
+    """CPU model, nproc, driver, CUDA versions (nvidia-smi driver ceiling, nvcc of the build) and git sha; never raises."""
+    from infra import results
+    info: dict = {k: None for k in ("cpu_model", "nproc", "nproc_all", "driver", "cuda_driver", "nvcc", "git_sha", "git_dirty", "compute_sanitizer")}
+    try:
+        for ln in pathlib.Path("/proc/cpuinfo").read_text(errors="replace").splitlines():
+            if ln.lower().startswith("model name"):
+                info["cpu_model"] = ln.split(":", 1)[1].strip()
+                break
+        info["nproc_all"] = os.cpu_count()
+        info["nproc"] = len(os.sched_getaffinity(0))
+    except (OSError, AttributeError):
+        pass
+    try:
+        info["driver"], info["cuda_driver"] = results._smi_driver()
+        info["nvcc"] = nvcc_release()
+        info["git_sha"] = os.environ.get("CR_GIT_SHA") or results._git("rev-parse", "HEAD")
+        st = results._git("status", "--porcelain", "--untracked-files=no")
+        info["git_dirty"] = None if st is None else bool(st.strip())
+        info["compute_sanitizer"] = find_sanitizer()
+    except Exception:
+        pass
+    return info
+
+
+def find_sanitizer() -> str | None:
+    p = shutil.which("compute-sanitizer")
+    if p:
+        return p
+    found = sorted(glob.glob("/usr/local/cuda*/bin/compute-sanitizer") + glob.glob("/opt/nvidia/*/bin/compute-sanitizer"))
+    return found[-1] if found else None
+
+
+def tbo_localize(bin_dir, cenv: dict, budget: common.Budget, notes: list, exp: str = EXP, gpu: str | None = None) -> dict:
+    """Part t after a timeout with the switch on while off passed. Inside budget: racecheck on SAN_FILTER (few pq2_0 cases) when
+    compute-sanitizer exists (recorded when not), then the whole pq2_0 filter with CUDA_LAUNCH_BLOCKING=1: with blocking launches the
+    last case line names the case that hangs. Racecheck sees shared memory hazards only, not a global memory race with PDL."""
+    out: dict = {"sanitizer": find_sanitizer(), "runs": []}
+    san = out["sanitizer"]
+    if san:
+        row = run_tbo([san, "--tool", "racecheck", "--target-processes", "all"] + tbo_cmd(bin_dir, filt=SAN_FILTER), run_env(cenv), budget.timeout(SAN_RUN_S),
+                      tbo_log_base(exp, gpu, "on-racecheck"))
+        out["runs"].append(dict(row, config="on-racecheck", env=cenv))
+        print(tbo_line("on-racecheck", row, exp), flush=True)
+    else:
+        notes.append("t: compute-sanitizer not found on this image; localizing with CUDA_LAUNCH_BLOCKING=1 only")
+    if budget.left() >= LOCALIZE_MIN_S:
+        env = dict(cenv, CUDA_LAUNCH_BLOCKING="1")
+        row = run_tbo(tbo_cmd(bin_dir), run_env(env), budget.timeout(CLB_RUN_S, reserve_s=5), tbo_log_base(exp, gpu, "on-launchblocking"))
+        out["runs"].append(dict(row, config="on-launchblocking", env=env))
+        print(tbo_line("on-launchblocking", row, exp), flush=True)
+    else:
+        notes.append("t: no time left for the CUDA_LAUNCH_BLOCKING=1 run")
     return out
 
 
@@ -474,7 +724,7 @@ def run(args) -> int:
             try:
                 if p == "t":
                     config["gpu_mem_before_t"] = gpu_mem()
-                    extra["tbo"] = tbo_part(bin_dir, sub, notes)
+                    extra["tbo"] = tbo_part(bin_dir, sub, notes, gpu=args.gpu)
                     if any(not t.get("ok") for t in extra["tbo"]):
                         rc = 1
                         notes.append("test-backend-ops reported failures: see data.tbo[].fail_lines before reading any timing")

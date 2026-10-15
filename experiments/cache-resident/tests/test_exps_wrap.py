@@ -446,7 +446,8 @@ def test_wrap_a_end_to_end_with_fakes(wpod):
     (wpod / "results" / "_status" / "bootstrap.log").write_text("[bootstrap 10:00:00] host check: power limit,default 600.00,600.00 W ok\n")
     assert wrap_a.main(["--budget-min", "10", "--per-category", "2", "--blocks", "2"]) == 0
     d = _result(wpod, "wrap_a", "pro6000-ws")["data"]
-    assert d["gate"]["problem"] is None and [t["config"] for t in d["tbo"]] == ["on", "off", "on", "on"] and all(mc.tbo_passed(t) for t in d["tbo"])
+    assert d["tbo"][2]["env"] == {mc.ENV_VAR: "1", "GGML_CUDA_PDL": "0"} and d["tbo_localize"] is None and d["host_info"]["nproc"] >= 1
+    assert d["gate"]["problem"] is None and [t["config"] for t in d["tbo"]] == ["off", "on", "on_pdl0"] and all(mc.tbo_passed(t) for t in d["tbo"])
     assert d["path"]["status"] == "ok" and d["path"]["on_uses_mc_kernel"] is True and d["path"]["off_uses_mc_kernel"] is False
     assert list(d["path"]["configs"]) == ["on", "off"] and any(n.startswith("k: kernel path ok") for n in d["notes"])
     pw = d["power"]
@@ -574,12 +575,80 @@ def test_wrap_a_without_nsys_runs_the_timing_and_says_unverified(wpod, monkeypat
     assert any(n.startswith("k: kernel path unverified") for n in d["notes"])
 
 
-def test_wrap_a_part_t_runs_off_second_and_flags_a_missing_off(wpod, monkeypatch):
-    assert [n for n, _ in wrap_a.TBO_ORDER] == ["on", "off", "on", "on"] and wrap_a.TBO_MIN_S >= 150
+def test_wrap_a_part_t_order_budget_and_a_missing_run(wpod, monkeypatch):
+    assert [n for n, _ in wrap_a.TBO_ORDER] == ["off", "on", "on_pdl0"] and wrap_a.TBO_RUN_S == 300.0 and wrap_a.TBO_MIN_S == 960.0
     monkeypatch.setattr(wrap_a, "TBO_ORDER", [wrap_a.KCONFIGS[1]])
     assert wrap_a.main(["--parts", "t", "--budget-min", "6"]) == 1
     d = _result(wpod, "wrap_a", "pro6000-ws")["data"]
-    assert [t["config"] for t in d["tbo"]] == ["on"] and any(n.startswith("INCOMPLETE: test-backend-ops did not run with the kernel off") for n in d["notes"])
+    assert [t["config"] for t in d["tbo"]] == ["on"] and any(n.startswith("stop: test-backend-ops did not pass with the switch off (not run)") for n in d["notes"])
+
+
+def _fast_hang(monkeypatch):
+    monkeypatch.setattr(wrap_a, "TBO_RUN_S", 2.0)
+    monkeypatch.setattr(mc, "TBO_SMI_PERIOD_S", 0.2)
+    monkeypatch.setattr(mc, "TBO_DIAG_WINDOW_S", 1.0)
+    monkeypatch.setattr(mc, "smi_tbo_sample", lambda: {"sm_mhz": 1.0, "mem_mhz": 1.0, "power_w": 99.0, "util": 100.0, "mem_util": 1.0, "mem_mib": 1.0})
+    monkeypatch.setattr(mc, "CLB_RUN_S", 2.0)
+    monkeypatch.setattr(mc, "LOCALIZE_MIN_S", 1.0)
+
+
+def test_wrap_a_on_timeout_with_off_passing_localizes_and_stops_before_any_timing(wpod, monkeypatch):
+    _fast_hang(monkeypatch)
+    monkeypatch.setattr(mc, "find_sanitizer", lambda: None)
+    monkeypatch.setenv("FAKE_TBO_HANG", "on")                     # the on and on_pdl0 runs hang, off passes
+    assert wrap_a.main(["--budget-min", "10", "--per-category", "2", "--blocks", "2"]) == 1
+    d = _result(wpod, "wrap_a", "pro6000-ws")["data"]
+    assert [(t["config"], t.get("error")) for t in d["tbo"]] == [("off", None), ("on", "timeout"), ("on_pdl0", "timeout")]    # each run independent
+    assert mc.tbo_passed(d["tbo"][0]) and d["tbo"][1]["cases_done"] == 2 and d["tbo"][1]["killed"] == "sigterm"
+    assert d["tbo"][1]["diagnosis"]["verdict"] == "pegged_no_progress" and d["tbo"][1]["smi"]["util_max"] == 100.0
+    loc = d["tbo_localize"]
+    assert loc["sanitizer"] is None and [r["config"] for r in loc["runs"]] == ["on-launchblocking"] and loc["runs"][0]["error"] == "timeout"
+    assert d["path"] is None and d["bench"] == [] and d["spec"] is None and d["power"]["checks"][-1]["at"] == "start"          # no k, b or s
+    assert any(n.startswith("stop: test-backend-ops did not pass with the switch on (timeout)") for n in d["notes"])
+    assert any(n.startswith("t: off ok") and "on TIMEOUT" in n for n in d["notes"]) and any("compute-sanitizer not found" in n for n in d["notes"])
+    raw = sorted(f.name for f in (wpod / "results" / "wrap_a" / "pro6000-ws" / "raw").glob("*-tbo-*"))
+    assert sorted(n.split("-", 1)[1] for n in raw) == sorted("tbo-%s.%s.log" % (c, k) for c in ("off", "on", "on_pdl0", "on-launchblocking") for k in ("out", "err"))
+
+
+def test_wrap_a_does_not_localize_when_off_does_not_pass_either(wpod, monkeypatch):
+    _fast_hang(monkeypatch)
+    monkeypatch.setenv("FAKE_TBO_HANG", "all")
+    assert wrap_a.main(["--budget-min", "10"]) == 1
+    d = _result(wpod, "wrap_a", "pro6000-ws")["data"]
+    assert [t.get("error") for t in d["tbo"]] == ["timeout"] * 3 and d["tbo_localize"] is None and d["bench"] == [] and d["spec"] is None
+    assert any("off (timeout) and on (timeout)" in n for n in d["notes"])
+
+
+def test_wrap_a_runs_the_timing_only_after_off_and_on_passed(wpod, monkeypatch):
+    # the PDL-off control failing is a note: off and on gate the timing
+    real = mc.tbo_part
+
+    def part(*a, **k):
+        rows = real(*a, **k)
+        rows[2].update(ok=False)
+        return rows
+    monkeypatch.setattr(mc, "tbo_part", part)
+    assert wrap_a.main(["--budget-min", "10", "--per-category", "2", "--blocks", "2"]) == 1
+    d = _result(wpod, "wrap_a", "pro6000-ws")["data"]
+    assert len(d["bench"]) == 80 and d["spec"]["runs"] and any("PDL off for every kernel (control)" in n for n in d["notes"])
+    monkeypatch.setattr(mc, "tbo_part", lambda *a, **k: [dict(r, ok=r["config"] != "off") for r in real(*a, **k)])
+    for f in (wpod / "results" / "wrap_a").rglob("2*.json"):
+        f.unlink()
+    assert wrap_a.main(["--budget-min", "10", "--per-category", "2", "--blocks", "2"]) == 1
+    d = _result(wpod, "wrap_a", "pro6000-ws")["data"]
+    assert d["bench"] == [] and d["spec"] is None and d["path"] is None and d["tbo_localize"] is None
+
+
+def test_tbo_gate_and_summary():
+    ok = {"ok": True, "total": 5, "passed": 5, "n_fail": 0}
+    assert wrap_a.tbo_gate([dict(ok, config="off"), dict(ok, config="on")]) == (True, "ok")
+    g = wrap_a.tbo_gate([dict(ok, config="off"), {"config": "on", "ok": False, "error": "timeout"}])
+    assert g == (False, "test-backend-ops did not pass with the switch on (timeout)")
+    assert wrap_a.on_timeout_only([dict(ok, config="off"), {"config": "on", "ok": False, "error": "timeout"}])
+    assert not wrap_a.on_timeout_only([{"config": "off", "ok": False, "error": "timeout"}, {"config": "on", "ok": False, "error": "timeout"}])
+    assert wrap_a.tbo_summary([dict(ok, config="off", elapsed_s=21.0), {"config": "on", "error": "timeout", "elapsed_s": 300.2, "cases_done": 7,
+                                                                      "diagnosis": {"verdict": "idle_no_progress"}}]) == \
+        "t: off ok 5/5 in 21.0 s; on TIMEOUT 300 s (7 cases done, idle_no_progress)"
 
 
 def test_kernel_status():

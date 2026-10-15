@@ -14,9 +14,17 @@ Correctness (t) is never skipped for power. r1.host_probe / host_health run befo
 part, exit 1). During part b every run is checked (clocks, power cap against the default within 1%); the first unhealthy round and all later
 rounds are left out of the paired gains (data.bench_health), the verdict lines then start with UNHEALTHY HOST and the exit code is 1, so a
 capped host cannot pass as PR evidence. --allow-power-cap turns the power checks into recorded values (development only).
-t  correctness. test-backend-ops test -o MUL_MAT -b CUDA0 -p type_a=pq2_0, in the order on, off, on, on (a PDL race is timing dependent;
-   off is second so a short budget cannot drop it; it gets at least 150 s; a missing off run is an INCOMPLETE note and exit 1). A failure
-   with on stops the run before any timing.
+t  correctness. test-backend-ops test -o MUL_MAT -b CUDA0 -p type_a=pq2_0, in the order off, on, on with GGML_CUDA_PDL=0 (control: PDL
+   off for every kernel). Each run is independent with its own 300 s limit (the earlier hosts took about 20 s): a timeout or failure
+   in one does not skip the next. Part t has a floor of 16 min (3 x 300 s + reserve), so a slow host cannot drop a run. stdout and
+   stderr stream to results/wrap_a/<gpu>/raw/<stamp>-tbo-<config>.{out,err}.log; on a timeout the partial output stays, the process
+   group is killed (TERM, then KILL), and the row has last_case, cases_done, elapsed_s. nvidia-smi (clocks, power, utilization,
+   memory) is sampled every 5 s during each run; a timed-out row gets a diagnosis: slow_progress (cases finished in the last 60 s),
+   idle_no_progress (GPU idle: a host-side hang), pegged_no_progress (GPU at >= 90% with no case finished: a kernel that never ends).
+   Parts k, b and s run only if off and on both passed (the PDL-off run is a note). Any other result stops the run (exit 1).
+   If on timed out and off passed, the run adds one localization step, time-boxed to 5 min, then stops without timing: racecheck on
+   6 pq2_0 cases under compute-sanitizer (recorded when the image has none), then the pq2_0 filter with CUDA_LAUNCH_BLOCKING=1 (the
+   last case line names the case that hangs). Racecheck sees shared memory hazards only. Result: data.tbo_localize.
 k  kernel path. One nsys kernel-name list (r2b_multicol.path_probe: llama-bench -p 4 -n 0 -r 1 under nsys, private dir, report deleted)
    with the kernel on, then off: on must show mul_mat_vec_pq2_0_mc<4> and off must not. The same binary and variable as parts b and s. If on
    shows no mc launch, or off does, parts b and s are not run (KERNEL NOT ACTIVE, exit 1); without nsys the path is noted as unverified.
@@ -33,10 +41,11 @@ s  A2, end to end. llama-server, the R2a balanced subset (--per-category prompts
    (draft dur g vs the rest, which holds the target verify the kernel changes), greedy text equality of on vs off and of each vs base
    (informational: the kernel changes the accumulation order, so mismatches are expected numerics), and on over off per category
    (paired bootstrap CI). The draft state of k4q8 is the stale-rollback one (see wrap_b); it is the same in off and on.
-Parts run in the order t, k, b, s with weights 2 : 1.5 : 6 : 4.5 of --budget-min (unused time rolls forward; t and k have floors of 150 and 120 s).
+Parts run in the order t, k, b, s with weights 2 : 1.5 : 6 : 4.5 of --budget-min (unused time rolls forward; t and k have floors of 960 and 120 s).
 Result: results/wrap_a/<gpu>/<stamp>.json with data.gate, data.power, data.tbo, data.path, data.bench, data.bench_summary, data.bench_paired,
-data.bench_health, data.spec, data.host, data.host_b.
-Time: failsafe 40 min = bootstrap with the cold build ~15, downloads <= 6, wrap_a 14, reserve 5 (cost model: s about 4 min at the defaults).
+data.bench_health, data.spec, data.host, data.host_b, data.host_info (CPU model, nproc, driver, CUDA versions, git sha), data.tbo_localize.
+Time: failsafe 55 min (needs --allow-long) = bootstrap with the cold build ~15, downloads <= 6, wrap_a 14 (part t timing out: up to 16 + 5 of localization), reserve 5
+(cost model: s about 4 min at the defaults; the pod ends when the run does).
 Cost at the community price of about $1.69 per hour: pod time about 35 min, about $1.0; the secure price of $2.09 gives about $1.2.
 """
 from __future__ import annotations
@@ -50,7 +59,7 @@ from exps import common, e4_bonsai, e4_pdl, hf_ids, make_prompts, r1, r2a_longct
 EXP = "wrap_a"
 ENV_VAR = mc.ENV_VAR
 KCONFIGS = [("off", {}), ("on", {ENV_VAR: "1"})]
-TBO_ORDER = [KCONFIGS[1], KCONFIGS[0], KCONFIGS[1], KCONFIGS[1]]     # on three times (a PDL race is timing dependent), off second: a short budget cannot drop it
+TBO_ORDER = [KCONFIGS[0], KCONFIGS[1], mc.CONFIGS[2]]       # off, on, on with PDL off for every kernel (control); each run is independent
 PATH_ORDER = [KCONFIGS[1], KCONFIGS[0]]       # part k: the on probe first
 ROUNDS = 4
 BLOCKS = 2
@@ -59,7 +68,9 @@ SPEC_NAMES = ["base", "k4q8_off", "k4q8_on"]
 PARTS = "tkbs"
 WEIGHTS = {"t": 2.0, "k": 1.5, "b": 6.0, "s": 4.5}
 DEFAULT_TOTAL_MIN = 14.0
-TBO_MIN_S = 150.0
+TBO_RUN_S = 300.0                              # limit of one test-backend-ops run (the earlier hosts took about 20 s)
+TBO_MIN_S = TBO_RUN_S * len(TBO_ORDER) + 60.0   # part t floor: all three runs may time out, plus a reserve
+LOCALIZE_S = 300.0                              # time box of the localization after an on timeout with off passing
 PATH_MIN_S = 120.0
 END_RESERVE_S = 25.0
 
@@ -119,6 +130,32 @@ def spec_summary(runs: dict, power_problem: dict | None = None) -> dict:
     return out
 
 
+def tbo_gate(rows: list[dict]) -> tuple[bool, str]:
+    """Parts k, b and s need test-backend-ops passed with the switch off and with it on (the PDL-off control is a note only)."""
+    by = {t.get("config"): t for t in rows}
+    bad = [n for n in ("off", "on") if n not in by or not mc.tbo_passed(by[n])]
+    if not bad:
+        return True, "ok"
+    return False, "test-backend-ops did not pass with the switch %s" % " and ".join(
+        "%s (%s)" % (n, "not run" if n not in by else "timeout" if by[n].get("error") == "timeout" else "failed") for n in bad)
+
+
+def on_timeout_only(rows: list[dict]) -> bool:
+    """On timed out while off passed: the case that gets the localization run."""
+    by = {t.get("config"): t for t in rows}
+    return bool(by.get("off") and mc.tbo_passed(by["off"]) and by.get("on") and by["on"].get("error") == "timeout")
+
+
+def tbo_summary(rows: list[dict]) -> str:
+    parts = []
+    for t in rows:
+        if t.get("error") == "timeout":
+            parts.append("%s TIMEOUT %.0f s (%s cases done, %s)" % (t["config"], t.get("elapsed_s", 0), t.get("cases_done"), (t.get("diagnosis") or {}).get("verdict")))
+        else:
+            parts.append("%s %s %s/%s in %s s" % (t["config"], "ok" if mc.tbo_passed(t) else "FAILED", t.get("passed"), t.get("total"), t.get("elapsed_s")))
+    return "t: " + "; ".join(parts)
+
+
 def part_budget_s(left_s: float, part: str, remaining: list[str]) -> float:
     tot = sum(WEIGHTS[p] for p in remaining) or 1.0
     return max(left_s - END_RESERVE_S, 0.0) * WEIGHTS[part] / tot
@@ -140,9 +177,9 @@ def run(args) -> int:
     blocks = sp.prompt_blocks(order, args.blocks)
     guard = mc.PowerGuard(enforce=not args.allow_power_cap, bootstrap=mc.bootstrap_power())
     config = {"parts": args.parts, "budget_min": args.budget_min, "rounds": args.rounds, "blocks": args.blocks, "kernel_configs": dict(KCONFIGS),
-              "spec_configs": [c["name"] for c in spec_configs()], "seed": args.seed, "per_category": args.per_category, "ctx": args.ctx,
+              "spec_configs": [c["name"] for c in spec_configs()], "tbo_order": [n for n, _ in TBO_ORDER], "tbo_run_s": TBO_RUN_S, "seed": args.seed, "per_category": args.per_category, "ctx": args.ctx,
               "prompt_ids": [p["id"] for p in order], "models": {}, "quick": args.quick}
-    doc: dict = {"gate": None, "power": guard.doc, "tbo": [], "path": None, "bench": [], "bench_summary": {}, "bench_paired": {}, "bench_health": {}, "spec": None, "host": None,
+    doc: dict = {"gate": None, "host_info": None, "power": guard.doc, "tbo": [], "tbo_localize": None, "path": None, "bench": [], "bench_summary": {}, "bench_paired": {}, "bench_health": {}, "spec": None, "host": None,
                  "host_b": None}
     rows: list[dict] = doc["bench"]
     health: dict = doc["bench_health"]          # first_bad_round / problem of part b; rounds from there on are left out of the gains
@@ -153,6 +190,7 @@ def run(args) -> int:
         (common.write_result if final else common.write_partial)(EXP, args, r1.scrub(config, secrets), [], r1.scrub(notes, secrets), False,
                                                                  extra=r1.scrub(doc, secrets))
 
+    doc["host_info"] = mc.host_info()
     if missing:
         notes.append(f"{missing} not found in {bin_dir}: build llama.cpp (CR_BUILD_LLAMA=1)")
         save(final=True)
@@ -176,6 +214,8 @@ def run(args) -> int:
     rc = 0
     cut = {"part": None}
     kernel_bad = None            # why the multi-column kernel is not shown active: no timing then
+    if "t" not in parts:
+        notes.append("part t not run: no correctness result in this session, the timings below are not PR evidence")
     bad = guard.check("start")
     if bad:
         notes.append(f"UNHEALTHY HOST: {bad} at the start; correctness still runs, no timing")
@@ -195,18 +235,20 @@ def run(args) -> int:
             try:
                 if p == "t":
                     config["gpu_mem_before_t"] = mc.gpu_mem()
-                    doc["tbo"] = mc.tbo_part(bin_dir, sub, notes, order=TBO_ORDER)
-                    on = [t for t in doc["tbo"] if t.get("config") == "on"]
-                    if not on or not all(mc.tbo_passed(t) for t in on):
-                        notes.append(f"stop: test-backend-ops did not pass with {ENV_VAR}=1; parts b and s not run")
+                    doc["tbo"] = mc.tbo_part(bin_dir, sub, notes, order=TBO_ORDER, per_run_s=TBO_RUN_S, exp=EXP, gpu=args.gpu)
+                    tbo_ok, why = tbo_gate(doc["tbo"])
+                    notes.append(tbo_summary(doc["tbo"]))
+                    save()                                         # the rows are on disk before the localization runs
+                    if not tbo_ok:
+                        notes.append(f"stop: {why}; parts k, b and s not run (no timing without a correctness pass with the switch off and on)")
                         rc = 1
+                        if on_timeout_only(doc["tbo"]):
+                            doc["tbo_localize"] = mc.tbo_localize(bin_dir, dict(KCONFIGS)["on"], common.Budget(LOCALIZE_S / 60.0), notes,
+                                                                  exp=EXP, gpu=args.gpu)
                         cut["part"] = None
                         break
                     if any(not mc.tbo_passed(t) for t in doc["tbo"]):
-                        notes.append("test-backend-ops failed with the kernel off: see data.tbo")
-                        rc = 1
-                    if not any(t.get("config") == "off" for t in doc["tbo"]):
-                        notes.append("INCOMPLETE: test-backend-ops did not run with the kernel off (time budget): see data.tbo")
+                        notes.append("test-backend-ops failed with PDL off for every kernel (control): see data.tbo")
                         rc = 1
                 elif p == "k":
                     doc["path"] = mc.path_probe(e4_bonsai.find_nsys(), bin_dir, target, sub, notes, configs=PATH_ORDER)
@@ -336,7 +378,7 @@ def plan_json(a) -> dict:
     drafts = {"q8_0": "<draft_q8_0.gguf>"}
     return {"exp": EXP, "parts": a.parts, "budget_min": a.budget_min, "weights": WEIGHTS, "gate": list(mc.GPU600_TAGS),
             "model": hf_ids.resolve("bonsai2", "PQ2_0", offline=True), "tbo_cmd": mc.tbo_cmd(bin_dir), "tbo_order": [n for n, _ in TBO_ORDER],
-            "power_tol": mc.POWER_TOL, "path_probe": {"cmd": mc.bench_pp_cmd(bin_dir, "<pq2.gguf>", [4], 1), "order": [n for n, _ in PATH_ORDER]},
+            "tbo_run_s": TBO_RUN_S, "tbo_min_s": TBO_MIN_S, "localize_s": LOCALIZE_S, "power_tol": mc.POWER_TOL, "path_probe": {"cmd": mc.bench_pp_cmd(bin_dir, "<pq2.gguf>", [4], 1), "order": [n for n, _ in PATH_ORDER]},
             "bench_pp_cmd": mc.bench_pp_cmd(bin_dir, "<pq2.gguf>"), "bench_tg_cmd": mc.bench_tg_cmd(bin_dir, "<pq2.gguf>"),
             "bench_order": [[n for n, _ in mc.round_configs(KCONFIGS, r)] for r in range(a.rounds)],
             "spec": {"blocks": [[p["id"] for p in b] for b in blocks], "orders": sp.block_orders([c["name"] for c in cfgs], len(blocks)),

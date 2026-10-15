@@ -4,7 +4,9 @@ import os
 import pathlib
 import re
 import stat
+import subprocess
 import sys
+import time
 
 import pytest
 
@@ -136,6 +138,11 @@ if a[1] == "perf":
         us = 100.0 / (2.0 if on and n >= 3 else 1.0)
         print("  MUL_MAT(type_a=pq2_0,type_b=f32,m=17408,n=%d,k=5120,bs=[1,1],nr=[1,1],per=[0,1,2,3],k_v=0,o=1):  1000 runs -  %.2f us/run - 1 MFLOP/run" % (n, us))
 else:
+    if os.environ.get("FAKE_TBO_HANG") in ("all", "on" if on else "off"):        # two cases done, the third never returns
+        for n in (3, 4):
+            print("  MUL_MAT(type_a=pq2_0,type_b=f32,m=97,n=%d,k=1024): OK" % n, flush=True)
+        print("  MUL_MAT(type_a=pq2_0,type_b=f32,m=97,n=5,k=1024): ", end="", flush=True)
+        import time; time.sleep(600)
     print("  MUL_MAT(type_a=pq2_0,type_b=f32,m=97,n=4,k=1024): OK")
     print("  1/1 tests passed" if not os.environ.get("FAKE_TBO_FAIL") else "  \\033[1;31mFAIL\\033[0m MUL_MAT(type_a=pq2_0,n=4)\\n  0/1 tests passed")
     sys.exit(1 if os.environ.get("FAKE_TBO_FAIL") else 0)
@@ -558,3 +565,109 @@ def test_run_tbo_ok_needs_a_test_to_have_run(tmp_path):
     assert mc.run_tbo(fake("  0/0 tests passed", 0), dict(os.environ), 30)["ok"] is False
     assert mc.run_tbo(fake("  219/219 tests passed", 0), dict(os.environ), 30)["ok"] is True
     assert mc.run_tbo(fake("  219/219 tests passed", 1), dict(os.environ), 30)["ok"] is False
+
+
+def _smi(util, power=300.0):
+    return lambda: {"sm_mhz": 2000.0, "mem_mhz": 9000.0, "power_w": power, "util": util, "mem_util": 10.0, "mem_mib": 5000.0}
+
+
+def test_tbo_progress_reads_the_partial_console():
+    text = ("  MUL_MAT(type_a=pq2_0,type_b=f32,m=97,n=1,k=1024,bs=[1,1]): \x1b[1;32mOK\x1b[0m\n"
+            "  MUL_MAT(type_a=pq2_0,m=97,n=2): not supported [CPU]\n  MUL_MAT(type_a=pq2_0,m=97,n=3): \x1b[1;31mFAIL\x1b[0m\n"
+            "  MUL_MAT(type_a=pq2_0,type_b=f32,m=97,n=4,k=1024): ")
+    p = mc.tbo_progress(text)
+    assert (p["cases_done"], p["passed_so_far"], p["fail_so_far"], p["last_case_has_result"]) == (3, 1, 1, False)
+    assert p["last_case"] == "MUL_MAT(type_a=pq2_0,type_b=f32,m=97,n=4,k=1024)"
+    assert mc.tbo_progress("")["last_case"] is None and mc.tbo_progress("")["cases_done"] == 0
+
+
+def test_tbo_diagnosis_tells_a_hang_from_slow_progress():
+    def run(util, done):
+        return [{"t": 5.0 * i, "util": util, "power_w": 100.0, "done": d} for i, d in enumerate(done)]
+    flat = [3] * 20
+    assert mc.tbo_diagnosis(run(0.0, flat))["verdict"] == "idle_no_progress"
+    assert mc.tbo_diagnosis(run(100.0, flat))["verdict"] == "pegged_no_progress"
+    assert mc.tbo_diagnosis(run(50.0, flat))["verdict"] == "partial_no_progress"
+    slow = mc.tbo_diagnosis(run(100.0, [i // 4 for i in range(20)]))
+    assert slow["verdict"] == "slow_progress" and slow["cases_in_window"] > 0
+    assert mc.tbo_diagnosis(run(100.0, [1, 2]))["verdict"] == "no_data" and mc.tbo_diagnosis([])["verdict"] == "no_data"
+    stalled = run(100.0, list(range(10)) + [10] * 20)               # progress long ago, none in the last minute
+    assert mc.tbo_diagnosis(stalled)["verdict"] == "pegged_no_progress"
+
+
+def test_run_tbo_timeout_keeps_the_partial_output_and_kills_the_group(tmp_path, monkeypatch):
+    monkeypatch.setattr(mc, "TBO_SMI_PERIOD_S", 0.2)
+    monkeypatch.setattr(mc, "TBO_DIAG_WINDOW_S", 1.0)
+    monkeypatch.setattr(mc, "smi_tbo_sample", _smi(100.0))
+    _script(tmp_path / "tbo", FAKE_TBO)
+    env = dict(os.environ, FAKE_TBO_HANG="all", HF_TOKEN="hf_secretsecret123")
+    base = tmp_path / "raw" / "t-tbo-on"
+    base.parent.mkdir()
+    row = mc.run_tbo([str(tmp_path / "tbo"), "test"], env, 2.5, base)
+    assert row["ok"] is False and row["error"] == "timeout" and row["timeout_s"] == 2.5 and 2.4 < row["elapsed_s"] < 6
+    assert row["killed"] == "sigterm" and row["cases_done"] == 2 and row["passed_so_far"] == 2 and row["last_case_has_result"] is False
+    assert row["last_case"].endswith("n=5,k=1024)") and row["diagnosis"]["verdict"] == "pegged_no_progress"
+    assert row["smi"]["n"] >= 3 and row["smi"]["util_max"] == 100.0 and row["smi_samples"][0]["done"] in (0, 2)
+    out = (tmp_path / "raw" / row["log_out"]).read_text()
+    assert out.count("OK") == 2 and out.rstrip().endswith("k=1024):") and (tmp_path / "raw" / row["log_err"]).exists()
+    assert "n=5" in row["out_tail"]
+    time.sleep(0.2)
+    ps = subprocess.run(["pgrep", "-f", str(tmp_path / "tbo")], capture_output=True, text=True)
+    assert ps.stdout.strip() == ""                                                 # nothing of the group is left
+
+
+def test_run_tbo_kills_a_child_that_ignores_term(tmp_path, monkeypatch):
+    monkeypatch.setattr(mc, "smi_tbo_sample", lambda: None)
+    f = tmp_path / "stubborn"
+    f.write_text("#!%s\nimport signal, time\nsignal.signal(signal.SIGTERM, signal.SIG_IGN)\nprint('  MUL_MAT(a=1): ', end='', flush=True)\ntime.sleep(600)\n" % sys.executable)
+    f.chmod(0o755)
+    t0 = time.monotonic()
+    real = mc.kill_group
+    monkeypatch.setattr(mc, "kill_group", lambda proc, grace_s=10.0: real(proc, 0.5))
+    row = mc.run_tbo([str(f)], dict(os.environ), 1.0, tmp_path / "x")
+    assert row["error"] == "timeout" and row["killed"] == "sigkill" and time.monotonic() - t0 < 10
+    assert row["diagnosis"]["verdict"] == "no_data" and row["smi"]["n"] == 0 and row["last_case"] == "MUL_MAT(a=1)"
+
+
+def test_run_tbo_records_elapsed_and_logs_on_success_and_scrubs_secrets(tmp_path, monkeypatch):
+    monkeypatch.setattr(mc, "smi_tbo_sample", _smi(80.0))
+    monkeypatch.setenv("HF_TOKEN", "hf_secretsecret123")
+    f = tmp_path / "ok"
+    f.write_text("#!%s\nimport sys\nprint('  MUL_MAT(a=1): OK\\n  1/1 tests passed')\nprint('token hf_secretsecret123', file=sys.stderr)\n" % sys.executable)
+    f.chmod(0o755)
+    row = mc.run_tbo([str(f)], dict(os.environ), 30, tmp_path / "y")
+    assert row["ok"] and row["passed"] == row["total"] == 1 and row["elapsed_s"] < 20 and row["smi"]["n"] >= 1 and "diagnosis" not in row
+    assert "hf_secretsecret123" not in (tmp_path / row["log_err"]).read_text() and (tmp_path / row["log_out"]).read_text().count("OK") == 1
+
+
+def test_tbo_localize_runs_racecheck_then_launch_blocking(tmp_path, monkeypatch):
+    b = tmp_path / "bin"
+    b.mkdir()
+    _script(b / "test-backend-ops", FAKE_TBO)
+    san = tmp_path / "compute-sanitizer"
+    san.write_text("#!%s\nimport os, sys\nprint('san', sys.argv[1:4], os.environ.get('GGML_CUDA_PQ2_MULTICOL'))\n"
+                   "print('========= RACECHECK SUMMARY: 2 hazards displayed (1 errors, 1 warnings)')\nsys.exit(0)\n" % sys.executable)
+    san.chmod(0o755)
+    monkeypatch.setattr(mc, "find_sanitizer", lambda: str(san))
+    monkeypatch.setattr(mc, "smi_tbo_sample", lambda: None)
+    monkeypatch.setattr(mc, "CLB_RUN_S", 2.0)
+    monkeypatch.setenv("FAKE_TBO_HANG", "on")
+    notes: list = []
+    out = mc.tbo_localize(b, {mc.ENV_VAR: "1"}, mc.common.Budget(5.0), notes)
+    assert out["sanitizer"] == str(san) and [r["config"] for r in out["runs"]] == ["on-racecheck", "on-launchblocking"]
+    assert out["runs"][0]["racecheck"] == {"hazards": 2, "errors": 1, "warnings": 1} and out["runs"][0]["cmd"][1:4] == ["--tool", "racecheck", "--target-processes"]
+    assert out["runs"][0]["cmd"][-1] == mc.SAN_FILTER
+    clb = out["runs"][1]
+    assert clb["error"] == "timeout" and clb["env"]["CUDA_LAUNCH_BLOCKING"] == "1" and clb["last_case"].endswith("n=5,k=1024)")
+    monkeypatch.setattr(mc, "find_sanitizer", lambda: None)
+    out = mc.tbo_localize(b, {mc.ENV_VAR: "1"}, mc.common.Budget(5.0), notes)
+    assert out["sanitizer"] is None and [r["config"] for r in out["runs"]] == ["on-launchblocking"]
+    assert any("compute-sanitizer not found" in n for n in notes)
+
+
+def test_host_info_has_the_fields(monkeypatch):
+    monkeypatch.setenv("CR_GIT_SHA", "abc123")
+    monkeypatch.setattr(mc, "find_sanitizer", lambda: None)
+    h = mc.host_info()
+    assert set(h) == {"cpu_model", "nproc", "nproc_all", "driver", "cuda_driver", "nvcc", "git_sha", "git_dirty", "compute_sanitizer"}
+    assert h["git_sha"] == "abc123" and h["nproc"] >= 1 and h["nproc_all"] >= h["nproc"]
