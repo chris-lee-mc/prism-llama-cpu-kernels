@@ -854,7 +854,7 @@ private:
     common_context_seq_rm_type ctx_tgt_seq_rm_type = COMMON_CONTEXT_SEQ_RM_TYPE_NO;
     common_context_seq_rm_type ctx_dft_seq_rm_type = COMMON_CONTEXT_SEQ_RM_TYPE_NO;
 
-    bool exp_skip_reeval = false; // env: GGML_EXP_SKIP_DRAFT_REEVAL (experiment)
+    bool exp_skip_reeval = false; // env: GGML_EXP_SKIP_DRAFT_REEVAL, attention-only draft (experiment)
 
     common_speculative_ptr spec;
 
@@ -1212,10 +1212,13 @@ private:
                 SRV_INF("%s", "GGML_EXP_DRAFT_CKPT: the draft context uses checkpoints\n");
             }
 
-            const char * env_skip = getenv("GGML_EXP_SKIP_DRAFT_REEVAL");
-            exp_skip_reeval = env_skip && atoi(env_skip) != 0 && ctx_dft_seq_rm_type == COMMON_CONTEXT_SEQ_RM_TYPE_RS;
+            // a recurrent draft context is excluded: its snapshots cover the last ubatch only, so seq_rm after one-token decodes restores a stale state
+            exp_skip_reeval = ctx_dft_seq_rm_type == COMMON_CONTEXT_SEQ_RM_TYPE_PART && params_base.n_parallel == 1 &&
+                              common_exp_skip_draft_reeval(params_base.speculative, ctx_dft);
             if (exp_skip_reeval) {
                 SRV_INF("%s", "GGML_EXP_SKIP_DRAFT_REEVAL: the draft context keeps its drafted tokens\n");
+            } else if (getenv("GGML_EXP_SKIP_DRAFT_REEVAL")) {
+                SRV_WRN("%s", "GGML_EXP_SKIP_DRAFT_REEVAL ignored: it needs one slot, draft-simple alone and an attention-only draft model\n");
             }
         }
 

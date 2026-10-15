@@ -143,10 +143,10 @@ static bool common_speculative_are_compatible(
 
 using common_speculative_draft_params_vec = std::vector<common_speculative_draft_params>;
 
-// experiment: the draft context keeps its drafted tokens, so the verify batch is not decoded on it again [TAG_SPEC_AVOID_DRAFT_REEVAL]
-static bool common_exp_skip_draft_reeval() {
+// experiment: GGML_EXP_DRAFT_TIME=1 times the decode of the verify batch on the draft context (synchronizes, changes the timing)
+static bool common_exp_draft_time() {
     static const bool enabled = [] {
-        const char * env = std::getenv("GGML_EXP_SKIP_DRAFT_REEVAL");
+        const char * env = std::getenv("GGML_EXP_DRAFT_TIME");
         return env != nullptr && std::atoi(env) != 0;
     }();
     return enabled;
@@ -184,6 +184,13 @@ struct common_speculative_impl {
     size_t n_exp_cut_tokens     = 0;
     size_t n_exp_skip_batches   = 0; // GGML_EXP_SKIP_DRAFT_REEVAL: verify batches not decoded on the draft context
     size_t n_exp_catchup_tokens = 0; // tokens draft() decoded in front of id_last instead
+    bool   exp_skip_reeval      = false; // draft-simple: GGML_EXP_SKIP_DRAFT_REEVAL is active
+    bool   exp_draft_time       = false; // draft-simple: GGML_EXP_DRAFT_TIME is active
+    int64_t n_exp_step_us       = 0;     // GGML_EXP_DRAFT_TIME: process() on the draft context, batches of a verify step (n_max + 1 tokens or less)
+    size_t  n_exp_step_calls    = 0;
+    int64_t n_exp_fill_us       = 0;     // same, longer batches (prompt)
+    size_t  n_exp_fill_calls    = 0;
+    size_t  n_exp_resets        = 0;     // ngram-mod: low-acceptance resets of the table
 
     common_speculative_impl(common_speculative_type type, uint32_t n_seq) : type(type), n_seq(n_seq) {}
 
@@ -928,6 +935,7 @@ struct common_speculative_impl_draft_simple : public common_speculative_impl {
     common_params_speculative_draft params;
 
     llama_batch batch;
+    uint32_t    n_batch_dft = 0;
 
     std::vector<common_sampler_ptr> smpls;
 
@@ -952,7 +960,14 @@ struct common_speculative_impl_draft_simple : public common_speculative_impl {
                 ctx_dft ? "yes" : "no",
                 common_speculative_get_devices_str(this->params.devices).c_str());
 
-        batch = llama_batch_init(llama_n_batch(ctx_dft), 0, 1);
+        n_batch_dft = llama_n_batch(ctx_dft);
+        batch = llama_batch_init(n_batch_dft, 0, 1);
+
+        exp_skip_reeval = n_seq == 1 && common_exp_skip_draft_reeval(params, ctx_dft);
+        exp_draft_time  = common_exp_draft_time();
+        if (exp_draft_time) {
+            SPC_TRC("%s", "GGML_EXP_DRAFT_TIME: the decode of the verify batch on the draft context is timed\n");
+        }
 
         // TODO: optimize or pass from outside?
         // {
@@ -1013,7 +1028,7 @@ struct common_speculative_impl_draft_simple : public common_speculative_impl {
         llama_batch batch_dft = batch;
         batch_dft.logits = nullptr;
 
-        if (common_exp_skip_draft_reeval() && batch.token && batch.pos && batch.seq_id && batch.n_tokens > 0) {
+        if (exp_skip_reeval && batch.token && batch.pos && batch.seq_id && batch.n_tokens > 0 && batch.n_tokens <= (int32_t) n_batch_dft) {
             // a seq whose first token is already in the draft context is a verify batch of our own draft: skip it
             auto * mem = llama_get_memory(ctx_dft);
             std::vector<int> keep(n_seq, -1);
@@ -1041,7 +1056,16 @@ struct common_speculative_impl_draft_simple : public common_speculative_impl {
             }
         }
 
+        const int64_t t_us = exp_draft_time ? ggml_time_us() : 0;
+
         const int ret = llama_decode(ctx_dft, batch_dft);
+
+        if (exp_draft_time) {
+            llama_synchronize(ctx_dft);
+            const bool step = batch_dft.n_tokens <= params.n_max + 1;
+            (step ? n_exp_step_us    : n_exp_fill_us)    += ggml_time_us() - t_us;
+            (step ? n_exp_step_calls : n_exp_fill_calls) += 1;
+        }
 
         if (ret != 0) {
             SPC_ERR("failed to decode draft batch, ret = %d\n", ret);
@@ -1073,10 +1097,10 @@ struct common_speculative_impl_draft_simple : public common_speculative_impl {
             drafting[seq_id] = true;
             common_sampler_reset(smpls[seq_id].get());
 
-            if (common_exp_skip_draft_reeval() && (llama_pos) dp.prompt->size() == dp.n_past) {
+            if (exp_skip_reeval && (llama_pos) dp.prompt->size() == dp.n_past) {
                 // the skipped verify batch can leave accepted tokens out (the last draft token on full acceptance): add them here
                 const llama_pos p0 = llama_memory_seq_pos_max(llama_get_memory(ctx_dft), seq_id) + 1;
-                if (p0 < dp.n_past && dp.n_past - p0 < (llama_pos) llama_n_batch(ctx_dft) - (llama_pos) n_seq) {
+                if (p0 < dp.n_past && batch.n_tokens + (dp.n_past - p0) + (llama_pos) n_seq <= (llama_pos) n_batch_dft) {
                     for (llama_pos p = std::max<llama_pos>(p0, 0); p < dp.n_past; ++p) {
                         common_batch_add(batch, dp.prompt->at(p), p, { seq_id }, false);
                         n_exp_catchup_tokens++;
@@ -3195,6 +3219,7 @@ struct common_speculative_impl_ngram_mod : public common_speculative_impl {
                     }
 
                     mod.reset();
+                    n_exp_resets++;
                     sinfo.n_low = 0;
                     sinfo.i_last = 0;
                 }
@@ -4076,9 +4101,16 @@ void common_speculative_print_stats(const common_speculative * spec) {
             SPC_TRC("exp ngram-rs     %16s: window = %u, cut drafts = %zu, cut tokens = %zu\n",
                     common_speculative_type_to_str(impl->type).c_str(), common_exp_ngram_rs(), impl->n_exp_cut_drafts, impl->n_exp_cut_tokens);
         }
-        if (common_exp_skip_draft_reeval() && impl->type == COMMON_SPECULATIVE_TYPE_DRAFT_SIMPLE) {
+        if (impl->type == COMMON_SPECULATIVE_TYPE_NGRAM_MOD) {
+            SPC_TRC("exp ngram-resets %16s: low-acceptance resets = %zu\n", common_speculative_type_to_str(impl->type).c_str(), impl->n_exp_resets);
+        }
+        if (impl->exp_skip_reeval) {
             SPC_TRC("exp skip-reeval  %16s: skipped batches = %zu, catch-up tokens = %zu\n",
                     common_speculative_type_to_str(impl->type).c_str(), impl->n_exp_skip_batches, impl->n_exp_catchup_tokens);
+        }
+        if (impl->exp_draft_time) {
+            SPC_TRC("exp draft-time   %16s: dur(p,pf) = %.3f, %.3f ms, #calls(p,pf) = %zu %zu\n", common_speculative_type_to_str(impl->type).c_str(),
+                    impl->n_exp_step_us / 1000.0, impl->n_exp_fill_us / 1000.0, impl->n_exp_step_calls, impl->n_exp_fill_calls);
         }
     }
 }

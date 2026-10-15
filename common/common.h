@@ -420,6 +420,16 @@ struct common_params_speculative {
     }
 };
 
+// experiment: GGML_EXP_SKIP_DRAFT_REEVAL=1 keeps the drafted tokens in the draft context (no re-eval of the verify batch)
+// valid for a single draft-simple type and a draft context without a recurrent window (seq_rm is exact); n_parallel 1 is assumed
+static inline bool common_exp_skip_draft_reeval(const common_params_speculative & p, const llama_context * ctx_dft) {
+    const char * env = getenv("GGML_EXP_SKIP_DRAFT_REEVAL");
+    if (env == nullptr || atoi(env) == 0 || ctx_dft == nullptr || llama_n_rs_seq(ctx_dft) > 0) {
+        return false;
+    }
+    return std::all_of(p.types.begin(), p.types.end(), [](auto t) { return t == COMMON_SPECULATIVE_TYPE_NONE || t == COMMON_SPECULATIVE_TYPE_DRAFT_SIMPLE; });
+}
+
 struct common_params_diffusion {
     int32_t steps         = 128;
     bool    visual_mode   = false;
