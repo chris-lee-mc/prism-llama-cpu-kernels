@@ -122,6 +122,8 @@ def test_parse_smi_and_summary():
     s = ep.smi_summary(d, during, d)
     assert s["sm_mhz_med"] == 2200 and s["sm_mhz_min"] == 2000 and s["sm_mhz_max"] == 2430 and s["n"] == 3
     assert ep.health_problem(s) is None and ep.smi_summary(None, [], None) == {}
+    s = ep.smi_summary(d, [dict(d, **{"power.limit": 320.0}), d], d)      # a cap that comes and goes is kept in the min
+    assert s["power_cap_w"] == 600 and s["power_cap_w_min"] == 320
 
 
 def test_health_problem():

@@ -46,8 +46,12 @@ if command -v nvidia-smi >/dev/null 2>&1; then
       say "host check: power limit,default $PW W, limit is not the default within $CR_POWER_TOL (or unreadable), stop"
       exit 3
     fi
-    say "host check: power limit,default $PW W ok"
+    EP="$(nvidia-smi --query-gpu=enforced.power.limit --format=csv,noheader,nounits 2>/dev/null | head -1 | tr -d ' ')"
+    say "host check: power limit,default $PW W ok (enforced ${EP:-n/a} W)"
   fi
+elif [ -n "${CR_POWER_TOL:-}" ]; then
+  say "host check: no nvidia-smi, power limit unreadable, stop"
+  exit 3
 fi
 
 if [ -f "$STAMP" ] && [ "$(cat "$STAMP" 2>/dev/null)" = "$REQ_HASH" ]; then

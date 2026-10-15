@@ -166,6 +166,16 @@ def bootstrap_power(path=None) -> dict | None:
     return {"limit": float(found[-1][0]), "default": float(found[-1][1])} if found else None
 
 
+def enforced_limit() -> float | None:
+    """nvidia-smi enforced.power.limit (the lowest of all power limiters), recorded only; None when unreadable."""
+    try:
+        p = subprocess.run(["nvidia-smi", "--query-gpu=enforced.power.limit", "--format=csv,noheader,nounits", "-i", "0"],
+                           capture_output=True, text=True, timeout=10)
+        return float(p.stdout.split()[0]) if p.returncode == 0 else None
+    except (OSError, subprocess.SubprocessError, ValueError, IndexError):
+        return None
+
+
 class PowerGuard:
     """PR evidence must come from a card at its default power limit. check() reads nvidia-smi, records both values and returns the problem
     (None when the limit is the default within tol, or when enforce is off: the values are recorded either way). doc goes into the result."""
@@ -176,9 +186,12 @@ class PowerGuard:
 
     def check(self, label: str) -> str | None:
         smi = e4_pdl.smi_sample() or {}
+        if not smi.get("power.limit") or not smi.get("power.default_limit"):      # one retry: a slow nvidia-smi must not skip a part
+            time.sleep(2)
+            smi = e4_pdl.smi_sample() or {}
         limit, default = smi.get("power.limit"), smi.get("power.default_limit")
         bad = power_problem(limit, default, self.doc["tol"])
-        self.doc["checks"].append({"at": label, "limit": limit, "default": default, "problem": bad, "t": time.time()})
+        self.doc["checks"].append({"at": label, "limit": limit, "default": default, "enforced": enforced_limit(), "problem": bad, "t": time.time()})
         if bad and self.doc["first_problem"] is None:
             self.doc["first_problem"] = {"at": label, "problem": bad}
         return bad if self.enforce else None
@@ -186,7 +199,8 @@ class PowerGuard:
 
 def power_line(power: dict) -> str:
     """One notes line with every recorded limit/default pair."""
-    pairs = ", ".join("%s %s/%s W%s" % (c["at"], c["limit"], c["default"], " PROBLEM" if c.get("problem") else "") for c in power.get("checks", []))
+    pairs = ", ".join("%s %s/%s W%s%s" % (c["at"], c["limit"], c["default"], " (enforced %s W)" % c["enforced"] if c.get("enforced") else "",
+                                         " PROBLEM" if c.get("problem") else "") for c in power.get("checks", []))
     boot = power.get("bootstrap")
     return "power limit/default: bootstrap %s, %s" % ("%s/%s W" % (boot["limit"], boot["default"]) if boot else "not seen", pairs or "no check")
 
@@ -399,7 +413,7 @@ def bench_part(bin_dir, model: str, budget: common.Budget, notes: list, rows: li
                 smi = watch.summary()
                 bad = e4_pdl.health_problem(smi, check_power=not allow_power_cap)
                 if not bad and power_tol and not allow_power_cap:
-                    bad = power_problem(smi.get("power_cap_w"), smi.get("power_default_w"), power_tol)
+                    bad = power_problem(smi.get("power_cap_w_min", smi.get("power_cap_w")), smi.get("power_default_w"), power_tol)      # lowest cap of all samples
                 if bad and not unhealthy:
                     unhealthy = True
                     notes.append(f"host health: {bad} during round {rnd} {name} {kind}; timings after this may be invalid")

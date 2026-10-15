@@ -176,6 +176,7 @@ def smi_summary(before: dict | None, during: list[dict], after: dict | None) -> 
     return {"n": len(during), "sm_mhz_med": col("clocks.sm"), "sm_mhz_min": col("clocks.sm", min), "sm_mhz_max": last.get("clocks.max.sm"),
             "mem_mhz_med": col("clocks.mem"), "mem_mhz_max": last.get("clocks.max.mem"), "power_w_med": col("power.draw"),
             "power_w_max": col("power.draw", max), "power_cap_w": last.get("power.limit"),
+            "power_cap_w_min": col("power.limit", min),
             "power_default_w": last.get("power.default_limit"), "temp_c_max": col("temperature.gpu", max),
             "before": before, "after": after}
 

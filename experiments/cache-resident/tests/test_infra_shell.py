@@ -4,6 +4,7 @@ import hashlib
 import os
 import pathlib
 import re
+import shutil
 import stat
 import subprocess
 
@@ -85,6 +86,16 @@ def test_bootstrap_power_tol_needs_the_default_limit(tmp_path, power, ok):
         assert code == 0 and "host check: power limit,default %s W ok" % power.replace(" ", "") in log and "stamp matches" in log
     else:
         assert code == 3 and "is not the default within 0.01 (or unreadable), stop" in log and "stamp matches" not in log
+
+
+def test_bootstrap_power_tol_stops_without_nvidia_smi(tmp_path):
+    (tmp_path / "bin").mkdir()
+    env = dict(os.environ, PATH="%s:/usr/bin:/bin" % (tmp_path / "bin"), CR_RESULTS_DIR=str(tmp_path / "res"), CR_POWER_TOL="0.01",
+               CR_BOOTSTRAP_STAMP=str(tmp_path / "stamp"))
+    if shutil.which("nvidia-smi", path=env["PATH"]):
+        pytest.skip("host has nvidia-smi")
+    r = subprocess.run(["bash", str(INFRA / "bootstrap.sh")], env=env, capture_output=True, text=True, timeout=60)
+    assert r.returncode == 3 and "no nvidia-smi, power limit unreadable, stop" in (tmp_path / "res" / "_status" / "bootstrap.log").read_text()
 
 
 def test_bootstrap_min_power_frac_only_stops_a_capped_host(tmp_path):
