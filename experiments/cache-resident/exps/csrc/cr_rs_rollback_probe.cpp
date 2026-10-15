@@ -59,6 +59,7 @@ static cmp compare(const float * a, const float * b, int n) {
 int main(int argc, char ** argv) {
     std::string model;
     int n_gpu = 0, n_rs = 4, n_prompt = 64, n_extra = 4;
+    std::string modes = "both"; // single (one-token decodes), batch (one batch) or both
     unsigned seed = 1234;
     for (int i = 1; i < argc; i++) {
         std::string a = argv[i];
@@ -68,11 +69,12 @@ int main(int argc, char ** argv) {
         else if (a == "--n-rs") n_rs = atoi(next());
         else if (a == "--prompt") n_prompt = atoi(next());
         else if (a == "--extra") n_extra = atoi(next());
+        else if (a == "--modes") modes = next();
         else if (a == "--seed") seed = (unsigned) atoi(next());
         else { fprintf(stderr, "unknown arg %s\n", a.c_str()); return 2; }
     }
-    if (model.empty() || n_extra < 1 || n_extra > n_rs) {
-        fprintf(stderr, "usage: %s -m model.gguf [-ngl N] [--n-rs 4] [--prompt 64] [--extra 4 (<= n-rs)] [--seed S]\n", argv[0]);
+    if (model.empty() || n_extra < 1 || n_extra > n_rs || (modes != "both" && modes != "single" && modes != "batch")) {
+        fprintf(stderr, "usage: %s -m model.gguf [-ngl N] [--n-rs 4] [--prompt 64] [--extra 4 (<= n-rs)] [--modes both|single|batch] [--seed S]\n", argv[0]);
         return 2;
     }
 
@@ -117,6 +119,7 @@ int main(int argc, char ** argv) {
     bool first = true;
     for (int m = 0; m < n_extra; ++m) {
         for (int single = 1; single >= 0; --single) {
+            if ((single && modes == "batch") || (!single && modes == "single")) continue;
             bool ok_ref = true, ok_rm = true;
             const auto ref = run(m, m, single, ok_ref);
             const auto got = run(n_extra, m, single, ok_rm);

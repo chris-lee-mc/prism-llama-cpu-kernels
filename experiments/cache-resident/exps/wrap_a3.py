@@ -1,6 +1,6 @@
 """Wrap A3: Ada regression check for the PQ2_0 multi-column PR change (pdl_sync, restrict off the parameters), one RTX 4090 pod session.
 
-  python -m exps.wrap_a3 [--parts build,t,b,f] [--budget-min 26]
+  python -m exps.wrap_a3 [--parts build,sass,t,b,f] [--budget-min 28]
 
 On Ada the #306 kernel is on by default with or without the change, and PDL is compiled out below sm_90, so no change is expected. Two
 binaries on the same pod, same cmake flags (-DGGML_CUDA=ON -DCMAKE_CUDA_ARCHITECTURES=<cc> -DCMAKE_BUILD_TYPE=Release -DLLAMA_CURL=OFF,
@@ -11,13 +11,19 @@ ccache):
         test-backend-ops are built (ccache with CCACHE_BASEDIR reuses the CPU objects of the head build). The model download runs while
         the base build runs.
 Gate: the GPU tag must be rtx4090 (Ada, cc 8.9); --allow-any-gpu for development.
+The pod query asks for 16 vCPUs when the llama build is on (infra/runpod.py), the base build gets 14 of 28 min (weight 14 of 28); a build
+that does not finish ends the run with exit 1 and no timing.
+sass  cuobjdump -sass of mul_mat_vec_pq2_0_mc from both builds (sm_89), instruction text without offsets and encodings. On sm_89 the
+   change is a no-op by construction (ggml_cuda_pdl_sync is compiled out below sm_90, GGML_CUDA_RESTRICT stays __restrict__), so the
+   kernels must be identical; any difference is reported before the timings are read. No cuobjdump: a note, the timings still run.
 t  test-backend-ops test -o MUL_MAT -b CUDA0 -p type_a=pq2_0, with head, then base (environment without GGML_CUDA_PQ2_MULTICOL). A head
    failure stops the run before any timing.
 b  llama-bench on Bonsai 2 27B PQ2_0 (flags of r2b_multicol): -p 1,...,9 -n 0 -r 5 and -p 0 -n 128 -r 5, base and head alternating,
    --rounds rounds (default 4). Reported: ms per width per build, the gain of head over base per round, and its median / min / max.
 f  test-backend-ops perf -o MUL_MAT -b CUDA0 -p type_a=pq2_0, (us per op, widths 1-32 at the 27B shapes), base and head.
 Result: results/wrap_a3/<gpu>/<stamp>.json with data.gate, data.build, data.tbo, data.bench, data.bench_summary, data.bench_paired, data.perf.
-Time: failsafe 55 min = bootstrap with the head build ~14, wrap_a3 26 (base build ~8, download overlapped, runs ~10), reserve 5.
+Time: failsafe 55 min = bootstrap with the head build ~15, wrap_a3 28 (base build up to 14, download overlapped, runs ~10), reserve 5.
+Cost at the 4090 community price of about $0.34 per hour: about 50 min of pod time, about $0.3.
 """
 from __future__ import annotations
 
@@ -25,6 +31,7 @@ import argparse
 import hashlib
 import os
 import pathlib
+import re
 import shutil
 import subprocess
 import sys
@@ -43,9 +50,10 @@ TOP_IGNORE = (".git", "experiments", "models")        # top level only, with eve
 ANY_IGNORE = ("__pycache__", "node_modules", ".venv")
 BUILDS = [("base", {}), ("head", {})]
 ROUNDS = 4
-PARTS = ("build", "t", "b", "f")
-WEIGHTS = {"build": 12.0, "t": 2.0, "b": 9.0, "f": 3.0}
-DEFAULT_TOTAL_MIN = 26.0
+PARTS = ("build", "sass", "t", "b", "f")
+WEIGHTS = {"build": 14.0, "sass": 1.0, "t": 2.0, "b": 8.0, "f": 3.0}
+DEFAULT_TOTAL_MIN = 28.0
+SASS_KERNEL = "mul_mat_vec_pq2_0_mc"
 END_RESERVE_S = 25.0
 ADA_TAGS = ("rtx4090",)
 
@@ -178,6 +186,77 @@ def build_part(args, budget: common.Budget, notes: list, doc: dict, config: dict
     return base_bin, model
 
 
+FUNC_RE = re.compile(r"^\s*Function : (\S+)")
+SASS_OFFSET_RE = re.compile(r"^\s*/\*[0-9a-f]{4}\*/\s*")
+SASS_ENC_RE = re.compile(r"\s*/\*\s*0x[0-9a-f]+\s*\*/\s*$")
+
+
+def sass_kernels(lines, pat: str = SASS_KERNEL) -> dict:
+    """{function name: [instruction text]} from cuobjdump -sass lines, for the functions whose name contains pat. The instruction text
+    has neither the offset nor the encoding comment, so two builds compare by their instructions."""
+    out: dict = {}
+    cur = None
+    for ln in lines:
+        m = FUNC_RE.match(ln)
+        if m:
+            cur = out.setdefault(m.group(1), []) if pat in m.group(1) else None
+            continue
+        if cur is None or not SASS_OFFSET_RE.match(ln):
+            continue
+        txt = SASS_ENC_RE.sub("", SASS_OFFSET_RE.sub("", ln.rstrip("\n"))).strip()
+        if txt:
+            cur.append(txt)
+    return out
+
+
+def sass_compare(head: dict, base: dict) -> dict:
+    """Same function names and the same instructions in both builds."""
+    diff = sorted(n for n in set(head) | set(base) if head.get(n) != base.get(n))
+    return {"n_kernels": {"head": len(head), "base": len(base)}, "n_instructions": {"head": sum(map(len, head.values())),
+                                                                                  "base": sum(map(len, base.values()))},
+            "different": diff, "identical": bool(head) and head.keys() == base.keys() and not diff}
+
+
+def find_cuobjdump() -> str | None:
+    return shutil.which("cuobjdump") or next((c for c in ("/usr/local/cuda/bin/cuobjdump", "/usr/local/cuda-12.8/bin/cuobjdump")
+                                              if os.path.exists(c)), None)
+
+
+def sass_of(bin_dir, tool: str, arch: str, timeout: float) -> dict:
+    """Kernels of SASS_KERNEL in libggml-cuda (or the executable when the build is static) of one build. Streams the dump."""
+    libs = sorted(pathlib.Path(bin_dir).glob("libggml-cuda.so*")) or [pathlib.Path(bin_dir) / "llama-bench"]
+    p = subprocess.Popen([tool, "-sass", "-arch", f"sm_{arch}", str(libs[0])], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True,
+                         errors="replace")
+    try:
+        out = sass_kernels(p.stdout)
+        p.wait(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        p.kill()
+        raise
+    return out
+
+
+def sass_part(bins: dict, cc: str, budget: common.Budget, notes: list) -> dict:
+    out: dict = {"kernel": SASS_KERNEL, "arch": f"sm_{cc}"}
+    tool = find_cuobjdump()
+    if not tool:
+        out["error"] = "cuobjdump not found"
+        notes.append("sass: cuobjdump not found; the kernel comparison is skipped (the timings still run)")
+        return out
+    out["tool"] = os.path.basename(tool)
+    try:
+        k = {n: sass_of(bins[n], tool, cc, budget.timeout(240, reserve_s=10)) for n in ("head", "base")}
+    except Exception as e:
+        out["error"] = f"{type(e).__name__}: {e}"
+        notes.append(f"sass: {out['error']}")
+        return out
+    out.update(sass_compare(k["head"], k["base"]))
+    notes.append("sass %s %s: %s (%s instructions in %s kernels)" % (
+        SASS_KERNEL, out["arch"], "identical in both builds" if out["identical"] else "NOT identical or not found: %s" % out["different"][:3],
+        out["n_instructions"], out["n_kernels"]))
+    return out
+
+
 def bench_verdict(paired: dict) -> list[str]:
     out = []
     for w, e in paired.get("pp", {}).items():
@@ -202,7 +281,7 @@ def run(args) -> int:
     secrets = r1.secret_values()
     config = {"parts": args.parts, "budget_min": args.budget_min, "rounds": args.rounds, "builds": [b for b, _ in BUILDS], "models": {},
               "targets": TARGETS, "head_bin": str(head_bin), "quick": args.quick}
-    doc: dict = {"gate": None, "build": None, "tbo": [], "bench": [], "bench_summary": {}, "bench_paired": {}, "perf": None}
+    doc: dict = {"gate": None, "build": None, "sass": None, "tbo": [], "bench": [], "bench_summary": {}, "bench_paired": {}, "perf": None}
     rows: list[dict] = doc["bench"]
 
     def save(final: bool = False) -> None:
@@ -232,6 +311,8 @@ def run(args) -> int:
             sub_s = part_budget_s(total.left(), p, parts[i:])
             if p == "t":
                 sub_s = max(sub_s, min(90.0, total.left()))      # correctness gates the timings: never dropped for budget
+            elif p == "sass":
+                sub_s = max(sub_s, min(120.0, total.left()))     # one cuobjdump pass per build, read before any timing
             if sub_s < 60:
                 notes.append(f"part {p} skipped: only {sub_s:.0f} s of budget left")
                 continue
@@ -249,6 +330,8 @@ def run(args) -> int:
                 elif "base" not in bins:
                     notes.append(f"part {p} skipped: no base build (run part build)")
                     rc = 1
+                elif p == "sass":
+                    doc["sass"] = sass_part(bins, compute_cap() or args.cc, sub, notes)
                 elif p == "t":
                     for name in ("head", "base"):
                         row = mc.run_tbo(mc.tbo_cmd(bins[name]), mc.run_env({}), sub.timeout(600, reserve_s=30))
@@ -312,7 +395,7 @@ def _parts(text):
 def parse_args(argv=None):
     ap = argparse.ArgumentParser(prog="exps.wrap_a3", description=__doc__.split("\n")[0])
     common.add_common_args(ap)
-    ap.add_argument("--parts", type=_parts, default=list(PARTS), help="build, t (test-backend-ops), b (llama-bench), f (op timing)")
+    ap.add_argument("--parts", type=_parts, default=list(PARTS), help="build, sass (kernel SASS of both builds), t (test-backend-ops), b (llama-bench), f (op timing)")
     ap.add_argument("--rounds", type=int, default=ROUNDS)
     ap.add_argument("--work", default=None, help="dir for the base tree and build (default /workspace/a3 on a pod, else a temp dir)")
     ap.add_argument("--cc", default="89", help="CUDA arch when nvidia-smi does not report one")

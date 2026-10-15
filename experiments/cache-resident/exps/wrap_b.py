@@ -1,40 +1,51 @@
-"""Wrap B: test build for two upstream investigations (measure first, issue before code), one 600 W PRO 6000 pod session.
+"""Wrap B: test build for two upstream investigations (measure first, issue before code), one pod session on a sm_120 card.
 
-  python -m exps.fetch_models --models pq2,draft_q8_0 --timeout-min 6 && python -m exps.wrap_b [--parts r,m] [--budget-min 24]
+  python -m exps.fetch_models --models pq2,draft_q8_0 --timeout-min 6 && python -m exps.wrap_b [--parts r,m] [--budget-min 22]
 
 Experiment-only switches in this branch (env, default off, read once):
-- GGML_EXP_SKIP_DRAFT_REEVAL=1 (B1, upstream TODO TAG_SPEC_AVOID_DRAFT_REEVAL): the server keeps the drafted tokens in the draft context
-  instead of removing them after drafting; draft-simple process() skips a verify batch whose first token the draft context already
-  holds; the partial-acceptance rollback is the usual seq_rm (n_rs_seq window); draft() decodes the tokens the draft context misses
-  (the last draft token after a full acceptance) in one batch with id_last.
-- GGML_EXP_DRAFT_CKPT=1 (control for B1): the server treats the draft context as FULL, so it saves the draft state before drafting and
-  restores it after (the existing checkpoint path). This is the draft state without any rollback after single-token decodes.
+- GGML_EXP_DRAFT_CKPT=1 (the correct draft state): the server treats the draft context as FULL, so it saves the draft state before drafting
+  and restores it after (the existing checkpoint path). Without it the draft context of a hybrid draft is rolled back with seq_rm after
+  one-token decodes. The recurrent snapshot of a GDN layer is written only for the tokens of the last ubatch (gated_delta_net: "older
+  slots are caller-owned"), so that seq_rm restores a stale state; part r measures this directly and k4q8 vs k4q8_ckpt shows it in alpha.
+- GGML_EXP_DRAFT_TIME=1 (B1, upstream TODO TAG_SPEC_AVOID_DRAFT_REEVAL): draft-simple process() times the decode of the verify batch on
+  the draft context (llama_synchronize after llama_decode) and prints it on the exp stats line (dur_p). With the correct state (k4q8_ckpt_t)
+  this is the upper bound of what skipping the re-eval can save per step. It does not skip anything.
+- GGML_EXP_SKIP_DRAFT_REEVAL=1 (B1 prototype, not in this matrix): the draft context keeps its drafted tokens and process() skips the verify
+  batch. It is allowed only for one slot, draft-simple alone and an attention-only draft (seq_rm exact). A hybrid draft (the Qwen3.5-0.8B
+  of this matrix) inherits the stale rollback above, so the switch is ignored there (warning in the server log). Not tested on a GPU.
 - GGML_EXP_NGRAM_RS=N (B2): need_n_rs_seq() returns at least N when an n-gram type is in --spec-type, so the target takes the in-batch
   (RS) rollback instead of checkpoint + replay; n-gram drafts longer than N are cut to N (counted, printed with the statistics).
-Why the control: the recurrent snapshot of a GDN layer is written only for the tokens of the last ubatch (gated_delta_net: "older slots
-are caller-owned"), so seq_rm after one-token decodes (draft-simple drafting) restores a stale snapshot. Part r measures this directly.
-Gate: the GPU tag must be pro6000-ws or pro6000-server and the default power limit >= 550 W (as wrap_a); --allow-any-gpu for development.
-r  rollback probe (exps/csrc/cr_rs_rollback_probe.cpp, built against libllama of the pod build): prompt of 64 tokens, then 4 tokens
-   decoded one at a time or as one batch, seq_rm back to 0-3 kept tokens, one probe token; logits against a context that decoded only
-   the kept tokens the same way. On the Qwen3.5-0.8B Q8_0 draft and on the Bonsai 2 27B PQ2_0 target, n_rs_seq 4. Untimed.
+Gate: the GPU tag must be a sm_120 card with enough memory (pro6000-*, rtx5090); --allow-any-gpu for development. The 600 W gate of wrap_a does
+not apply: every comparison here is paired inside one pod and is not PR evidence.
+r  rollback probe (exps/csrc/cr_rs_rollback_probe.cpp, built against libllama of the pod build): prompt of 64 tokens, then extra tokens
+   decoded one at a time or as one batch, seq_rm back to the kept tokens, one probe token; logits against a context that decoded only
+   the kept tokens the same way. Runs: n4 (n_rs_seq 4, 4 extra, both decode modes) on the Qwen3.5-0.8B Q8_0 draft and the Bonsai 2 27B PQ2_0
+   target; n16 and n64 (n_rs_seq 16 / 64, 16 / 64 extra, batch mode only) on the target: the window sizes B2 uses, rollbacks of 1 to n-1
+   tokens of a verify batch. Untimed.
 m  matrix, the R2a balanced subset (24 prompts, 8 per category, same seed, ctx 16384, -lv 4), interleaved by prompt blocks (--blocks,
-   default 4, a fresh server per block and config, config order changes per block):
-   base        target alone
-   k4q8        draft-simple K=4, Qwen3.5-0.8B Q8_0 draft (the CONFIG-GUIDANCE setting)
-   k4q8_skip   k4q8 with GGML_EXP_SKIP_DRAFT_REEVAL=1 (B1)
-   k4q8_ckpt   k4q8 with GGML_EXP_DRAFT_CKPT=1 (control: draft state restored from a checkpoint)
-   ngram       --spec-type ngram-mod, fork defaults (checkpoint + replay on the hybrid target)
-   ngram_rs16  ngram with GGML_EXP_NGRAM_RS=16 (drafts cut to 16)
-   ngram_rs64  ngram with GGML_EXP_NGRAM_RS=64 (no cut at the fork default n_max 64; 65 recurrent snapshots of the target)
+   default 2, a fresh server per block and config, config order changes per block):
+   base         target alone
+   k4q8         draft-simple K=4, Qwen3.5-0.8B Q8_0 draft (the CONFIG-GUIDANCE setting; stale draft state after partial acceptance)
+   k4q8_ckpt    k4q8 with GGML_EXP_DRAFT_CKPT=1 (correct draft state, the reference)
+   k4q8_ckpt_t  k4q8_ckpt with GGML_EXP_DRAFT_TIME=1 (draft-context decode of the verify batch timed; the synchronize costs time, so it is
+                a separate config and k4q8_ckpt_t vs k4q8_ckpt is the cost of the instrumentation)
+   ngram        --spec-type ngram-mod, fork defaults (checkpoint + replay on the hybrid target)
+   ngram_rs16   ngram with GGML_EXP_NGRAM_RS=16 (drafts cut to 16: a draft-length setting as well as the rollback path)
+   ngram_rs64   ngram with GGML_EXP_NGRAM_RS=64 (no cut at the fork default n_max 64: the clean rollback-path comparison with ngram)
    Reported: per config and category tok/s, speedup over base with bootstrap 95% CIs (prompts paired), r, alpha, greedy text equality
-   vs base; the pairs B1 vs k4q8, control vs k4q8, B1 vs control, rs16 / rs64 vs ngram per category with paired bootstrap CIs; ms per
-   step and its split from the server statistics (dur g of the drafting implementation vs the rest); path verification from the -lv 4
-   logs (n_rs_seq of the target and the draft, rollback path, the GGML_EXP_* switch lines, the cut counters).
+   vs base; the pairs k4q8_ckpt vs k4q8, k4q8_ckpt_t vs k4q8_ckpt, rs16 / rs64 vs ngram per category with paired bootstrap CIs; ms per
+   step and its split from the server statistics (dur g of the drafting implementation vs the rest); the re-eval time per step of
+   k4q8_ckpt_t (reeval_ms_per_step, its share of the step); the low-acceptance resets of ngram-mod per config (ngram_cut.*.resets: the
+   cut drafts of rs16 change the acceptance fraction and so the reset rule); path verification from the -lv 4 logs (n_rs_seq of the
+   target and the draft, rollback path, the GGML_EXP_* switch lines, the cut counters).
+   The draft state is checked by alpha, not by text: the target verifies every token, so a wrong draft state lowers alpha and leaves the
+   output alone. Greedy text equality checks only the target side and has a numerics floor (88-100% in R2a / R2b: batch shapes change
+   the accumulation order). alpha of k4q8 below alpha of k4q8_ckpt means k4q8 inherits the stale rollback.
    ngram-mod keeps its n-gram pool per server: with a fresh server per block it sees fewer earlier prompts than in R2a (same for every
    ngram config, so the pairs stay fair).
-Parts run in the order r, m with weights 2 : 22 of --budget-min. An unhealthy host skips m (r still runs).
+Parts run in the order r, m with weights 3 : 20 of --budget-min. An unhealthy host skips m (r still runs).
 Result: results/wrap_b/<gpu>/<stamp>.json with data.gate, data.probe, data.matrix (runs, summary, pairs, paths), data.host.
-Time: failsafe 55 min = bootstrap with the cold build ~14, downloads <= 6, wrap_b 24, reserve 5 (the matrix needs about 16).
+Time: failsafe 55 min = bootstrap with the cold build ~14, downloads <= 6, wrap_b 22, reserve 5 (the cost model gives about 16 min for the matrix with 2 blocks, 19 with 4).
 """
 from __future__ import annotations
 
@@ -48,18 +59,31 @@ import sys
 from exps import common, e4_bonsai, e4_pdl, hf_ids, make_prompts, r1, r2a_longctx as r2a, r2b_multicol as mc, r2b_spec as sp
 
 EXP = "wrap_b"
-SKIP, CKPT, NGRAM_RS = "GGML_EXP_SKIP_DRAFT_REEVAL", "GGML_EXP_DRAFT_CKPT", "GGML_EXP_NGRAM_RS"
-CONFIG_NAMES = ["base", "k4q8", "k4q8_skip", "k4q8_ckpt", "ngram", "ngram_rs16", "ngram_rs64"]
-PAIRS = [("k4q8_skip", "k4q8"), ("k4q8_ckpt", "k4q8"), ("k4q8_skip", "k4q8_ckpt"), ("ngram_rs16", "ngram"), ("ngram_rs64", "ngram"),
-         ("ngram_rs64", "ngram_rs16")]
-BLOCKS = 4
+SKIP, CKPT, TIME, NGRAM_RS = "GGML_EXP_SKIP_DRAFT_REEVAL", "GGML_EXP_DRAFT_CKPT", "GGML_EXP_DRAFT_TIME", "GGML_EXP_NGRAM_RS"
+CONFIG_NAMES = ["base", "k4q8", "k4q8_ckpt", "k4q8_ckpt_t", "ngram", "ngram_rs16", "ngram_rs64"]
+PAIRS = [("k4q8_ckpt", "k4q8"), ("k4q8_ckpt_t", "k4q8_ckpt"), ("ngram_rs64", "ngram"), ("ngram_rs16", "ngram"), ("ngram_rs64", "ngram_rs16")]
+DRAFT_STATE_REF = "k4q8_ckpt"           # alpha of this config is the draft-state reference
+DRAFT_STATE_CHECK = ("k4q8", "k4q8_ckpt_t")
+ALPHA_TOL = 0.02
+BLOCKS = 2
 PARTS = "rm"
-WEIGHTS = {"r": 2.0, "m": 22.0}
-DEFAULT_TOTAL_MIN = 24.0
+WEIGHTS = {"r": 3.0, "m": 20.0}
+DEFAULT_TOTAL_MIN = 22.0
+WB_TAGS = ("pro6000-ws", "pro6000-server", "pro6000-maxq", "rtx5090")        # sm_120, >= 32 GB (n_rs_seq 64 keeps 65 snapshots of the 27B state)
 END_RESERVE_S = 25.0
 PROBE_SRC = common.EXP_DIR / "exps" / "csrc" / "cr_rs_rollback_probe.cpp"
-PROBE_ARGS = ["--n-rs", "4", "--prompt", "64", "--extra", "4"]
+# (label, models, argv): n4 is the draft-simple window (both decode modes); n16 and n64 are the windows B2 gives the target (verify batches only)
+PROBE_RUNS = [("n4", ("draft_q8_0", "pq2"), ["--n-rs", "4", "--prompt", "64", "--extra", "4"]),
+              ("n16", ("pq2",), ["--n-rs", "16", "--prompt", "64", "--extra", "16", "--modes", "batch"]),
+              ("n64", ("pq2",), ["--n-rs", "64", "--prompt", "64", "--extra", "64", "--modes", "batch"])]
+PROBE_ARGS = PROBE_RUNS[0][2]
+EXACT_REL = 1e-3          # a rollback is exact when the logits differ by less than this fraction of the largest logit
 REPO_ROOT = common.EXP_DIR.parent.parent
+
+
+def gate_problem(tag: str) -> str | None:
+    """Why this card cannot run B (an sm_120 card with 32 GB or more), else None. Not a 600 W gate: B is not PR evidence."""
+    return None if tag in WB_TAGS else f"GPU tag {tag} is not one of {', '.join(WB_TAGS)}"
 
 
 def matrix_configs(names=CONFIG_NAMES) -> list[dict]:
@@ -67,12 +91,13 @@ def matrix_configs(names=CONFIG_NAMES) -> list[dict]:
     k, ng = by["k4_q8"], r2a.matrix_configs(["ngram_mod"])[0]
     allc = {
         "base": dict(by["base"], env={}),
-        "k4q8": dict(k, name="k4q8", env={}, desc="draft-simple K=4, Qwen3.5-0.8B Q8_0 draft"),
-        "k4q8_skip": dict(k, name="k4q8_skip", env={SKIP: "1"}, desc="k4q8, the draft context keeps its drafted tokens (no re-eval)"),
-        "k4q8_ckpt": dict(k, name="k4q8_ckpt", env={CKPT: "1"}, desc="k4q8, draft state restored from a checkpoint after drafting"),
+        "k4q8": dict(k, name="k4q8", env={}, desc="draft-simple K=4, Qwen3.5-0.8B Q8_0 draft (draft state rolled back with seq_rm: stale)"),
+        "k4q8_ckpt": dict(k, name="k4q8_ckpt", env={CKPT: "1"}, desc="k4q8, draft state restored from a checkpoint after drafting (reference)"),
+        "k4q8_ckpt_t": dict(k, name="k4q8_ckpt_t", env={CKPT: "1", TIME: "1"},
+                            desc="k4q8_ckpt, the draft-context decode of the verify batch timed (synchronizes)"),
         "ngram": dict(ng, name="ngram", env={}, desc="ngram-mod, fork defaults (checkpoint path on the hybrid target)"),
         "ngram_rs16": dict(ng, name="ngram_rs16", env={NGRAM_RS: "16"}, desc="ngram-mod, in-batch rollback window 16, drafts cut to 16"),
-        "ngram_rs64": dict(ng, name="ngram_rs64", env={NGRAM_RS: "64"}, desc="ngram-mod, in-batch rollback window 64"),
+        "ngram_rs64": dict(ng, name="ngram_rs64", env={NGRAM_RS: "64"}, desc="ngram-mod, in-batch rollback window 64 (no cut)"),
     }
     return [allc[n] for n in names]
 
@@ -83,7 +108,7 @@ def expected_path(cfg: dict) -> dict:
     if cfg["spec_type"] == "none":
         return {"rollback_path": "none", "n_rs_seq_target": 0, "switches": []}
     if sp.has_draft_model(cfg):
-        return {"rollback_path": "in_batch", "n_rs_seq_target": int(cfg["k"]), "switches": [k for k in (SKIP, CKPT) if k in env]}
+        return {"rollback_path": "in_batch", "n_rs_seq_target": int(cfg["k"]), "switches": [k for k in (SKIP, CKPT, TIME) if k in env]}
     n = int(env.get(NGRAM_RS, 0))
     return {"rollback_path": "in_batch" if n else "checkpoint", "n_rs_seq_target": n, "switches": []}
 
@@ -111,14 +136,29 @@ def verify_paths(cfgs: list[dict], runs: dict) -> dict:
 
 def matrix_summary(cfgs: list[dict], runs: dict) -> dict:
     st = {n: r.get("stats") or {} for n, r in runs.items()}
-    cut = {n: {impl: {k: d.get(k) for k in ("cut_drafts", "cut_tokens", "gen_drafts", "gen_tokens", "rs_window") if k in d}
-               for impl, d in s.items() if "cut_drafts" in d} for n, s in st.items()}
-    skip = {n: {impl: {k: d.get(k) for k in ("skipped_batches", "catchup_tokens", "calls_g") if k in d}
-                for impl, d in s.items() if "skipped_batches" in d} for n, s in st.items()}
-    return {"vs_base": r2a.summarize(runs, ci=True), "pairs": {f"{a}_vs_{b}": sp.pair_by_category(runs, a, b) for a, b in PAIRS
-                                                                if a in runs and b in runs},
-            "step_split": {n: r.get("step_split") for n, r in runs.items()}, "paths": verify_paths(cfgs, runs),
-            "ngram_cut": {n: v for n, v in cut.items() if v}, "skip_reeval": {n: v for n, v in skip.items() if v}}
+    cut = {n: {impl: {k: d.get(k) for k in ("cut_drafts", "cut_tokens", "gen_drafts", "gen_tokens", "rs_window", "resets") if k in d}
+               for impl, d in s.items() if "cut_drafts" in d or "resets" in d} for n, s in st.items()}
+    vs_base = r2a.summarize(runs, ci=True)
+    split = {n: r.get("step_split") for n, r in runs.items()}
+    return {"vs_base": vs_base, "pairs": {f"{a}_vs_{b}": sp.pair_by_category(runs, a, b) for a, b in PAIRS if a in runs and b in runs},
+            "step_split": split, "paths": verify_paths(cfgs, runs), "ngram_cut": {n: v for n, v in cut.items() if v},
+            "draft_state": draft_state(vs_base), "reeval": {n: {k: v for k, v in (d or {}).items() if k.startswith(("reeval", "prefill"))}
+                                                            for n, d in split.items() if d and "reeval_ms" in d}}
+
+
+def draft_state(vs_base: dict) -> dict | None:
+    """alpha of the draft-simple configs against the reference (correct draft state, k4q8_ckpt). Text equality cannot show a wrong draft
+    state (the target verifies every token); alpha can. A config more than ALPHA_TOL below the reference has a stale draft state."""
+    alpha = {n: ((vs_base.get(n) or {}).get("all") or {}).get("alpha") for n in (DRAFT_STATE_REF,) + DRAFT_STATE_CHECK}
+    ref = alpha.get(DRAFT_STATE_REF)
+    if ref is None:
+        return None
+    return {"reference": DRAFT_STATE_REF, "alpha": alpha, "tol": ALPHA_TOL,
+            "matches_reference": {n: abs(alpha[n] - ref) <= ALPHA_TOL if alpha.get(n) is not None else None for n in DRAFT_STATE_CHECK}}
+
+
+NOTE_EQ = ("text equality checks only the target side (it verifies every token) and has a numerics floor of 88-100% from batch shapes; "
+           "it says nothing about the draft state, alpha does")
 
 
 def verdict_lines(summ: dict) -> list[str]:
@@ -126,12 +166,25 @@ def verdict_lines(summ: dict) -> list[str]:
     for key, p in (summ.get("pairs") or {}).items():
         a = (p or {}).get("all") or {}
         if a.get("speedup"):
-            out.append("%s: %.3fx (95%% CI %s), alpha %s vs %s, r %s, text equal %s/%s" % (
+            out.append("%s: %.3fx (95%% CI %s), alpha %s vs %s, r %s, text equal %s/%s (informational)" % (
                 key, a["speedup"], _ci(a.get("speedup_ci95")), _f(a.get("alpha")), _f(a.get("base_alpha")), _f(a.get("r")), a.get("text_equal"),
                 a.get("text_compared")))
+    ds = summ.get("draft_state")
+    if ds:
+        out.append("draft state: alpha " + ", ".join("%s %s" % (n, _f(v)) for n, v in ds["alpha"].items()) + "; within %.2f of %s: %s" % (
+            ds["tol"], ds["reference"], ds["matches_reference"]))
+    for n, d in (summ.get("reeval") or {}).items():
+        out.append("%s: draft-context decode of the verify batch %s ms per call, %s ms per step (%s of the step; synchronized, upper bound of "
+                   "the saving from skipping the re-eval)" % (n, _f(d.get("reeval_ms_per_call")), _f(d.get("reeval_ms_per_step")),
+                                                              _f(d.get("reeval_share_of_step"))))
+    for n, v in (summ.get("ngram_cut") or {}).items():
+        for impl, d in v.items():
+            if "resets" in d:
+                out.append("%s: ngram-mod low-acceptance resets %s, cut drafts %s" % (n, d["resets"], d.get("cut_drafts", 0)))
     bad = [n for n, v in (summ.get("paths") or {}).items() if not v["ok"]]
     if bad:
         out.append(f"path verification failed for {bad}: read data.matrix.summary.paths before any number")
+    out.append(NOTE_EQ)
     return out
 
 
@@ -163,8 +216,8 @@ def build_probe(bin_dir: pathlib.Path, notes: list) -> pathlib.Path | None:
     return out
 
 
-def run_probe(exe, model: str, ngl: int, timeout: float) -> dict:
-    cmd = [str(exe), "-m", model, "-ngl", str(ngl)] + PROBE_ARGS
+def run_probe(exe, model: str, ngl: int, timeout: float, args: list | None = None) -> dict:
+    cmd = [str(exe), "-m", model, "-ngl", str(ngl)] + list(PROBE_ARGS if args is None else args)
     try:
         p = subprocess.run(cmd, capture_output=True, text=True, timeout=max(timeout, 5.0))
     except subprocess.TimeoutExpired:
@@ -177,7 +230,8 @@ def run_probe(exe, model: str, ngl: int, timeout: float) -> dict:
 
 def probe_verdict(res: dict) -> dict:
     """Per decode mode: largest logit difference and top-1 agreement over the rollbacks. single: one-token decodes (draft-simple drafting),
-    rollback 1..n_extra; batch: one batch, rollback 1..n_extra - 1 (a verify batch keeps its first token); batch_whole: the whole batch."""
+    rollback 1..n_extra; batch: one batch, rollback 1..n_extra - 1 (a verify batch keeps its first token); batch_whole: the whole batch.
+    exact: every case of the mode is within EXACT_REL of the largest logit and has the same top-1."""
     out = {}
     n_extra = res.get("n_extra")
     for mode in ("single", "batch", "batch_whole"):
@@ -187,30 +241,36 @@ def probe_verdict(res: dict) -> dict:
         if cs:
             out[mode] = {"max_abs_diff": max(c["max_abs_diff"] for c in cs), "max_abs_ref": max(c["max_abs_ref"] for c in cs),
                          "top1_equal": sum(1 for c in cs if c["top1_equal"]), "n": len(cs),
+                         "exact": all(c["max_abs_diff"] <= EXACT_REL * max(c["max_abs_ref"], 1.0) and c["top1_equal"] for c in cs),
                          "by_rollback": {str(c["rollback"]): c["max_abs_diff"] for c in cs}}
     return out
 
 
 def probe_part(bin_dir, models: dict, budget: common.Budget, notes: list) -> dict:
-    out: dict = {"src": os.path.relpath(PROBE_SRC, common.EXP_DIR), "args": PROBE_ARGS, "models": {}}
+    out: dict = {"src": os.path.relpath(PROBE_SRC, common.EXP_DIR), "runs": {}}
     exe = build_probe(bin_dir, notes)
     if not exe:
         out["error"] = "probe build failed"
         return out
-    for name, path in models.items():
-        if budget.expired(20):
-            notes.append(f"r: time budget used up, {name} skipped")
-            continue
-        res = run_probe(exe, path, 99, budget.timeout(240, reserve_s=10))
-        res["verdict"] = probe_verdict(res)
-        out["models"][name] = res
-        v = res["verdict"]
-        if v:
-            notes.append("r %s: rollback after one-token decodes: max logit diff %s, top-1 equal %s/%s; after one batch: max diff %s" % (
-                name, _f((v.get("single") or {}).get("max_abs_diff")), (v.get("single") or {}).get("top1_equal"), (v.get("single") or {}).get("n"),
-                _f((v.get("batch") or {}).get("max_abs_diff"))))
+    for label, names, argv in PROBE_RUNS:
+        ent = out["runs"][label] = {"args": argv, "models": {}}
+        for name in names:
+            if name not in models:
+                continue
+            if budget.expired(20):
+                notes.append(f"r: time budget used up, {label} {name} skipped")
+                continue
+            res = run_probe(exe, models[name], 99, budget.timeout(240, reserve_s=10), argv)
+            res["verdict"] = probe_verdict(res)
+            ent["models"][name] = res
+            v = res["verdict"]
+            if v:
+                parts = ["%s: max logit diff %s, exact %s" % (m, _f(v[m]["max_abs_diff"]), v[m]["exact"]) for m in ("single", "batch") if m in v]
+                notes.append("r %s %s (n_rs_seq %s): " % (label, name, res.get("n_rs_seq")) + "; ".join(parts))
+            elif res.get("error"):
+                notes.append(f"r {label} {name}: {res['error']}")
     out["note"] = ("batch rows with rollback == n_extra roll back the whole batch: the snapshot before its first token was never written; "
-                   "the server never does that with a verify batch (K + 1 tokens, rollback <= K)")
+                   "the server never does that with a verify batch (K + 1 tokens, rollback <= K); single rows are the draft-simple drafting case")
     return out
 
 
@@ -249,14 +309,15 @@ def run(args) -> int:
         save(final=True)
         return 2
     smi = e4_pdl.smi_sample()
-    bad = mc.gpu600_problem(args.gpu, smi)
+    bad = gate_problem(args.gpu)
     doc["gate"] = {"gpu": args.gpu, "smi": smi, "problem": bad, "allow_any_gpu": args.allow_any_gpu}
     if bad and not args.allow_any_gpu:
-        notes.append(f"gate: {bad}; no run on this host (B needs a 600 W PRO 6000)")
+        notes.append(f"gate: {bad}; no run on this host")
         save(final=True)
         return 1
     if bad:
-        notes.append(f"gate (--allow-any-gpu): {bad}; the timings are not comparable to the PRO 6000 runs")
+        notes.append(f"gate (--allow-any-gpu): {bad}; the n_rs_seq 64 probe and the matrix may not fit in memory")
+    notes.append("every comparison is paired inside this pod; absolute timings are not comparable to the 600 W PRO 6000 runs of R2a / R2b")
     paths: dict = {}
     try:
         for name in ("pq2", "draft_q8_0"):
@@ -272,7 +333,7 @@ def run(args) -> int:
         for i, p in enumerate(parts):
             sub_s = part_budget_s(total.left(), p, parts[i:])
             if p == "r":
-                sub_s = max(sub_s, min(120.0, total.left()))     # two short probe runs, not worth a skip
+                sub_s = max(sub_s, min(180.0, total.left()))     # four short probe runs (model loads), not worth a skip
             if sub_s < 60:
                 notes.append(f"part {p} skipped: only {sub_s:.0f} s of budget left")
                 continue
@@ -333,7 +394,7 @@ def parse_args(argv=None):
     ap.add_argument("--ctx", type=int, default=sp.CTX)
     ap.add_argument("--prompts", default=str(make_prompts.R2A_OUT))
     ap.add_argument("--allow-power-cap", action="store_true", help="a power cap below default is a note, not a skip of part m")
-    ap.add_argument("--allow-any-gpu", action="store_true", help="run on a host that is not a 600 W PRO 6000 (development only)")
+    ap.add_argument("--allow-any-gpu", action="store_true", help="run on a card that is not an sm_120 card with 32 GB or more (development only)")
     a = ap.parse_args(argv)
     bad = [p for p in a.parts if p not in PARTS]
     badc = [c for c in a.configs if c not in CONFIG_NAMES]
@@ -353,8 +414,8 @@ def plan_json(a) -> dict:
     blocks = sp.prompt_blocks(order, a.blocks)
     cfgs = matrix_configs(a.configs)
     drafts = {"q8_0": "<draft_q8_0.gguf>"}
-    return {"exp": EXP, "parts": a.parts, "budget_min": a.budget_min, "weights": WEIGHTS, "gate": list(mc.GPU600_TAGS),
-            "model": hf_ids.resolve("bonsai2", "PQ2_0", offline=True), "probe": {"src": str(PROBE_SRC.name), "args": PROBE_ARGS},
+    return {"exp": EXP, "parts": a.parts, "budget_min": a.budget_min, "weights": WEIGHTS, "gate": list(WB_TAGS),
+            "model": hf_ids.resolve("bonsai2", "PQ2_0", offline=True), "probe": {"src": str(PROBE_SRC.name), "runs": [{"label": l, "models": list(m), "args": a_} for l, m, a_ in PROBE_RUNS]},
             "blocks": [[p["id"] for p in b] for b in blocks], "orders": sp.block_orders([c["name"] for c in cfgs], len(blocks)),
             "configs": [{"name": c["name"], "env": c["env"], "expected": expected_path(c),
                          "cmd": sp.config_cmd(bin_dir, "<pq2.gguf>", drafts, c, ctx=a.ctx)} for c in cfgs],

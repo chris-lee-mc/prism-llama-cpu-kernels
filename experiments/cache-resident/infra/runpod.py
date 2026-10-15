@@ -28,7 +28,8 @@ GRAPHQL_URL = "https://api.runpod.io/graphql"
 IMAGE = "nvidia/cuda:12.8.1-devel-ubuntu22.04"
 DEFAULT_REPO = "https://github.com/chris-lee-mc/prism-llama-cpu-kernels"
 DEFAULT_BRANCH = "exp/cache-resident"
-DEFAULT_MAX_PRICE = {"rtx3090": 0.50, "rtx4090": 0.80, "rtx5090": 1.30, "pro6000": 2.60, "pro6000_600w": 2.60, "l40s": 1.20}
+# pro6000_600w: the community price (about 1.69); the secure price (2.09) needs --max-price. The budget gate reserves (failsafe + 5) min at this price.
+DEFAULT_MAX_PRICE = {"rtx3090": 0.50, "rtx4090": 0.80, "rtx5090": 1.30, "pro6000": 2.60, "pro6000_600w": 1.75, "pro6000_maxq": 1.20, "l40s": 1.20}
 MAX_FAILSAFE_MIN = 90
 CAPACITY_HINTS = ("no longer any instances", "no instances", "not available", "unavailable", "out of stock",
                   "capacity", "no gpus", "required specifications", "does not have the resources")
@@ -628,8 +629,9 @@ def launch(exp: str, gpu: str | None = None, *, cmd=None, cloud="any", failsafe_
         dest = pathlib.Path(os.environ.get("CR_RESULTS_DIR") or (EXP_DIR / "results"))
         got = _fetch_results(base, files, dest)
         print(f"downloaded {len(files)} files to {dest}" if got else "error: some downloads failed")
-        if done.get("status") == "ok" and not any(_is_result_json(f["path"], exp, key) for f in files):
-            print(f"error: status ok but MANIFEST lists no {exp}/.../{key}[-*]/*.json")
+        res_exp = ent.get("result_exp") or exp      # a chained entry writes the results of its first command under that name
+        if done.get("status") == "ok" and not any(_is_result_json(f["path"], res_exp, key) for f in files):
+            print(f"error: status ok but MANIFEST lists no {res_exp}/.../{key}[-*]/*.json")
             return 1
         return 0 if (got and done.get("status") == "ok") else 1
     except _PodUnknown as e:

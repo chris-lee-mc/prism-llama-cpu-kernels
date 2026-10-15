@@ -1,6 +1,7 @@
 """Wrap A (A1 + A2), A3 and B drivers, their helpers in r2b_multicol / r2b_spec, the experiment switches in common/ and the server."""
 import json
 import os
+import stat
 import pathlib
 import shutil
 import subprocess
@@ -23,21 +24,28 @@ def test_switches_are_env_gated_and_default_off():
     com = (REPO / "common" / "common.h").read_text()
     f = com[com.index("static inline uint32_t common_exp_ngram_rs()"):][:400]
     assert 'getenv("GGML_EXP_NGRAM_RS")' in f and "static const uint32_t n" in f and ": 0u" in f
+    f = com[com.index("static inline bool common_exp_skip_draft_reeval("):][:700]
+    assert 'getenv("GGML_EXP_SKIP_DRAFT_REEVAL")' in f and "llama_n_rs_seq(ctx_dft) > 0) {\n        return false;" in f      # a recurrent draft is out
+    assert "COMMON_SPECULATIVE_TYPE_DRAFT_SIMPLE" in f and "std::all_of" in f                                          # draft-simple alone
     spec = (REPO / "common" / "speculative.cpp").read_text()
-    f = spec[spec.index("static bool common_exp_skip_draft_reeval()"):][:400]
-    assert 'getenv("GGML_EXP_SKIP_DRAFT_REEVAL")' in f and "static const bool enabled" in f
+    f = spec[spec.index("static bool common_exp_draft_time()"):][:300]
+    assert 'getenv("GGML_EXP_DRAFT_TIME")' in f and "static const bool enabled" in f
+    assert "exp_skip_reeval = n_seq == 1 && common_exp_skip_draft_reeval(params, ctx_dft);" in spec
     proc = spec[spec.index("struct common_speculative_impl_draft_simple"):]
     proc = proc[proc.index("bool process(const llama_batch & batch) override {"):proc.index("void draft(common_speculative_draft_params_vec")]
-    assert "if (common_exp_skip_draft_reeval() &&" in proc and "llama_memory_seq_pos_max(mem, s)" in proc
-    assert proc.index("const int ret = llama_decode(ctx_dft, batch_dft);") > proc.index("common_exp_skip_draft_reeval()")
+    assert "if (exp_skip_reeval && batch.token" in proc and "batch.n_tokens <= (int32_t) n_batch_dft" in proc and "llama_memory_seq_pos_max(mem, s)" in proc
+    assert proc.index("const int ret = llama_decode(ctx_dft, batch_dft);") > proc.index("exp_skip_reeval")
+    assert "if (exp_draft_time) {\n            llama_synchronize(ctx_dft);" in proc                                   # the timing needs the synchronize
+    assert "batch.n_tokens + (dp.n_past - p0) + (llama_pos) n_seq <= (llama_pos) n_batch_dft" in spec                  # catch-up fits the batch
     assert "common_sampler_sample(smpl, ctx_dft, i == 0 ? i_last[seq_id] : i_batch, true);" in spec       # id_last may not be batch row 0
     srv = (REPO / "tools" / "server" / "server-context.cpp").read_text()
-    assert 'getenv("GGML_EXP_DRAFT_CKPT")' in srv and 'getenv("GGML_EXP_SKIP_DRAFT_REEVAL")' in srv
-    assert "exp_skip_reeval = env_skip && atoi(env_skip) != 0 && ctx_dft_seq_rm_type == COMMON_CONTEXT_SEQ_RM_TYPE_RS;" in srv
+    assert 'getenv("GGML_EXP_DRAFT_CKPT")' in srv
+    assert ("exp_skip_reeval = ctx_dft_seq_rm_type == COMMON_CONTEXT_SEQ_RM_TYPE_PART && params_base.n_parallel == 1 &&\n"
+            "                              common_exp_skip_draft_reeval(params_base.speculative, ctx_dft);") in srv
     assert "if (!keep_dft && !llama_memory_seq_rm(llama_get_memory(ctx_dft), slot.id, ckpt.pos_max + 1, -1))" in srv
     for p in (REPO / "common" / "common.h", REPO / "common" / "speculative.cpp", REPO / "tools" / "server" / "server-context.cpp"):
         txt = p.read_text()
-        for key in ("GGML_EXP_", "exp skip-reeval", "exp ngram-rs"):
+        for key in ("GGML_EXP_", "exp skip-reeval", "exp ngram-rs", "exp draft-time", "exp ngram-resets"):
             for ln in [ln for ln in txt.splitlines() if key in ln]:
                 assert all(ord(c) < 0x80 for c in ln), ln
 
@@ -46,12 +54,18 @@ def test_the_printed_counter_lines_match_the_parser():
     spec = (REPO / "common" / "speculative.cpp").read_text()
     assert 'SPC_TRC("exp ngram-rs     %16s: window = %u, cut drafts = %zu, cut tokens = %zu\\n"' in spec
     assert 'SPC_TRC("exp skip-reeval  %16s: skipped batches = %zu, catch-up tokens = %zu\\n"' in spec
+    assert 'SPC_TRC("exp draft-time   %16s: dur(p,pf) = %.3f, %.3f ms, #calls(p,pf) = %zu %zu\\n"' in spec
+    assert 'SPC_TRC("exp ngram-resets %16s: low-acceptance resets = %zu\\n"' in spec
     assert sp.EXP_CUT_RE.search("spec common_specu: exp ngram-rs            ngram-mod: window = 16, cut drafts = 3, cut tokens = 90")
     assert sp.EXP_SKIP_RE.search("spec common_specu: exp skip-reeval      draft-simple: skipped batches = 57, catch-up tokens = 54")
+    assert sp.EXP_TIME_RE.search("spec common_specu: exp draft-time        draft-simple: dur(p,pf) = 488.500, 6.474 ms, #calls(p,pf) = 204 2")
+    assert sp.EXP_RESET_RE.search("spec common_specu: exp ngram-resets            ngram-mod: low-acceptance resets = 2")
     srv = (REPO / "tools" / "server" / "server-context.cpp").read_text()
     for name in ("GGML_EXP_DRAFT_CKPT", "GGML_EXP_SKIP_DRAFT_REEVAL"):
         line = next(ln for ln in srv.splitlines() if 'SRV_INF("%s", "' + name + ":" in ln)
         assert sp.EXP_MARK_RE.search(line.split('"%s", "')[1]).group(1) == name
+    line = next(ln for ln in spec.splitlines() if 'SPC_TRC("%s", "GGML_EXP_DRAFT_TIME:' in ln)
+    assert sp.EXP_MARK_RE.search(line.split('"%s", "')[1]).group(1) == "GGML_EXP_DRAFT_TIME"
 
 
 # ---------------------------------------------------------------- helpers
@@ -80,6 +94,22 @@ def test_rounds_alternate_and_paired_gain_per_round():
     assert s["pp"]["4"]["gain_pct_head"] == pytest.approx(10.0) and "gain_pct_base" not in s["pp"]["4"]
 
 
+def test_paired_gains_leave_out_the_unhealthy_rounds():
+    rows = []
+    for rnd, g in enumerate((1.10, 1.05, 1.20, 0.50)):
+        for cfg, mult in (("off", 1.0), ("on", g)):
+            rows.append({"config": cfg, "round": rnd, "kind": "pp", "width": 4, "tok_s": 400.0 * mult})
+    assert mc.paired_rounds(rows)["pp"]["4"]["n"] == 4
+    p = mc.paired_rounds(rows, "off", "on", before_round=3)
+    assert p["pp"]["4"]["rounds"] == [0, 1, 2] and p["pp"]["4"]["min"] == pytest.approx(5.0)
+    assert mc.paired_rounds(rows, "off", "on", before_round=0)["pp"] == {}
+    assert mc.summarize_bench(rows, ["off", "on"], before_round=2)["pp"]["4"]["rounds"] == [0, 1]
+    v = wrap_a.bench_verdict(p, {"first_bad_round": 3, "problem": "power cap", "where": "on pp"})
+    assert v and all(x.startswith("UNHEALTHY HOST (power cap during round 3 on pp;") for x in v)
+    assert not any("UNHEALTHY" in x for x in wrap_a.bench_verdict(p, {}))
+    assert wrap_a.bench_verdict({"pp": {}, "tg": {}}, {"first_bad_round": 0, "problem": "p"})[0].endswith("no healthy round: no paired gain")
+
+
 def test_prompt_blocks_keep_the_categories_balanced_and_the_order():
     order = sp.balanced_subset(make_prompts.load_longctx(make_prompts.R2A_OUT))
     blocks = sp.prompt_blocks(order, 4)
@@ -105,6 +135,7 @@ spec common_specu: statistics     draft-simple: #calls(b,g,a) =    1      6     
 spec common_specu: exp skip-reeval      draft-simple: skipped batches = 6, catch-up tokens = 2
 spec common_specu: statistics     draft-simple: #calls(b,g,a) =    2     56     56, #gen drafts =     56, #acc drafts =    40, #gen tokens =    221, #acc tokens =   150, #mean acc len = 3.70, #acc rate/pos = (0.9), dur(b,g,a) = 0.000, 350.000, 0.050 ms
 spec common_specu: exp skip-reeval      draft-simple: skipped batches = 56, catch-up tokens = 22
+spec common_specu: exp draft-time        draft-simple: dur(p,pf) = 120.000, 30.000 ms, #calls(p,pf) = 60 3
 """
 
 
@@ -114,6 +145,11 @@ def test_parse_and_difference_the_statistics_lines():
     t = sp.timed_stats(st)["draft-simple"]
     assert (t["calls_g"], t["gen_tokens"], t["acc_tokens"], t["dur_g_ms"], t["n_requests"]) == (50, 200, 141, pytest.approx(300.0), 1)
     assert (t["skipped_batches"], t["catchup_tokens"]) == (50, 20)
+    assert st["draft-simple"][1]["dur_p_ms"] == 120.0 and st["draft-simple"][1]["calls_pf"] == 3 and "dur_p_ms" not in st["draft-simple"][0]
+    res = sp.parse_stats("spec common_specu: statistics        ngram-mod: #calls(b,g,a) =    1     37      8, #gen drafts =      8, #acc drafts =     8, "
+                         "#gen tokens =     58, #acc tokens =    58, dur(b,g,a) = 0.031, 0.166, 0.011 ms\n"
+                         "spec common_specu: exp ngram-resets        ngram-mod: low-acceptance resets = 3\n")
+    assert res["ngram-mod"][0]["resets"] == 3 and sp.timed_stats({"ngram-mod": [res["ngram-mod"][0], res["ngram-mod"][0]]})["ngram-mod"]["resets"] == 0
     both = sp.add_stats({"draft-simple": t}, {"draft-simple": t, "ngram-mod": {"calls_g": 3, "rs_window": 16}})
     assert both["draft-simple"]["calls_g"] == 100 and both["ngram-mod"] == {"calls_g": 3, "rs_window": 16}
     cut = sp.parse_stats("spec common_specu: statistics        ngram-mod: #calls(b,g,a) =    1     37      8, #gen drafts =      8, #acc drafts =     8, "
@@ -136,6 +172,11 @@ def test_step_split_and_pairs_by_category():
     ss = sp.step_split(runs["a"])
     assert ss["draft_ms_per_call"] == pytest.approx(5.0) and ss["rest_ms_per_step"] == pytest.approx(ss["ms_per_step"] - 200.0 / ss["steps"])
     assert sp.step_split(runs["b"])["ms_per_step"] and "draft_ms_per_call" not in sp.step_split(runs["b"]) and sp.step_split({}) == {}
+    assert "reeval_ms" not in ss
+    runs["a"]["stats"]["draft-simple"].update(dur_p_ms=100.0, calls_p=50, dur_pf_ms=7.0)
+    t = sp.step_split(runs["a"])
+    assert t["reeval_ms_per_call"] == pytest.approx(2.0) and t["reeval_ms_per_step"] == pytest.approx(100.0 / t["steps"]) and t["prefill_ms"] == 7.0
+    assert t["reeval_share_of_step"] == pytest.approx(t["reeval_ms_per_step"] / t["ms_per_step"])
     p = sp.pair_by_category(runs, "a", "b")
     assert p["all"]["speedup"] == pytest.approx(1.2) and p["all"]["text_equal"] == 3 and p["all"]["speedup_ci95"]
     assert set(p["by_category"]) == set(cats) and p["by_category"]["edit_diff"]["text_equal"] == 1
@@ -146,7 +187,8 @@ def test_wrap_b_expected_paths_and_verification():
     cfgs = {c["name"]: c for c in wrap_b.matrix_configs()}
     exp = {n: wrap_b.expected_path(c) for n, c in cfgs.items()}
     assert exp["base"]["rollback_path"] == "none" and exp["ngram"] == {"rollback_path": "checkpoint", "n_rs_seq_target": 0, "switches": []}
-    assert exp["ngram_rs64"]["n_rs_seq_target"] == 64 and exp["k4q8_skip"]["switches"] == [wrap_b.SKIP] and exp["k4q8"]["n_rs_seq_target"] == 4
+    assert exp["ngram_rs64"]["n_rs_seq_target"] == 64 and exp["k4q8_ckpt_t"]["switches"] == [wrap_b.CKPT, wrap_b.TIME] and exp["k4q8"]["n_rs_seq_target"] == 4
+    assert "k4q8_skip" not in cfgs and wrap_b.SKIP not in {k for c in cfgs.values() for k in c["env"]}      # the skip prototype is not in the matrix
     runs = {"ngram_rs16": {"blocks": [{"block": 0, "checks": {"rollback_path": "in_batch", "n_rs_seq_target": 16}, "exp_switches": [],
                                        "stats": {"ngram-mod": {"rs_window": 16}}}]}}
     v = wrap_b.verify_paths([cfgs["ngram_rs16"], cfgs["ngram"]], runs)
@@ -166,6 +208,31 @@ def test_probe_verdict_keeps_the_whole_batch_case_apart():
     v = wrap_b.probe_verdict(PROBE_OUT)
     assert v["single"]["max_abs_diff"] == 13.0 and v["single"]["n"] == 2 and v["single"]["top1_equal"] == 0
     assert v["batch"]["max_abs_diff"] == pytest.approx(1e-6) and v["batch"]["n"] == 1 and v["batch_whole"]["by_rollback"] == {"4": 11.0}
+    assert v["batch"]["exact"] is True and v["single"]["exact"] is False and v["batch_whole"]["exact"] is False
+
+
+def test_probe_runs_cover_the_b2_windows():
+    runs = {l: (m, a) for l, m, a in wrap_b.PROBE_RUNS}
+    assert set(runs) == {"n4", "n16", "n64"} and runs["n4"][0] == ("draft_q8_0", "pq2") and runs["n16"][0] == runs["n64"][0] == ("pq2",)
+    for label, n in (("n16", 16), ("n64", 64)):
+        a = runs[label][1]
+        assert a[a.index("--n-rs") + 1] == a[a.index("--extra") + 1] == str(n) and a[a.index("--modes") + 1] == "batch"
+    src = wrap_b.PROBE_SRC.read_text()
+    assert '--modes' in src and 'modes == "batch"' in src and "n_extra > n_rs" in src
+
+
+def test_wrap_b_gate_and_draft_state_check():
+    assert wrap_b.gate_problem("pro6000-maxq") is None and wrap_b.gate_problem("rtx5090") is None and wrap_b.gate_problem("pro6000-ws") is None
+    assert "not one of" in wrap_b.gate_problem("rtx4090")
+    vs = {n: {"all": {"alpha": a}} for n, a in (("k4q8_ckpt", 0.60), ("k4q8", 0.01), ("k4q8_ckpt_t", 0.61))}
+    ds = wrap_b.draft_state(vs)
+    assert ds["matches_reference"] == {"k4q8": False, "k4q8_ckpt_t": True} and wrap_b.draft_state({}) is None
+    lines = wrap_b.verdict_lines({"pairs": {}, "draft_state": ds, "reeval": {"k4q8_ckpt_t": {"reeval_ms_per_call": 1.5, "reeval_ms_per_step": 1.5,
+                                                                                         "reeval_share_of_step": 0.07}},
+                                  "ngram_cut": {"ngram": {"ngram-mod": {"resets": 2}}}, "paths": {}})
+    assert any(l.startswith("draft state: alpha k4q8_ckpt 0.600") and "'k4q8': False" in l for l in lines)
+    assert any("1.500 ms per step" in l and "upper bound" in l for l in lines) and any("low-acceptance resets 2" in l for l in lines)
+    assert lines[-1] == wrap_b.NOTE_EQ
 
 
 def test_probe_source_builds_against_llama_h_only():
@@ -210,12 +277,17 @@ mc = os.environ.get("GGML_CUDA_PQ2_MULTICOL") == "1"
 ign = os.environ.get("FAKE_IGNORE_EXP") == "1"
 skip = os.environ.get("GGML_EXP_SKIP_DRAFT_REEVAL") == "1" and not ign
 ckpt = os.environ.get("GGML_EXP_DRAFT_CKPT") == "1" and not ign
+timeit = os.environ.get("GGML_EXP_DRAFT_TIME") == "1" and not ign
 nrs = 0 if ign else int(os.environ.get("GGML_EXP_NGRAM_RS", "0"))
 impl = "draft-simple" if draft else ("ngram-mod" if spec != "none" else None)
 st = dict(g=0, gt=0, at=0, dg=0.0, sk=0, cu=0, cd=0, ct=0)
 def stats():
     print("spec common_specu: statistics %16s: #calls(b,g,a) =    1 %6d %6d, #gen drafts = %6d, #acc drafts = %5d, #gen tokens = %6d, "
           "#acc tokens = %5d, dur(b,g,a) = 0.000, %.3f, 0.004 ms" % (impl, st["g"], st["g"], st["g"], st["g"], st["gt"], st["at"], st["dg"]), flush=True)
+    if timeit and impl == "draft-simple":
+        print("spec common_specu: exp draft-time   %16s: dur(p,pf) = %.3f, %.3f ms, #calls(p,pf) = %d %d" % (impl, 1.5 * st["g"], 20.0, st["g"], 2), flush=True)
+    if impl == "ngram-mod":
+        print("spec common_specu: exp ngram-resets %16s: low-acceptance resets = %d" % (impl, st["g"] // 10), flush=True)
     if skip and impl == "draft-simple":
         print("spec common_specu: exp skip-reeval  %16s: skipped batches = %d, catch-up tokens = %d" % (impl, st["sk"], st["cu"]), flush=True)
     if nrs and impl == "ngram-mod":
@@ -260,6 +332,8 @@ else:
         print("srv    load_model: GGML_EXP_SKIP_DRAFT_REEVAL: the draft context keeps its drafted tokens", flush=True)
     if ckpt:
         print("srv    load_model: GGML_EXP_DRAFT_CKPT: the draft context uses checkpoints", flush=True)
+    if timeit:
+        print("spec common_specu: GGML_EXP_DRAFT_TIME: the decode of the verify batch on the draft context is timed", flush=True)
 HTTPServer(("127.0.0.1", port), H).serve_forever()
 """
 
@@ -299,7 +373,8 @@ def _result(tmp, exp, gpu):
 def test_wrap_a_end_to_end_with_fakes(wpod):
     assert wrap_a.main(["--budget-min", "10", "--per-category", "2", "--blocks", "2"]) == 0
     d = _result(wpod, "wrap_a", "pro6000-ws")["data"]
-    assert d["gate"]["problem"] is None and [t["config"] for t in d["tbo"]] == ["on", "off"] and all(mc.tbo_passed(t) for t in d["tbo"])
+    assert d["gate"]["problem"] is None and [t["config"] for t in d["tbo"]] == ["on", "on", "on", "off"] and all(mc.tbo_passed(t) for t in d["tbo"])
+    assert d["bench_health"] == {} and d["host_b"]["problem"] is None
     assert len(d["bench"]) == 4 * 2 * 10 and [r["config"] for r in d["bench"][::10]] == ["off", "on", "on", "off", "off", "on", "on", "off"]
     bp = d["bench_paired"]
     assert bp["pp"]["4"]["n"] == 4 and bp["pp"]["4"]["median"] == pytest.approx(100.0) and bp["pp"]["2"]["median"] == pytest.approx(0.0)
@@ -334,33 +409,73 @@ def test_wrap_a_refuses_a_max_q_and_stops_on_a_failing_kernel(wpod, monkeypatch)
     assert d["bench"] == [] and d["spec"] is None and any(n.startswith("stop: test-backend-ops did not pass") for n in d["notes"])
 
 
+def test_wrap_a_unhealthy_host_is_not_pr_evidence(wpod, monkeypatch):
+    # a throttled round: the first unhealthy round and the later ones are left out, the verdict says so, the exit code is 1
+    calls = {"n": 0}
+
+    def health(smi, check_power=True):
+        calls["n"] += 1
+        return "power cap 400 W < 75% of default 600 W" if calls["n"] >= 5 else None       # 4 runs per round: the 5th is round 1
+    monkeypatch.setattr(mc.e4_pdl, "health_problem", health)
+    monkeypatch.setattr(wrap_a.r1, "host_health", lambda smi, probe_smi, check_power=True: (None, None))      # healthy before the timing
+    assert wrap_a.main(["--parts", "b", "--budget-min", "10"]) == 1
+    d = _result(wpod, "wrap_a", "pro6000-ws")["data"]
+    assert d["bench_health"]["first_bad_round"] == 1 and "power cap" in d["bench_health"]["problem"]
+    assert d["bench_paired"]["pp"]["4"]["rounds"] == [0] and d["bench_summary"]["pp"]["4"]["rounds"] == [0]
+    assert any(r["unhealthy"] for r in d["bench"]) and not any(r["unhealthy"] for r in d["bench"] if r["round"] == 0)
+    verdict = [n for n in d["notes"] if "width 4: on over off" in n]
+    assert verdict and verdict[0].startswith("UNHEALTHY HOST (power cap")
+
+
+def test_wrap_a_skips_the_timing_on_an_unhealthy_host(wpod, monkeypatch):
+    monkeypatch.setattr(wrap_a.r1, "host_health", lambda smi, probe_smi, check_power=True: ("SM clock 1200 MHz under load", None))
+    assert wrap_a.main(["--budget-min", "10", "--per-category", "2", "--blocks", "2"]) == 1
+    d = _result(wpod, "wrap_a", "pro6000-ws")["data"]
+    assert d["bench"] == [] and d["spec"] is None and d["host_b"]["problem"] and d["host"]["problem"]
+    assert sum(1 for n in d["notes"] if n.startswith("UNHEALTHY HOST")) == 2          # part b and part s
+
+
 def test_wrap_b_end_to_end_with_fakes(wpod):
     assert wrap_b.main(["--budget-min", "10", "--per-category", "2", "--blocks", "2"]) == 0
     d = _result(wpod, "wrap_b", "pro6000-ws")["data"]
-    pr = d["probe"]["models"]
-    assert set(pr) == {"draft_q8_0", "pq2"} and pr["pq2"]["verdict"]["single"]["max_abs_diff"] == 13.0
+    runs_p = d["probe"]["runs"]
+    assert set(runs_p) == {"n4", "n16", "n64"} and set(runs_p["n4"]["models"]) == {"draft_q8_0", "pq2"} and set(runs_p["n64"]["models"]) == {"pq2"}
+    assert runs_p["n4"]["models"]["pq2"]["verdict"]["single"]["max_abs_diff"] == 13.0 and "--modes" in runs_p["n64"]["models"]["pq2"]["cmd"]
     m = d["matrix"]
     assert set(m["runs"]) == set(wrap_b.CONFIG_NAMES) and all(len(r["rows"]) == 6 for r in m["runs"].values())
     summ = m["summary"]
     assert all(v["ok"] for v in summ["paths"].values()), summ["paths"]
     p = summ["pairs"]
-    assert p["k4q8_skip_vs_k4q8"]["all"]["speedup"] == pytest.approx(1.05) and p["k4q8_ckpt_vs_k4q8"]["all"]["speedup"] == pytest.approx(1.2)
+    assert p["k4q8_ckpt_vs_k4q8"]["all"]["speedup"] == pytest.approx(1.2) and p["k4q8_ckpt_t_vs_k4q8_ckpt"]["all"]["speedup"] == pytest.approx(1.0)
     assert p["ngram_rs16_vs_ngram"]["all"]["speedup"] == pytest.approx(1.1) and p["ngram_rs64_vs_ngram"]["all"]["speedup_ci95"]
     assert set(p["ngram_rs64_vs_ngram"]["by_category"]) == set(make_prompts.R2A_CATEGORIES)
     assert summ["ngram_cut"]["ngram_rs16"]["ngram-mod"]["rs_window"] == 16 and summ["ngram_cut"]["ngram_rs16"]["ngram-mod"]["cut_tokens"] == 60
-    assert summ["skip_reeval"]["k4q8_skip"]["draft-simple"]["skipped_batches"] > 0 and "k4q8" not in summ["skip_reeval"]
+    assert "resets" in summ["ngram_cut"]["ngram"]["ngram-mod"] and "cut_drafts" not in summ["ngram_cut"]["ngram"]["ngram-mod"]
+    assert set(summ["reeval"]) == {"k4q8_ckpt_t"} and summ["reeval"]["k4q8_ckpt_t"]["reeval_ms_per_call"] > 0
+    assert summ["draft_state"]["reference"] == "k4q8_ckpt" and all(summ["draft_state"]["matches_reference"].values())
     assert summ["vs_base"]["ngram"]["checks"]["rollback_path"] == "checkpoint" and summ["vs_base"]["ngram_rs64"]["checks"]["n_rs_seq_target"] == 64
     assert m["runs"]["k4q8_ckpt"]["blocks"][0]["exp_switches"] == [wrap_b.CKPT] and m["runs"]["k4q8"]["blocks"][0]["exp_switches"] == []
-    assert summ["vs_base"]["k4q8_skip"]["all"]["text_equal_frac"] == 1.0 and d["config"]["envs"]["ngram_rs64"] == {wrap_b.NGRAM_RS: "64"}
+    assert m["runs"]["k4q8_ckpt_t"]["blocks"][0]["exp_switches"] == [wrap_b.CKPT, wrap_b.TIME]
+    assert d["config"]["envs"]["ngram_rs64"] == {wrap_b.NGRAM_RS: "64"} and wrap_b.NOTE_EQ in d["notes"]
+    assert any(n.startswith("draft state: alpha") for n in d["notes"]) and any("ms per step" in n and "upper bound" in n for n in d["notes"])
     assert "rpa_secretsecret456" not in json.dumps(d)
+
+
+def test_wrap_b_runs_on_a_maxq_and_refuses_an_ada_card(wpod, monkeypatch):
+    monkeypatch.setenv("CR_GPU_TAG", "pro6000-maxq")                 # not PR evidence: no 600 W gate
+    assert wrap_b.main(["--parts", "r", "--budget-min", "6"]) == 0
+    assert _result(wpod, "wrap_b", "pro6000-maxq")["data"]["gate"]["problem"] is None
+    monkeypatch.setenv("CR_GPU_TAG", "rtx4090")
+    assert wrap_b.main(["--parts", "r", "--budget-min", "6"]) == 1
+    assert "not one of" in _result(wpod, "wrap_b", "rtx4090")["data"]["gate"]["problem"]
 
 
 def test_wrap_b_flags_a_switch_that_did_not_take_effect(wpod, monkeypatch):
     monkeypatch.setenv("FAKE_IGNORE_EXP", "1")
-    assert wrap_b.main(["--parts", "m", "--configs", "base,ngram_rs16,k4q8_skip", "--budget-min", "6", "--per-category", "2", "--blocks", "2"]) == 1
+    assert wrap_b.main(["--parts", "m", "--configs", "base,ngram_rs16,k4q8_ckpt_t", "--budget-min", "6", "--per-category", "2", "--blocks", "2"]) == 1
     d = _result(wpod, "wrap_b", "pro6000-ws")["data"]
     paths = d["matrix"]["summary"]["paths"]
-    assert paths["base"]["ok"] is True and paths["ngram_rs16"]["ok"] is False and paths["k4q8_skip"]["ok"] is False
+    assert paths["base"]["ok"] is True and paths["ngram_rs16"]["ok"] is False and paths["k4q8_ckpt_t"]["ok"] is False
     assert any("path verification failed" in n for n in d["notes"])
 
 
@@ -375,8 +490,10 @@ def test_wrap_a3_end_to_end_with_a_fake_base_build(wpod, monkeypatch):
         doc["build"] = {"applied": True, "differs": True}
         return base, str(wpod / "target.gguf")
     monkeypatch.setattr(wrap_a3, "build_part", fake_build)
+    monkeypatch.setattr(wrap_a3, "find_cuobjdump", lambda: None)
     assert wrap_a3.main(["--budget-min", "10"]) == 0
     d = _result(wpod, "wrap_a3", "rtx4090")["data"]
+    assert d["sass"]["error"] == "cuobjdump not found" and any("sass: cuobjdump not found" in n for n in d["notes"])
     assert [t["config"] for t in d["tbo"]] == ["head", "base"] and all(mc.tbo_passed(t) for t in d["tbo"])
     assert len(d["bench"]) == 4 * 2 * 10 and {r["config"] for r in d["bench"]} == {"base", "head"}
     assert d["bench_paired"]["a"] == "base" and d["bench_paired"]["pp"]["4"]["median"] == pytest.approx(0.0)
@@ -385,6 +502,86 @@ def test_wrap_a3_end_to_end_with_a_fake_base_build(wpod, monkeypatch):
     monkeypatch.setenv("CR_GPU_TAG", "rtx5090")
     assert wrap_a3.main(["--budget-min", "6"]) == 1
     assert "not an RTX 4090" in _result(wpod, "wrap_a3", "rtx5090")["data"]["gate"]["problem"]
+
+
+SASS = """
+        Function : _Z22mul_mat_vec_pq2_0_mc4Pv
+        .headerflags    @"EF_CUDA_SM89"
+        /*0000*/                   MOV R1, c[0x0][0x28] ;                         /* 0x00000a0000017a02 */
+                                                                                   /* 0x000fc40000000f00 */
+        /*0010*/                   S2R R0, SR_TID.X ;                             /* 0x0000000000007919 */
+                                                                                   /* 0x000e220000002100 */
+        Function : _Z6othercPv
+        /*0000*/                   NOP ;                                          /* 0x0000000000007918 */
+"""
+
+
+def test_sass_kernels_compare_by_instruction_text():
+    k = wrap_a3.sass_kernels(SASS.splitlines(True))
+    assert list(k) == ["_Z22mul_mat_vec_pq2_0_mc4Pv"] and k["_Z22mul_mat_vec_pq2_0_mc4Pv"] == ["MOV R1, c[0x0][0x28] ;", "S2R R0, SR_TID.X ;"]
+    moved = SASS.replace("/*0010*/", "/*0020*/").replace("0x000e220000002100", "0x1111111111111111")
+    assert wrap_a3.sass_compare(k, wrap_a3.sass_kernels(moved.splitlines(True)))["identical"] is True
+    other = wrap_a3.sass_kernels(SASS.replace("SR_TID.X", "SR_TID.Y").splitlines(True))
+    c = wrap_a3.sass_compare(k, other)
+    assert c["identical"] is False and c["different"] == ["_Z22mul_mat_vec_pq2_0_mc4Pv"] and wrap_a3.sass_compare({}, {})["identical"] is False
+
+
+def test_sass_part_with_a_fake_cuobjdump(tmp_path, monkeypatch):
+    tool = tmp_path / "cuobjdump"
+    tool.write_text("#!%s\nimport sys\nprint(open(sys.argv[-1]).read())\n" % sys.executable)
+    tool.chmod(tool.stat().st_mode | stat.S_IXUSR)
+    for n, txt in (("head", SASS), ("base", SASS), ("diff", SASS.replace("SR_TID.X", "SR_TID.Y"))):
+        (tmp_path / n).mkdir()
+        (tmp_path / n / "libggml-cuda.so").write_text(txt)
+    monkeypatch.setattr(wrap_a3, "find_cuobjdump", lambda: str(tool))
+    notes = []
+    out = wrap_a3.sass_part({"head": tmp_path / "head", "base": tmp_path / "base"}, "89", common_budget(), notes)
+    assert out["identical"] is True and out["arch"] == "sm_89" and notes[0].startswith("sass mul_mat_vec_pq2_0_mc sm_89: identical in both builds")
+    out = wrap_a3.sass_part({"head": tmp_path / "head", "base": tmp_path / "diff"}, "89", common_budget(), notes)
+    assert out["identical"] is False and "NOT identical" in notes[1]
+
+
+def common_budget():
+    from exps import common
+    return common.Budget(2.0)
+
+
+def test_wrap_costs_fit_the_trimmed_estimates():
+    # the cost model of the server part at the defaults: wrap_a about 4 min, wrap_b about 16 min; both inside their budgets
+    rows = make_prompts.load_longctx(make_prompts.R2A_OUT)
+    for mod, cfgs, per, nb, part_w in ((wrap_a, wrap_a.spec_configs(), wrap_a.PER_CATEGORY, wrap_a.BLOCKS, "s"),
+                                       (wrap_b, wrap_b.matrix_configs(), sp.PER_CATEGORY, wrap_b.BLOCKS, "m")):
+        blocks = sp.prompt_blocks(sp.balanced_subset(rows, sp.SEED, per), nb)
+        est = sum(r2a.config_cost_s(c, b) for b in blocks for c in cfgs) / 60.0
+        share = (mod.DEFAULT_TOTAL_MIN - 25 / 60.0) * mod.WEIGHTS[part_w] / sum(mod.WEIGHTS.values())
+        assert est <= share * 1.05, (mod.EXP, est, share)
+
+
+def test_rs_rollback_cpu_configs_and_summary():
+    cfgs = {c["name"]: c for c in rs_rollback_cpu.server_configs()}
+    assert len(cfgs) == len(rs_rollback_cpu.server_configs()) and all(c["base"] in cfgs for c in cfgs.values())
+    assert cfgs["k4_skip_near"]["model"] == "target" and cfgs["k4_skip_near"]["env"] == {wrap_b.SKIP: "1"}          # hybrid draft: ignored
+    assert cfgs["k4_l_skip_near"]["model"] == "l" and cfgs["k4_l_skip_near"]["draft"] == "lnear" and cfgs["k4_l_near"]["env"] == {}
+    assert cfgs["k4_ckpt_t_near"]["env"] == {wrap_b.CKPT: "1", wrap_b.TIME: "1"} and cfgs["ngram_rs8_mid"]["env"] == {wrap_b.NGRAM_RS: "8"}
+    assert cfgs["ngram_mid"]["base"] == "base_mid" and cfgs["k4_l_same"]["base"] == "base_l"
+
+    def srv(acc, drafted, partial=0, **kw):
+        return dict({"acceptance": acc, "drafted": drafted, "accepted": int((acc or 0) * drafted), "ignored": False, "text_equal_base": 3, "text_compared": 3,
+                     "steps": {"verified": 10, "partial": partial, "restored": 0, "rolled_back_tokens": 4 * partial}, "path": {"rollback_path": "in_batch"},
+                     "stats": {}}, **kw)
+    s = {"k4_near": srv(0.001, 1000), "k4_ckpt_near": srv(0.106, 800, 190), "k4_skip_near": srv(0.001, 1000, ignored=True),
+         "k4_same": srv(0.011, 1000), "k4_ckpt_same": srv(1.0, 200),
+         "k4_l_near": srv(0.329, 487, 107), "k4_l_skip_near": srv(0.329, 487, 107, stats={"draft-simple": {"skipped_batches": 125, "catchup_tokens": 15}}),
+         "ngram_mid": srv(None, 158, 2), "ngram_rs8_mid": srv(None, 137, 2)}
+    notes = rs_rollback_cpu.summary_notes(s)
+    assert any("hybrid draft near: acceptance k4_near 0.001, k4_ckpt_near 0.106" in n and "stale rollback" in n for n in notes)
+    assert any("no rollback happens" in n and "k4_same 0.011" in n for n in notes)                       # the 'same' row is not rollback evidence
+    assert any("skip switch ignored: True (acceptance equals k4_near: True)" in n for n in notes)
+    assert any("attention-only draft near: acceptance k4_l 0.329, k4_l_skip 0.329" in n and "skipped batches 125" in n for n in notes)
+    assert any(n.startswith("ngram_rs8_mid: drafted 137") and "partial steps 2 of 10" in n for n in notes)
+    import inspect
+    src = inspect.getsource(rs_rollback_cpu.run)
+    assert '"bin_dir"' not in src and '"build": pathlib.Path(bin_dir).parent.name' in src                # the result keeps the build name, not its path
 
 
 @pytest.mark.parametrize("mod", [wrap_a, wrap_a3, wrap_b, rs_rollback_cpu])

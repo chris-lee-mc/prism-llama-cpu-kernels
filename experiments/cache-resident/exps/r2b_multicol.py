@@ -147,12 +147,13 @@ def round_configs(configs: list, rnd: int) -> list:
     return list(configs) if rnd % 2 == 0 else list(reversed(configs))
 
 
-def paired_rounds(rows: list[dict], a: str = "off", b: str = "on") -> dict:
+def paired_rounds(rows: list[dict], a: str = "off", b: str = "on", before_round: int | None = None) -> dict:
     """Gain of b over a per width and kind, round by round (ms_a / ms_b - 1 in percent, each from the median of the round's reps),
-    and over the rounds: median, min, max and whether every round has the same sign. A round counts when both configs ran it."""
+    and over the rounds: median, min, max and whether every round has the same sign. A round counts when both configs ran it.
+    before_round: only rounds below it count (the first unhealthy round and later ones are left out)."""
     cell: dict = {}
     for r in rows:
-        if r.get("tok_s"):
+        if r.get("tok_s") and (before_round is None or r["round"] < before_round):
             cell.setdefault((r["kind"], r["width"]), {}).setdefault(r["round"], {})[r["config"]] = r["tok_s"]
     out: dict = {"a": a, "b": b, "pp": {}, "tg": {}}
     for (kind, width), by_r in sorted(cell.items()):
@@ -165,12 +166,12 @@ def paired_rounds(rows: list[dict], a: str = "off", b: str = "on") -> dict:
     return out
 
 
-def summarize_bench(rows: list[dict], cfg_names: list[str], ref: str = "off") -> dict:
+def summarize_bench(rows: list[dict], cfg_names: list[str], ref: str = "off", before_round: int | None = None) -> dict:
     """rows: {config, round, kind (pp|tg), width, tok_s}. Per width: median ms per batch of each config over the rounds in which every
     config has the width, and gain_pct_<cfg> = ms_<ref> / ms_<cfg> - 1 in percent. tg: median decode tok/s per config."""
     cells: dict = {}
     for r in rows:
-        if r.get("tok_s"):
+        if r.get("tok_s") and (before_round is None or r["round"] < before_round):
             cells.setdefault((r["kind"], r["width"]), {}).setdefault(r["config"], {}).setdefault(r["round"], []).append(r["tok_s"])
     out: dict = {"pp": {}, "tg": {}}
     for (kind, width), by_c in sorted(cells.items()):
@@ -327,8 +328,11 @@ def bench_entries(cmd: list[str], env: dict, timeout: float) -> tuple[list[dict]
 
 
 def bench_part(bin_dir, model: str, budget: common.Budget, notes: list, rows: list, allow_power_cap: bool, save,
-               configs: list | None = None, rounds: int = ROUNDS, bins: dict | None = None, tag: str = "r2b_mc") -> None:
-    """configs: [(name, env)] (default CONFIGS); bins: {name: bin_dir} when the configs are different builds."""
+               configs: list | None = None, rounds: int = ROUNDS, bins: dict | None = None, tag: str = "r2b_mc",
+               health: dict | None = None) -> None:
+    """configs: [(name, env)] (default CONFIGS); bins: {name: bin_dir} when the configs are different builds.
+    health: filled with first_bad_round and problem at the first run that fails the health check; rows from that round on are flagged
+    unhealthy (the caller leaves them out with before_round)."""
     unhealthy = False
     configs = CONFIGS if configs is None else configs
     for rnd in range(rounds):
@@ -345,12 +349,14 @@ def bench_part(bin_dir, model: str, budget: common.Budget, notes: list, rows: li
                 if bad and not unhealthy:
                     unhealthy = True
                     notes.append(f"host health: {bad} during round {rnd} {name} {kind}; timings after this may be invalid")
+                    if health is not None:
+                        health.update(first_bad_round=rnd, problem=bad, where=f"{name} {kind}")
                 if err:
                     notes.append(f"round {rnd} {name} {kind} bench failed: {err}")
                 for r in e5_cost.rows_from(got, "pq2", 0):
                     rows.append({"config": name, "env": cenv, "round": rnd, "kind": "pp" if r["kind"] == "verify" else "tg",
                                  "width": r["width"], "tok_s": r["tok_s"], "stddev": r["stddev"], "ms_per_batch": r["ms_per_batch"],
-                                 "samples_ts": r["samples_ts"], "smi": smi})
+                                 "samples_ts": r["samples_ts"], "smi": smi, "unhealthy": unhealthy})
                 save()
                 print("[%s] r%d %s %s sm %s MHz" % (tag, rnd, name, kind, smi.get("sm_mhz_med")), flush=True)
 

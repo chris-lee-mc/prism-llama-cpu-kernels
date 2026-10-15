@@ -1,27 +1,34 @@
 """Wrap A (A1 + A2): evidence for the fork PR that enables the PQ2_0 multi-column kernel on sm_120, one 600 W PRO 6000 pod session.
 
-  python -m exps.fetch_models --models pq2,draft_q8_0 --timeout-min 6 && python -m exps.wrap_a [--parts t,b,s] [--budget-min 20]
+  python -m exps.fetch_models --models pq2,draft_q8_0 --timeout-min 6 && python -m exps.wrap_a [--parts t,b,s] [--budget-min 12]
 
 The kernel is the #306 mat-vec (mmvq-pq2_0.cuh) for 3-8 columns; the prototype switch GGML_CUDA_PQ2_MULTICOL=1 enables it on cc >= Ada
 (default: Ada only) and the kernel calls ggml_cuda_pdl_sync() before it reads the activations. off = variable unset, on = set to 1.
 Gate: the GPU tag must be pro6000-ws or pro6000-server (600 W) and the default power limit >= 550 W; a Max-Q or any other GPU gets no
 timing (exit 1). --allow-any-gpu turns the gate into a note (development only).
-t  correctness. test-backend-ops test -o MUL_MAT -b CUDA0 -p type_a=pq2_0, with on, then off (r2b_multicol part t). A failure with on
-   stops the run before any timing.
+Health: the 600 W card must also run at its default limit during the timing. r1.host_probe / host_health run before part b and before part s
+(an unhealthy host skips the part, exit 1). During part b every run is checked (clocks, power cap); the first unhealthy round and all later
+rounds are left out of the paired gains (data.bench_health), the verdict lines then start with UNHEALTHY HOST and the exit code is 1, so a
+capped host cannot pass as PR evidence.
+t  correctness. test-backend-ops test -o MUL_MAT -b CUDA0 -p type_a=pq2_0, with on three times (a PDL race is timing dependent), then off
+   (r2b_multicol part t). A failure with on stops the run before any timing.
 b  A1, paired kernel timing. llama-bench on Bonsai 2 27B PQ2_0 (-fa on, -ub 2048, f16 KV, depth 0): -p 1,...,9 -n 0 -r 5 and
    -p 0 -n 128 -r 5, off and on alternating, --rounds rounds (default 4: off on / on off / off on / on off). Reported: ms per width
    per config (median over rounds), the gain of on over off per round and its median / min / max (widths 1, 2 and 9 do not use
    the kernel: their gain is the noise floor), decode tok/s.
-s  A2, end to end. llama-server, the R2a balanced subset (8 prompts per category, the 24 prompts of r2b_spec, same seed, ctx 16384,
-   -lv 4): target alone (base), draft-simple K=4 with the Qwen3.5-0.8B Q8_0 draft with the kernel off (k4q8_off) and on (k4q8_on).
-   Interleaved by prompt blocks: --blocks blocks (default 4, 2 prompts per category each); in every block each config gets a fresh
+s  A2, end to end. llama-server, the R2a balanced subset (--per-category prompts per category, default 4, same seed, ctx 16384, -lv 4):
+   target alone (base), draft-simple K=4 with the Qwen3.5-0.8B Q8_0 draft with the kernel off (k4q8_off) and on (k4q8_on).
+   Interleaved by prompt blocks: --blocks blocks (default 2); in every block each config gets a fresh
    server; the config order changes per block (r2b_spec.block_orders) so on runs before off as often as after. Reported: per config
    and category tok/s, speedup over base with bootstrap 95% CIs, r, alpha, ms per step and its split from the server statistics
-   (draft dur g vs the rest, which holds the target verify the kernel changes), greedy text equality of on vs off and of each vs base,
-   and on over off per category (paired bootstrap CI). The host health check of R2a skips s on a throttled host.
-Parts run in the order t, b, s with weights 3 : 8 : 9 of --budget-min (unused time rolls forward).
-Result: results/wrap_a/<gpu>/<stamp>.json with data.gate, data.tbo, data.bench, data.bench_summary, data.bench_paired, data.spec, data.host.
-Time: failsafe 55 min = bootstrap with the cold build ~14, downloads <= 6, wrap_a 20, reserve 5 (the runs need about 14).
+   (draft dur g vs the rest, which holds the target verify the kernel changes), greedy text equality of on vs off and of each vs base
+   (informational: the kernel changes the accumulation order, so mismatches are expected numerics), and on over off per category
+   (paired bootstrap CI). The draft state of k4q8 is the stale-rollback one (see wrap_b); it is the same in off and on.
+Parts run in the order t, b, s with weights 2 : 6 : 4.5 of --budget-min (unused time rolls forward).
+Result: results/wrap_a/<gpu>/<stamp>.json with data.gate, data.tbo, data.bench, data.bench_summary, data.bench_paired, data.bench_health,
+data.spec, data.host, data.host_b.
+Time: failsafe 40 min = bootstrap with the cold build ~15, downloads <= 6, wrap_a 12, reserve 5 (cost model: s about 4 min at the defaults).
+Cost at the community price of about $1.69 per hour: pod time about 32 min, about $0.9; the secure price of $2.09 gives about $1.1.
 """
 from __future__ import annotations
 
@@ -34,13 +41,14 @@ from exps import common, e4_bonsai, e4_pdl, hf_ids, make_prompts, r1, r2a_longct
 EXP = "wrap_a"
 ENV_VAR = mc.ENV_VAR
 KCONFIGS = [("off", {}), ("on", {ENV_VAR: "1"})]
-TBO_ORDER = [KCONFIGS[1], KCONFIGS[0]]
+TBO_ORDER = [KCONFIGS[1]] * 3 + [KCONFIGS[0]]     # on three times: a PDL race is timing dependent; off last (a short budget drops it first)
 ROUNDS = 4
-BLOCKS = 4
+BLOCKS = 2
+PER_CATEGORY = 4
 SPEC_NAMES = ["base", "k4q8_off", "k4q8_on"]
 PARTS = "tbs"
-WEIGHTS = {"t": 3.0, "b": 8.0, "s": 9.0}
-DEFAULT_TOTAL_MIN = 20.0
+WEIGHTS = {"t": 2.0, "b": 6.0, "s": 4.5}
+DEFAULT_TOTAL_MIN = 12.0
 END_RESERVE_S = 25.0
 
 
@@ -52,14 +60,21 @@ def spec_configs() -> list[dict]:
             dict(by["k4_q8"], name="k4q8_on", env={ENV_VAR: "1"}, desc="draft-simple K=4, Qwen3.5-0.8B Q8_0 draft, PQ2_0 multi-column kernel on")]
 
 
-def bench_verdict(paired: dict) -> list[str]:
+def bench_verdict(paired: dict, health: dict | None = None) -> list[str]:
+    """Paired gains per width. After an unhealthy host every line starts with UNHEALTHY HOST and says which rounds were left out."""
+    pre = ""
+    if health and health.get("first_bad_round") is not None:
+        pre = "UNHEALTHY HOST (%s during round %d %s; that round and later ones left out): " % (
+            health["problem"], health["first_bad_round"], health.get("where", ""))
     out = []
     for w, e in paired.get("pp", {}).items():
-        out.append("width %s: on over off %+.1f%% (rounds %s, min %+.1f%%, max %+.1f%%)%s" % (
-            w, e["median"], e["n"], e["min"], e["max"], "" if int(w) in mc.MC_WIDTHS else " (not a multi-column width)"))
+        out.append("%swidth %s: on over off %+.1f%% (rounds %s, min %+.1f%%, max %+.1f%%)%s" % (
+            pre, w, e["median"], e["n"], e["min"], e["max"], "" if int(w) in mc.MC_WIDTHS else " (not a multi-column width)"))
     tg = paired.get("tg", {}).get("1")
     if tg:
-        out.append("decode tg128: on over off %+.1f%% (min %+.1f%%, max %+.1f%%)" % (tg["median"], tg["min"], tg["max"]))
+        out.append("%sdecode tg128: on over off %+.1f%% (min %+.1f%%, max %+.1f%%)" % (pre, tg["median"], tg["min"], tg["max"]))
+    if pre and not out:
+        out.append(pre + "no healthy round: no paired gain")
     return out
 
 
@@ -68,7 +83,8 @@ def spec_summary(runs: dict) -> dict:
            "step_split": {n: r.get("step_split") for n, r in runs.items()}}
     a = (out["on_vs_off"] or {}).get("all") or {}
     ms = {n: (out["step_split"].get(n) or {}).get("ms_per_step") for n in ("k4q8_on", "k4q8_off")}
-    out["verdict"] = None if not a.get("speedup") else ("k4q8_on over k4q8_off %.3fx (95%% CI %s), greedy text equal %s/%s, ms/step on %s vs off %s" % (
+    out["verdict"] = None if not a.get("speedup") else ("k4q8_on over k4q8_off %.3fx (95%% CI %s), greedy text equal %s/%s (informational: "
+                                                         "the kernel changes the accumulation order), ms/step on %s vs off %s" % (
         a["speedup"], "n/a" if not a.get("speedup_ci95") else "[%.3f, %.3f]" % tuple(a["speedup_ci95"]), a.get("text_equal"), a.get("text_compared"),
         *("%.2f" % ms[n] if ms[n] else "n/a" for n in ("k4q8_on", "k4q8_off"))))
     return out
@@ -96,12 +112,14 @@ def run(args) -> int:
     config = {"parts": args.parts, "budget_min": args.budget_min, "rounds": args.rounds, "blocks": args.blocks, "kernel_configs": dict(KCONFIGS),
               "spec_configs": [c["name"] for c in spec_configs()], "seed": args.seed, "per_category": args.per_category, "ctx": args.ctx,
               "prompt_ids": [p["id"] for p in order], "models": {}, "quick": args.quick}
-    doc: dict = {"gate": None, "tbo": [], "bench": [], "bench_summary": {}, "bench_paired": {}, "spec": None, "host": None}
+    doc: dict = {"gate": None, "tbo": [], "bench": [], "bench_summary": {}, "bench_paired": {}, "bench_health": {}, "spec": None, "host": None,
+                 "host_b": None}
     rows: list[dict] = doc["bench"]
+    health: dict = doc["bench_health"]          # first_bad_round / problem of part b; rounds from there on are left out of the gains
 
     def save(final: bool = False) -> None:
-        doc["bench_summary"] = mc.summarize_bench(rows, [c for c, _ in KCONFIGS])
-        doc["bench_paired"] = mc.paired_rounds(rows, "off", "on")
+        doc["bench_summary"] = mc.summarize_bench(rows, [c for c, _ in KCONFIGS], before_round=health.get("first_bad_round"))
+        doc["bench_paired"] = mc.paired_rounds(rows, "off", "on", before_round=health.get("first_bad_round"))
         (common.write_result if final else common.write_partial)(EXP, args, r1.scrub(config, secrets), [], r1.scrub(notes, secrets), False,
                                                                  extra=r1.scrub(doc, secrets))
 
@@ -152,7 +170,17 @@ def run(args) -> int:
                         notes.append("test-backend-ops failed with the kernel off: see data.tbo")
                         rc = 1
                 elif p == "b":
-                    mc.bench_part(bin_dir, target, sub, notes, rows, args.allow_power_cap, save, configs=KCONFIGS, rounds=args.rounds, tag=EXP)
+                    probe = r1.host_probe(bin_dir, target)
+                    hbad, cap = r1.host_health(e4_pdl.smi_sample(), (probe or {}).get("smi"), check_power=not args.allow_power_cap)
+                    doc["host_b"] = {"problem": hbad, "power_cap_note": cap, "probe": probe}
+                    if hbad:
+                        notes.append(f"UNHEALTHY HOST: {hbad}; part b skipped (A1 needs a healthy 600 W card)")
+                        rc = 1
+                    else:
+                        mc.bench_part(bin_dir, target, sub, notes, rows, args.allow_power_cap, save, configs=KCONFIGS, rounds=args.rounds, tag=EXP,
+                                      health=health)
+                        if health.get("first_bad_round") is not None:
+                            rc = 1
                 else:
                     rc = max(rc, spec_part(args, bin_dir, target, blocks, sub_s, notes, doc, config, save))
             except Exception as e:  # a failed part must not lose the others
@@ -167,8 +195,10 @@ def run(args) -> int:
                 doc["spec"]["summary"] = spec_summary(doc["spec"]["runs"])
             except Exception as e:
                 notes.append(f"final spec summary failed: {type(e).__name__}: {e}")
-        paired = mc.paired_rounds(rows, "off", "on")
-        notes.extend(bench_verdict(paired))
+        paired = mc.paired_rounds(rows, "off", "on", before_round=health.get("first_bad_round"))
+        notes.extend(bench_verdict(paired, health))
+        if doc.get("host_b") and doc["host_b"]["problem"] or any(n.startswith("UNHEALTHY HOST") for n in notes):
+            rc = max(rc, 1)
         if (doc.get("spec") or {}).get("summary", {}).get("verdict"):
             notes.append(doc["spec"]["summary"]["verdict"])
         notes.append(mc.PDL_LC_NOTE)
@@ -187,7 +217,7 @@ def spec_part(args, bin_dir, target: str, blocks: list, budget_s: float, notes: 
     bad, cap = r1.host_health(e4_pdl.smi_sample(), (probe or {}).get("smi"), check_power=not args.allow_power_cap)
     doc["host"] = {"problem": bad, "power_cap_note": cap, "probe": probe}
     if bad:
-        notes.append(f"unhealthy host: {bad}; part s skipped")
+        notes.append(f"UNHEALTHY HOST: {bad}; part s skipped")
         return 1
     cfgs = spec_configs()
     drafts = {"q8_0": draft}
@@ -206,7 +236,7 @@ def parse_args(argv=None):
     ap.add_argument("--parts", type=lambda t: t.replace(",", ""), default=PARTS, help="t (test-backend-ops), b (llama-bench), s (spec run)")
     ap.add_argument("--rounds", type=int, default=ROUNDS)
     ap.add_argument("--blocks", type=int, default=BLOCKS)
-    ap.add_argument("--per-category", type=int, default=sp.PER_CATEGORY)
+    ap.add_argument("--per-category", type=int, default=PER_CATEGORY)
     ap.add_argument("--seed", type=int, default=sp.SEED)
     ap.add_argument("--ctx", type=int, default=sp.CTX)
     ap.add_argument("--prompts", default=str(make_prompts.R2A_OUT))

@@ -725,3 +725,34 @@ def test_min_vcpu_default_without_llama_build(env, monkeypatch):
     api = FakeAPI()
     assert runpod.launch("p0_x", "rtx5090", manifest=MAN, client=api, ledger=led) == 0
     assert api.created[0]["minVcpuCount"] == 4
+
+
+def test_600w_cascade_is_capped_at_the_community_price_and_maxq_has_its_own_key(env, monkeypatch, capsys):
+    res, led = env
+    assert runpod.DEFAULT_MAX_PRICE["pro6000_600w"] == 1.75 and runpod.DEFAULT_MAX_PRICE["pro6000_maxq"] < 1.75
+    serve_http(monkeypatch, files={"p0_x/pro6000-ws/r.json": FILE})
+    # no community stock: the secure price (2.09) is above the cap, so the cascade refuses it instead of paying it
+    types = [dict(TYPES[1], communityCloud=False)]
+    man = {"p0_x": dict(MAN["p0_x"], gpus=["pro6000_600w"])}
+    api = FakeAPI(types=types)
+    assert runpod.launch("p0_x", None, manifest=man, client=api, ledger=led) == 1
+    assert api.created == [] and "$2.09/hr > max $1.75" in capsys.readouterr().out
+    # --max-price lifts the cap
+    api = FakeAPI(types=types)
+    assert runpod.launch("p0_x", None, max_price=2.2, manifest=man, client=api, ledger=led) == 0
+    # the Max-Q key never asks for a 600 W edition
+    api = FakeAPI()
+    man = {"p0_x": dict(MAN["p0_x"], gpus=["pro6000_maxq"])}
+    assert runpod.launch("p0_x", None, manifest=man, client=api, ledger=led) == 0
+    assert api.created[0]["gpuTypeId"].endswith("Max-Q Workstation Edition")
+
+
+def test_chained_entry_checks_the_result_dir_of_its_first_command(env, monkeypatch, capsys):
+    res, led = env
+    serve_http(monkeypatch, files={"p0_x/rtx5090/r.json": FILE, "p0_y/rtx5090/r.json": FILE})
+    man = {"chain": dict(MAN["p0_x"], gpus=["rtx5090"], result_exp="p0_x")}
+    assert runpod.launch("chain", None, manifest=man, client=FakeAPI(), ledger=led) == 0
+    assert (res / "p0_y" / "rtx5090" / "r.json").exists()                              # the second command's results come along
+    man = {"chain": dict(MAN["p0_x"], gpus=["rtx5090"])}
+    assert runpod.launch("chain", None, manifest=man, client=FakeAPI(), ledger=led) == 1
+    assert "MANIFEST lists no chain/.../rtx5090" in capsys.readouterr().out

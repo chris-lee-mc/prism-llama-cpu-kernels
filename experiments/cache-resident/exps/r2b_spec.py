@@ -67,6 +67,8 @@ STATS_RE = re.compile(r"statistics\s+(\S+): #calls\(b,g,a\) =\s*(\d+)\s+(\d+)\s+
                       r"#gen tokens =\s*(\d+), #acc tokens =\s*(\d+).*?dur\(b,g,a\) = ([0-9.]+), ([0-9.]+), ([0-9.]+) ms")
 EXP_SKIP_RE = re.compile(r"exp skip-reeval\s+(\S+): skipped batches = (\d+), catch-up tokens = (\d+)")
 EXP_CUT_RE = re.compile(r"exp ngram-rs\s+(\S+): window = (\d+), cut drafts = (\d+), cut tokens = (\d+)")
+EXP_TIME_RE = re.compile(r"exp draft-time\s+(\S+): dur\(p,pf\) = ([0-9.]+), ([0-9.]+) ms, #calls\(p,pf\) = (\d+) (\d+)")
+EXP_RESET_RE = re.compile(r"exp ngram-resets\s+(\S+): low-acceptance resets = (\d+)")
 EXP_MARK_RE = re.compile(r"(GGML_EXP_\w+): (.*)$")       # SRV_INF line of the server when an experiment switch is active
 STATS_KEYS = ("calls_b", "calls_g", "calls_a", "gen_drafts", "acc_drafts", "gen_tokens", "acc_tokens", "dur_b_ms", "dur_g_ms", "dur_a_ms")
 N_RS_SEQ_NOTE = ("need_n_rs_seq() is the draft n_max with draft-simple in the list: the target keeps n_rs_seq = K, so the "
@@ -296,7 +298,7 @@ def block_orders(names: list[str], n_blocks: int) -> list[list[str]]:
 
 def parse_stats(text: str) -> dict:
     """{impl: [cumulative stats per request]} from the 'statistics' lines (-lv 4) the server prints after every request, plus the
-    experiment counter lines (exp skip-reeval, exp ngram-rs) in the same order."""
+    experiment counter lines (exp skip-reeval, exp ngram-rs, exp draft-time, exp ngram-resets) in the same order."""
     out: dict = {}
     for ln in text.splitlines():
         if (m := STATS_RE.search(ln)):
@@ -306,6 +308,10 @@ def parse_stats(text: str) -> dict:
             out[m.group(1)][-1].update(skipped_batches=int(m.group(2)), catchup_tokens=int(m.group(3)))
         elif (m := EXP_CUT_RE.search(ln)) and out.get(m.group(1)):
             out[m.group(1)][-1].update(rs_window=int(m.group(2)), cut_drafts=int(m.group(3)), cut_tokens=int(m.group(4)))
+        elif (m := EXP_TIME_RE.search(ln)) and out.get(m.group(1)):
+            out[m.group(1)][-1].update(dur_p_ms=float(m.group(2)), dur_pf_ms=float(m.group(3)), calls_p=int(m.group(4)), calls_pf=int(m.group(5)))
+        elif (m := EXP_RESET_RE.search(ln)) and out.get(m.group(1)):
+            out[m.group(1)][-1].update(resets=int(m.group(2)))
     return out
 
 
@@ -350,6 +356,14 @@ def step_split(run: dict) -> dict:
                    draft_ms_per_step=dur / agg["steps"] if agg["steps"] else None, impls=st)
         if out["draft_ms_per_step"] is not None and agg["ms_per_step"]:
             out["rest_ms_per_step"] = agg["ms_per_step"] - out["draft_ms_per_step"]
+        if any("dur_p_ms" in d for d in st.values()):
+            # GGML_EXP_DRAFT_TIME: the draft-context decode of the verify batch (synchronized), the most a skipped re-eval could save
+            dp, cp = sum(d.get("dur_p_ms", 0.0) for d in st.values()), sum(d.get("calls_p", 0) for d in st.values())
+            out.update(reeval_ms=dp, reeval_calls=cp, reeval_ms_per_call=dp / cp if cp else None,
+                       reeval_ms_per_step=dp / agg["steps"] if agg["steps"] else None,
+                       prefill_ms=sum(d.get("dur_pf_ms", 0.0) for d in st.values()))
+            if out["reeval_ms_per_step"] is not None and agg["ms_per_step"]:
+                out["reeval_share_of_step"] = out["reeval_ms_per_step"] / agg["ms_per_step"]
     return out
 
 

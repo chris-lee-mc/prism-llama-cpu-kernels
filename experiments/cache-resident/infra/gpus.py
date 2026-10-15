@@ -38,6 +38,8 @@ RUNPOD_CANDIDATES: dict[str, list[str]] = {
         "NVIDIA RTX PRO 6000 Blackwell Workstation Edition",
         "NVIDIA RTX PRO 6000 Blackwell Server Edition",
     ],
+    # Max-Q (300 W) only: runs that are paired inside one pod and are not PR timing evidence (wrap_b)
+    "pro6000_maxq": ["NVIDIA RTX PRO 6000 Blackwell Max-Q Workstation Edition"],
     "rtx5090": ["NVIDIA GeForce RTX 5090"],
     "rtx4090": ["NVIDIA GeForce RTX 4090"],
     "rtx3090": ["NVIDIA GeForce RTX 3090"],

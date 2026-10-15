@@ -64,3 +64,8 @@ def test_pro6000_600w_excludes_max_q_and_maps_to_the_pro6000_tags():
     c = gpus.cascade("pro6000_600w")
     assert len(c) == 4 and not any("Max-Q" in n for n, _ in c) and "Workstation" in c[0][0] and "Server" in c[2][0]
     assert gpus.tag_prefix("pro6000_600w") == "pro6000" and gpus.tag_prefix("rtx4090") == "rtx4090"
+
+
+def test_pro6000_maxq_key_is_the_max_q_edition_only():
+    c = gpus.cascade("pro6000_maxq")
+    assert len(c) == 2 and all("Max-Q" in n for n, _ in c) and gpus.tag_prefix("pro6000_maxq") == "pro6000"
