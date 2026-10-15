@@ -1,0 +1,161 @@
+{
+ "schema": 1,
+ "exp": "wrap_a",
+ "gpu": "pro6000-server",
+ "utc": "2026-10-15T15:25:43.378272+00:00",
+ "env": {
+  "gpu_name": "NVIDIA RTX PRO 6000 Blackwell Server Edition",
+  "gpu_tag": "pro6000-server",
+  "cc": "12.0",
+  "sm": "sm_120",
+  "driver": "595.91.07",
+  "cuda_runtime": "12.8",
+  "cuda_driver": "13.2",
+  "torch": "2.11.0+cu128",
+  "vram_bytes": 101975851008,
+  "sm_count": 188,
+  "l2_bytes": 134217728,
+  "persisting_l2_max_bytes": 83886080,
+  "access_policy_window_max_bytes": 134217728,
+  "persisting_l2_limit_bytes": 25165824,
+  "git_sha": "9ac5764c0cb4aa399ed6f87ef729047c7ab82363",
+  "git_branch": "exp/cache-resident",
+  "hostname": "d8a6dbb97a44",
+  "pod_id": "e4nesxnsj9ejus",
+  "python": "3.10.12",
+  "counters_ok": null,
+  "transformers": "5.19.0"
+ },
+ "data": {
+  "config": {
+   "parts": "tkbs",
+   "budget_min": 14.0,
+   "rounds": 4,
+   "blocks": 2,
+   "kernel_configs": {
+    "off": {},
+    "on": {
+     "GGML_CUDA_PQ2_MULTICOL": "1"
+    }
+   },
+   "spec_configs": [
+    "base",
+    "k4q8_off",
+    "k4q8_on"
+   ],
+   "seed": 20261014,
+   "per_category": 4,
+   "ctx": 16384,
+   "prompt_ids": [
+    "r037",
+    "r014",
+    "r048",
+    "r025",
+    "r010",
+    "r052",
+    "r024",
+    "r016",
+    "r043",
+    "r035",
+    "r012",
+    "r053"
+   ],
+   "models": {
+    "pq2": {
+     "kind": "bonsai2",
+     "key": "PQ2_0",
+     "repo": "prism-ml/Ternary-Bonsai-2-27B-gguf",
+     "file": "Ternary-Bonsai-2-27B-PQ2_0.gguf",
+     "exists": true,
+     "source": "api",
+     "checked_utc": "2026-10-15T15:23:42.977806+00:00",
+     "alternatives": [],
+     "note": null
+    }
+   },
+   "quick": false,
+   "gpu_mem_before_t": "0 MiB, 97887 MiB, NVIDIA RTX PRO 6000 Blackwell Server Edition, 595.91.07"
+  },
+  "rows": [],
+  "notes": [
+   "t: time budget used up, config off skipped",
+   "t: time budget used up, config on skipped",
+   "t: time budget used up, config on skipped",
+   "stop: test-backend-ops did not pass with GGML_CUDA_PQ2_MULTICOL=1; parts b and s not run",
+   "power limit/default: bootstrap 600.0/600.0 W, start 600.0/600.0 W (enforced 600.0 W)",
+   "kernel path unverified: part k did not run",
+   "the mc kernel waits for the quantizer (ggml_cuda_pdl_sync) but never calls ggml_cuda_pdl_lc, unlike mul_mat_vec_q: with 'on' the next kernel does not overlap its launch, so the gain of on over off is slightly understated; on_pdl0 vs on mixes this in"
+  ],
+  "counters_ok": false,
+  "gate": {
+   "gpu": "pro6000-server",
+   "smi": {
+    "clocks.sm": 180.0,
+    "clocks.max.sm": 2430.0,
+    "clocks.mem": 405.0,
+    "clocks.max.mem": 12481.0,
+    "power.draw": 31.63,
+    "power.limit": 600.0,
+    "power.default_limit": 600.0,
+    "temperature.gpu": 26.0
+   },
+   "problem": null,
+   "allow_any_gpu": false
+  },
+  "power": {
+   "tol": 0.01,
+   "enforced": true,
+   "bootstrap": {
+    "limit": 600.0,
+    "default": 600.0
+   },
+   "checks": [
+    {
+     "at": "start",
+     "limit": 600.0,
+     "default": 600.0,
+     "enforced": 600.0,
+     "problem": null,
+     "t": 1792077823.2206347
+    }
+   ],
+   "first_problem": null
+  },
+  "tbo": [
+   {
+    "cmd": [
+     "/workspace/repo/build-cuda/bin/test-backend-ops",
+     "test",
+     "-o",
+     "MUL_MAT",
+     "-b",
+     "CUDA0",
+     "-p",
+     "type_a=pq2_0,"
+    ],
+    "ok": false,
+    "error": "timeout",
+    "config": "on",
+    "env": {
+     "GGML_CUDA_PQ2_MULTICOL": "1"
+    }
+   }
+  ],
+  "path": null,
+  "bench": [],
+  "bench_summary": {
+   "pp": {},
+   "tg": {}
+  },
+  "bench_paired": {
+   "a": "off",
+   "b": "on",
+   "pp": {},
+   "tg": {}
+  },
+  "bench_health": {},
+  "spec": null,
+  "host": null,
+  "host_b": null
+ }
+}
