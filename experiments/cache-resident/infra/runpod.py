@@ -458,6 +458,8 @@ def launch(exp: str, gpu: str | None = None, *, cmd=None, cloud="any", failsafe_
            "CR_REPO_URL": os.environ.get("CR_REPO_URL", DEFAULT_REPO), "HF_HUB_ENABLE_HF_TRANSFER": 1}
     if cmd:
         env["CR_CMD"] = cmd
+    if ent.get("min_power_frac"):
+        env["CR_MIN_POWER_FRAC"] = ent["min_power_frac"]      # bootstrap stops on a capped host before the slow steps
     script = startup_script(env)
 
     client = client or RunPod()

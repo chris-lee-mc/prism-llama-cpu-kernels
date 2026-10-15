@@ -29,6 +29,22 @@ if [ -d /workspace ]; then
 fi
 export DEBIAN_FRONTEND=noninteractive PIP_BREAK_SYSTEM_PACKAGES=1 PIP_DISABLE_PIP_VERSION_CHECK=1
 
+# 0) host check before the slow steps: CUDA must init, and with CR_MIN_POWER_FRAC the power limit must be >= that share of the default
+if command -v nvidia-smi >/dev/null 2>&1; then
+  if command -v python3 >/dev/null 2>&1 && ! python3 -c 'import ctypes, sys; sys.exit(ctypes.CDLL("libcuda.so.1").cuInit(0))'; then
+    say "host check: cuInit failed (bad host), stop"
+    exit 3
+  fi
+  if [ -n "${CR_MIN_POWER_FRAC:-}" ]; then
+    PW="$(nvidia-smi --query-gpu=power.limit,power.default_limit --format=csv,noheader,nounits 2>/dev/null | head -1 | tr -d ' ')"
+    if awk -F, -v f="$CR_MIN_POWER_FRAC" '$1 != "" && $2 > 0 && $1 < f * $2 { found = 1 } END { exit !found }' <<<"$PW"; then
+      say "host check: power limit,default $PW W, limit < $CR_MIN_POWER_FRAC of default (capped host), stop"
+      exit 3
+    fi
+    say "host check: power limit,default $PW W ok"
+  fi
+fi
+
 if [ -f "$STAMP" ] && [ "$(cat "$STAMP" 2>/dev/null)" = "$REQ_HASH" ]; then
   say "stamp matches, nothing to do"
   exit 0

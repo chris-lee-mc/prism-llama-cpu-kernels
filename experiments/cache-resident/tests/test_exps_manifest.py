@@ -11,7 +11,7 @@ from infra import gpus
 EXP = pathlib.Path(__file__).resolve().parent.parent
 MAN = json.loads((EXP / "exps" / "manifest.json").read_text())
 KEYS = {"cmd", "gpus", "est_min", "failsafe_min", "build_llama", "disk_gb", "desc"}
-OPTIONAL_KEYS = {"result_exp"}          # a chained entry: the exp dir of its first command
+OPTIONAL_KEYS = {"result_exp", "min_power_frac"}    # result_exp: a chained entry, the exp dir of its first command
 LONG_FAILSAFE = {"e4_pdl": 70, "r1": 55, "r2a": 55, "r2b_mc": 55, "r2b_spec": 55, "wrap_a3": 55, "wrap_b": 55, "wrap_ab": 60}  # clone + cold build + downloads + the runs; launch needs --allow-long
 EXPECTED = {"p0_smoke", "p0_l2", "e1", "e2_08b", "e2_2b", "e3", "e3d", "e4_pq2", "e4_ptq1", "e4_pdl", "e5_base", "e5_k4", "e5_k6", "e5_k8", "e5_cost", "r1", "r2a", "r2b_mc", "r2b_spec", "wrap_a", "wrap_a3", "wrap_b", "wrap_ab"}
 

@@ -1,0 +1,790 @@
+-- The C compiler identification is GNU 11.4.0
+-- The CXX compiler identification is GNU 11.4.0
+-- Detecting C compiler ABI info
+-- Detecting C compiler ABI info - done
+-- Check for working C compiler: /usr/bin/cc - skipped
+-- Detecting C compile features
+-- Detecting C compile features - done
+-- Detecting CXX compiler ABI info
+-- Detecting CXX compiler ABI info - done
+-- Check for working CXX compiler: /usr/bin/c++ - skipped
+-- Detecting CXX compile features
+-- Detecting CXX compile features - done
+-- llama.cpp version: 0.2.0-dev
+CMAKE_BUILD_TYPE=Release
+-- Found Git: /usr/bin/git (found version "2.34.1") 
+fatal: not a git repository (or any of the parent directories): .git
+fatal: not a git repository (or any of the parent directories): .git
+-- The ASM compiler identification is GNU
+-- Found assembler: /usr/bin/cc
+-- Looking for pthread.h
+-- Looking for pthread.h - found
+-- Performing Test CMAKE_HAVE_LIBC_PTHREAD
+-- Performing Test CMAKE_HAVE_LIBC_PTHREAD - Success
+-- Found Threads: TRUE  
+-- CMAKE_SYSTEM_PROCESSOR: x86_64
+-- GGML_SYSTEM_ARCH: x86
+-- Found OpenMP_C: -fopenmp (found version "4.5") 
+-- Found OpenMP_CXX: -fopenmp (found version "4.5") 
+-- Found OpenMP: TRUE (found version "4.5")  
+-- Including CPU backend
+-- x86 detected
+-- Adding CPU backend variant ggml-cpu: -march=native 
+-- Found CUDAToolkit: /usr/local/cuda/include (found version "12.8.93") 
+-- CUDA Toolkit found
+-- The CUDA compiler identification is NVIDIA 12.8.93
+-- Detecting CUDA compiler ABI info
+-- Detecting CUDA compiler ABI info - done
+-- Check for working CUDA compiler: /usr/local/cuda/bin/nvcc - skipped
+-- Detecting CUDA compile features
+-- Detecting CUDA compile features - done
+-- Using CMAKE_CUDA_ARCHITECTURES=89 CMAKE_CUDA_ARCHITECTURES_NATIVE=
+-- FlashAttention K-V type combinations: f16-f16;q4_0-q4_0;q8_0-q8_0;bf16-bf16
+-- Found NCCL: /usr/lib/x86_64-linux-gnu/libnccl.so  
+-- CUDA host compiler is GNU 11.4.0
+-- Including CUDA backend
+-- ggml version: 0.21.0
+-- ggml commit:  unknown
+-- Could NOT find OpenSSL, try to set the path to OpenSSL root folder in the system variable OPENSSL_ROOT_DIR (missing: OPENSSL_CRYPTO_LIBRARY OPENSSL_INCLUDE_DIR) 
+CMake Warning at vendor/cpp-httplib/CMakeLists.txt:154 (message):
+  OpenSSL not found, HTTPS support disabled
+
+
+CMake Warning at common/CMakeLists.txt:33 (message):
+  Git repository not found; to enable automatic generation of build info,
+  make sure Git is installed and the project is a Git repository.
+
+
+-- Generating embedded license file for target: llama-app
+-- Configuring done
+-- Generating done
+-- Build files have been written to: /workspace/a3/src/build-cuda
+[1/444] Building CXX object ggml/src/CMakeFiles/ggml.dir/ggml-backend-dl.cpp.o
+[2/444] Building CXX object ggml/src/CMakeFiles/ggml.dir/ggml-backend-reg.cpp.o
+[3/444] Building C object ggml/src/CMakeFiles/ggml-cpu.dir/ggml-cpu/ggml-cpu.c.o
+[4/444] Building CXX object ggml/src/CMakeFiles/ggml-cpu.dir/ggml-cpu/ggml-cpu.cpp.o
+[5/444] Building CXX object ggml/src/CMakeFiles/ggml-cpu.dir/ggml-cpu/repack.cpp.o
+[6/444] Building CXX object ggml/src/CMakeFiles/ggml-cpu.dir/ggml-cpu/hbm.cpp.o
+[7/444] Building C object ggml/src/CMakeFiles/ggml-cpu.dir/ggml-cpu/quants.c.o
+[8/444] Building CXX object ggml/src/CMakeFiles/ggml-cpu.dir/ggml-cpu/traits.cpp.o
+[9/444] Building CXX object ggml/src/CMakeFiles/ggml-cpu.dir/ggml-cpu/amx/amx.cpp.o
+[10/444] Building CXX object ggml/src/CMakeFiles/ggml-cpu.dir/ggml-cpu/amx/mmq.cpp.o
+[11/444] Building CXX object ggml/src/CMakeFiles/ggml-cpu.dir/ggml-cpu/binary-ops.cpp.o
+[12/444] Building CXX object ggml/src/CMakeFiles/ggml-cpu.dir/ggml-cpu/unary-ops.cpp.o
+[13/444] Building CXX object ggml/src/CMakeFiles/ggml-cpu.dir/ggml-cpu/vec.cpp.o
+[14/444] Building CXX object ggml/src/CMakeFiles/ggml-cpu.dir/ggml-cpu/ops.cpp.o
+[15/444] Building CXX object ggml/src/CMakeFiles/ggml-cpu.dir/ggml-cpu/llamafile/sgemm.cpp.o
+[16/444] Building C object ggml/src/CMakeFiles/ggml-cpu.dir/ggml-cpu/arch/x86/quants.c.o
+[17/444] Building CXX object ggml/src/CMakeFiles/ggml-cpu.dir/ggml-cpu/arch/x86/repack.cpp.o
+[18/444] Building CXX object ggml/src/CMakeFiles/ggml-base.dir/ggml.cpp.o
+[19/444] Building C object ggml/src/CMakeFiles/ggml-base.dir/ggml-alloc.c.o
+[20/444] Building C object ggml/src/CMakeFiles/ggml-base.dir/ggml-quants.c.o
+[21/444] Building CXX object ggml/src/CMakeFiles/ggml-base.dir/ggml-threading.cpp.o
+[22/444] Building CXX object ggml/src/CMakeFiles/ggml-base.dir/ggml-backend.cpp.o
+[23/444] Building CXX object ggml/src/CMakeFiles/ggml-base.dir/gguf.cpp.o
+[24/444] Building CXX object ggml/src/CMakeFiles/ggml-base.dir/ggml-opt.cpp.o
+[25/444] Building CXX object src/CMakeFiles/llama.dir/models/starcoder2.cpp.o
+[26/444] Building CXX object ggml/src/CMakeFiles/ggml-base.dir/ggml-backend-meta.cpp.o
+[27/444] Building C object ggml/src/CMakeFiles/ggml-base.dir/ggml.c.o
+[28/444] Linking CXX shared library bin/libggml-base.so.0.21.0
+[29/444] Creating library symlink bin/libggml-base.so.0 bin/libggml-base.so
+[30/444] Linking CXX shared library bin/libggml-cpu.so.0.21.0
+[31/444] Creating library symlink bin/libggml-cpu.so.0 bin/libggml-cpu.so
+[32/444] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/cross-entropy-loss.cu.o
+[33/444] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/clamp.cu.o
+[34/444] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/pad.cu.o
+[35/444] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/conv-transpose-1d.cu.o
+[36/444] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/pool1d.cu.o
+[37/444] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/mmq-hopper-q1.cu.o
+[38/444] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/pad_reflect_1d.cu.o
+[39/444] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/set.cu.o
+[40/444] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/tsembd.cu.o
+[41/444] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/col2im-1d.cu.o
+[42/444] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/sumrows.cu.o
+[43/444] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/roll.cu.o
+[44/444] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/pool2d.cu.o
+[45/444] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/opt-step-sgd.cu.o
+[46/444] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/conv2d-dw.cu.o
+[47/444] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/out-prod.cu.o
+[48/444] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/mmf.cu.o
+[49/444] Building CXX object common/CMakeFiles/llama-common.dir/imatrix-loader.cpp.o
+[50/444] Building CXX object common/CMakeFiles/llama-common.dir/json-schema-to-grammar.cpp.o
+[51/444] Building CXX object common/CMakeFiles/llama-common.dir/json.cpp.o
+[52/444] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/fattn-tile.cu.o
+[53/444] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/snake.cu.o
+[54/444] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/count-equal.cu.o
+[55/444] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/gla.cu.o
+[56/444] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/arange.cu.o
+[57/444] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/upscale.cu.o
+[58/444] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/diagmask.cu.o
+[59/444] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/allreduce.cu.o
+[60/444] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/conv2d-transpose.cu.o
+[61/444] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/argmax.cu.o
+[62/444] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/add-id.cu.o
+[63/444] Building CXX object src/CMakeFiles/llama.dir/llama-memory-hybrid.cpp.o
+[64/444] Building CXX object src/CMakeFiles/llama.dir/llama-memory.cpp.o
+[65/444] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/scale.cu.o
+[66/444] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/softcap.cu.o
+[67/444] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/diag.cu.o
+[68/444] Building CXX object src/CMakeFiles/llama.dir/llama-adapter.cpp.o
+[69/444] Building CXX object src/CMakeFiles/llama.dir/llama-arch.cpp.o
+[70/444] Building CXX object src/CMakeFiles/llama.dir/llama-chat.cpp.o
+[71/444] Building CXX object src/CMakeFiles/llama.dir/llama-cparams.cpp.o
+[72/444] Building CXX object src/CMakeFiles/llama.dir/llama-context.cpp.o
+[73/444] Building CXX object src/CMakeFiles/llama.dir/llama-grammar.cpp.o
+[74/444] Building CXX object src/CMakeFiles/llama.dir/llama.cpp.o
+[75/444] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/conv2d.cu.o
+[76/444] Building CXX object src/CMakeFiles/llama.dir/llama-hparams.cpp.o
+[77/444] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/acc.cu.o
+[78/444] Building CXX object src/CMakeFiles/llama.dir/llama-batch.cpp.o
+[79/444] Building CXX object src/CMakeFiles/llama.dir/llama-graph.cpp.o
+[80/444] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/fill.cu.o
+[81/444] Building CXX object src/CMakeFiles/llama.dir/llama-io.cpp.o
+[82/444] Building CXX object src/CMakeFiles/llama.dir/llama-kv-cache.cpp.o
+[83/444] Building CXX object src/CMakeFiles/llama.dir/llama-impl.cpp.o
+[84/444] Building CXX object src/CMakeFiles/llama.dir/llama-kv-cache-msa.cpp.o
+[85/444] Building CXX object src/CMakeFiles/llama.dir/llama-kv-cache-iswa.cpp.o
+[86/444] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/dsv4-hc.cu.o
+[87/444] Building CXX object src/CMakeFiles/llama.dir/llama-kv-cache-dsa-iswa.cpp.o
+[88/444] Building CXX object src/CMakeFiles/llama.dir/llama-kv-cache-dsv4.cpp.o
+[89/444] Building CXX object src/CMakeFiles/llama.dir/llama-memory-hybrid-iswa.cpp.o
+[90/444] Building CXX object src/CMakeFiles/llama.dir/llama-memory-recurrent.cpp.o
+[91/444] Building CXX object src/CMakeFiles/llama.dir/llama-mmap.cpp.o
+[92/444] Building CXX object src/CMakeFiles/llama.dir/llama-model-loader.cpp.o
+[93/444] Building CXX object src/CMakeFiles/llama.dir/unicode-data.cpp.o
+[94/444] Building CXX object src/CMakeFiles/llama.dir/llama-model-saver.cpp.o
+[95/444] Building CXX object src/CMakeFiles/llama.dir/llama-kv-cache-dsa.cpp.o
+[96/444] Building CXX object src/CMakeFiles/llama.dir/llama-model.cpp.o
+[97/444] Building CXX object src/CMakeFiles/llama.dir/unicode.cpp.o
+[98/444] Building CXX object src/CMakeFiles/llama.dir/llama-sampler.cpp.o
+[99/444] Building CXX object src/CMakeFiles/llama.dir/llama-vocab.cpp.o
+[100/444] Building CXX object src/CMakeFiles/llama.dir/models/apertus.cpp.o
+[101/444] Building CXX object src/CMakeFiles/llama.dir/models/arwkv7.cpp.o
+[102/444] Building CXX object src/CMakeFiles/llama.dir/models/arcee.cpp.o
+[103/444] Building CXX object src/CMakeFiles/llama.dir/models/afmoe.cpp.o
+[104/444] Building CXX object src/CMakeFiles/llama.dir/models/baichuan.cpp.o
+[105/444] Building CXX object src/CMakeFiles/llama.dir/llama-quant.cpp.o
+[106/444] Building CXX object src/CMakeFiles/llama.dir/models/bailingmoe3.cpp.o
+[107/444] Building CXX object src/CMakeFiles/llama.dir/models/bailingmoe.cpp.o
+[108/444] Building CXX object src/CMakeFiles/llama.dir/models/chameleon.cpp.o
+[109/444] Building CXX object src/CMakeFiles/llama.dir/models/bailingmoe2.cpp.o
+[110/444] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/moe-reduce.cu.o
+[111/444] Building CXX object src/CMakeFiles/llama.dir/models/bloom.cpp.o
+[112/444] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/mmid.cu.o
+[113/444] Building CXX object src/CMakeFiles/llama.dir/models/arctic.cpp.o
+[114/444] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/opt-step-adamw.cu.o
+[115/444] Building CXX object src/CMakeFiles/llama.dir/models/chatglm.cpp.o
+[116/444] Building CXX object src/CMakeFiles/llama.dir/models/bert.cpp.o
+[117/444] Building CXX object src/CMakeFiles/llama.dir/models/bitnet.cpp.o
+[118/444] Building CXX object src/CMakeFiles/llama.dir/models/codeshell.cpp.o
+[119/444] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/tri.cu.o
+[120/444] Building CXX object src/CMakeFiles/llama.dir/models/cogvlm.cpp.o
+[121/444] Building CXX object src/CMakeFiles/llama.dir/models/cohere2moe.cpp.o
+[122/444] Building CXX object src/CMakeFiles/llama.dir/models/command-r.cpp.o
+[123/444] Building CXX object src/CMakeFiles/llama.dir/models/clip.cpp.o
+[124/444] Building CXX object src/CMakeFiles/llama.dir/models/deci.cpp.o
+[125/444] Building CXX object src/CMakeFiles/llama.dir/models/deepseek2.cpp.o
+[126/444] Building CXX object src/CMakeFiles/llama.dir/models/deepseek4.cpp.o
+[127/444] Building CXX object src/CMakeFiles/llama.dir/models/cohere2.cpp.o
+[128/444] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/im2col.cu.o
+[129/444] Building CXX object src/CMakeFiles/llama.dir/models/delta-net-base.cpp.o
+[130/444] Building CXX object src/CMakeFiles/llama.dir/models/deepseek2ocr.cpp.o
+[131/444] Building CXX object src/CMakeFiles/llama.dir/models/dbrx.cpp.o
+[132/444] Building CXX object src/CMakeFiles/llama.dir/models/dflash.cpp.o
+[133/444] Building CXX object src/CMakeFiles/llama.dir/models/dots3note.cpp.o
+[134/444] Building CXX object src/CMakeFiles/llama.dir/models/dspark.cpp.o
+[135/444] Building CXX object src/CMakeFiles/llama.dir/models/dream.cpp.o
+[136/444] Building CXX object src/CMakeFiles/llama.dir/models/exaone-moe.cpp.o
+[137/444] Building CXX object src/CMakeFiles/llama.dir/models/deepseek32.cpp.o
+[138/444] Building CXX object src/CMakeFiles/llama.dir/models/ernie4-5.cpp.o
+[139/444] Building CXX object src/CMakeFiles/llama.dir/models/exaone4.cpp.o
+[140/444] Building CXX object src/CMakeFiles/llama.dir/models/ernie4-5-moe.cpp.o
+[141/444] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/wkv.cu.o
+[142/444] Building CXX object src/CMakeFiles/llama.dir/models/falcon.cpp.o
+[143/444] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/ssm-conv.cu.o
+[144/444] Building CXX object src/CMakeFiles/llama.dir/models/falcon-h1.cpp.o
+[145/444] Building CXX object src/CMakeFiles/llama.dir/models/gemma3.cpp.o
+[146/444] Building CXX object src/CMakeFiles/llama.dir/models/gemma3n.cpp.o
+[147/444] Building CXX object src/CMakeFiles/llama.dir/models/gemma.cpp.o
+[148/444] Building CXX object src/CMakeFiles/llama.dir/models/gemma2.cpp.o
+[149/444] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/concat.cu.o
+[150/444] Building CXX object src/CMakeFiles/llama.dir/models/dots1.cpp.o
+[151/444] Building CXX object src/CMakeFiles/llama.dir/models/eagle3.cpp.o
+[152/444] Building CXX object src/CMakeFiles/llama.dir/models/gemma4-assistant.cpp.o
+[153/444] Building CXX object src/CMakeFiles/llama.dir/models/glm4-moe.cpp.o
+[154/444] Building CXX object src/CMakeFiles/llama.dir/models/gemma4.cpp.o
+[155/444] Building CXX object src/CMakeFiles/llama.dir/models/exaone.cpp.o
+[156/444] Building CXX object src/CMakeFiles/llama.dir/models/glm-dsa.cpp.o
+[157/444] Building CXX object src/CMakeFiles/llama.dir/models/glm4.cpp.o
+[158/444] Building CXX object src/CMakeFiles/llama.dir/models/gpt2.cpp.o
+[159/444] Building CXX object src/CMakeFiles/llama.dir/models/deepseek.cpp.o
+[160/444] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/set-rows.cu.o
+[161/444] Building CXX object src/CMakeFiles/llama.dir/models/eurobert.cpp.o
+[162/444] Building CXX object src/CMakeFiles/llama.dir/models/granite-moe.cpp.o
+[163/444] Building CXX object src/CMakeFiles/llama.dir/models/gemma-embedding.cpp.o
+[164/444] Building CXX object src/CMakeFiles/llama.dir/models/gptneox.cpp.o
+[165/444] Building CXX object src/CMakeFiles/llama.dir/models/granite-hybrid.cpp.o
+[166/444] Building CXX object src/CMakeFiles/llama.dir/models/grok.cpp.o
+[167/444] Building CXX object src/CMakeFiles/llama.dir/models/hunyuan-dense.cpp.o
+[168/444] Building CXX object src/CMakeFiles/llama.dir/models/hy-v3.cpp.o
+[169/444] Building CXX object src/CMakeFiles/llama.dir/models/granite-swa.cpp.o
+[170/444] Building CXX object src/CMakeFiles/llama.dir/models/granite-switch.cpp.o
+[171/444] Building CXX object src/CMakeFiles/llama.dir/models/hunyuan-moe.cpp.o
+[172/444] Building CXX object src/CMakeFiles/llama.dir/models/jamba.cpp.o
+[173/444] Building CXX object src/CMakeFiles/llama.dir/models/granite.cpp.o
+[174/444] Building CXX object src/CMakeFiles/llama.dir/models/jais.cpp.o
+[175/444] Building CXX object src/CMakeFiles/llama.dir/models/jina-bert-v2.cpp.o
+[176/444] Building CXX object src/CMakeFiles/llama.dir/models/jais2.cpp.o
+[177/444] Building CXX object src/CMakeFiles/llama.dir/models/internlm2.cpp.o
+[178/444] Building CXX object src/CMakeFiles/llama.dir/models/laguna.cpp.o
+[179/444] Building CXX object src/CMakeFiles/llama.dir/models/kimi-linear.cpp.o
+[180/444] Building CXX object src/CMakeFiles/llama.dir/models/lfm2.cpp.o
+[181/444] Building CXX object src/CMakeFiles/llama.dir/models/lfm2moe.cpp.o
+[182/444] Building CXX object src/CMakeFiles/llama.dir/models/hunyuan-vl.cpp.o
+[183/444] Building CXX object src/CMakeFiles/llama.dir/models/llada-moe.cpp.o
+[184/444] Building CXX object src/CMakeFiles/llama.dir/models/mamba-base.cpp.o
+[185/444] Building CXX object src/CMakeFiles/llama.dir/models/llama-embed.cpp.o
+[186/444] Building CXX object src/CMakeFiles/llama.dir/models/llama4.cpp.o
+[187/444] Building CXX object src/CMakeFiles/llama.dir/models/maincoder.cpp.o
+[188/444] Building CXX object src/CMakeFiles/llama.dir/models/mamba.cpp.o
+[189/444] Building CXX object src/CMakeFiles/llama.dir/models/llama.cpp.o
+[190/444] Building CXX object src/CMakeFiles/llama.dir/models/grovemoe.cpp.o
+[191/444] Building CXX object src/CMakeFiles/llama.dir/models/mamba2.cpp.o
+[192/444] Building CXX object src/CMakeFiles/llama.dir/models/mellum.cpp.o
+[193/444] Building CXX object src/CMakeFiles/llama.dir/models/llada.cpp.o
+[194/444] Building CXX object src/CMakeFiles/llama.dir/models/minicpm.cpp.o
+[195/444] Building CXX object src/CMakeFiles/llama.dir/models/kimi-k3.cpp.o
+[196/444] Building CXX object src/CMakeFiles/llama.dir/models/mimo2.cpp.o
+[197/444] Building CXX object src/CMakeFiles/llama.dir/models/jina-bert-v3.cpp.o
+[198/444] Building CXX object src/CMakeFiles/llama.dir/models/minimax-01.cpp.o
+[199/444] Building CXX object src/CMakeFiles/llama.dir/models/mistral3.cpp.o
+[200/444] Building CXX object src/CMakeFiles/llama.dir/models/mpt.cpp.o
+[201/444] Building CXX object src/CMakeFiles/llama.dir/models/muse-glimmer.cpp.o
+[202/444] Building CXX object src/CMakeFiles/llama.dir/models/minimax-m3.cpp.o
+[203/444] Building CXX object src/CMakeFiles/llama.dir/models/neo-bert.cpp.o
+[204/444] Building CXX object src/CMakeFiles/llama.dir/models/nemotron-h-moe.cpp.o
+[205/444] Building CXX object src/CMakeFiles/llama.dir/models/olmo.cpp.o
+[206/444] Building CXX object src/CMakeFiles/llama.dir/models/openelm.cpp.o
+[207/444] Building CXX object src/CMakeFiles/llama.dir/models/orion.cpp.o
+[208/444] Building CXX object src/CMakeFiles/llama.dir/models/nemotron.cpp.o
+[209/444] Building CXX object src/CMakeFiles/llama.dir/models/openai-moe.cpp.o
+[210/444] Building CXX object src/CMakeFiles/llama.dir/models/nemotron-h.cpp.o
+[211/444] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/norm.cu.o
+[212/444] Building CXX object src/CMakeFiles/llama.dir/models/nomic-bert-moe.cpp.o
+[213/444] Building CXX object src/CMakeFiles/llama.dir/models/minimax-m2.cpp.o
+[214/444] Building CXX object src/CMakeFiles/llama.dir/models/mistral4.cpp.o
+[215/444] Building CXX object src/CMakeFiles/llama.dir/models/nanbeige.cpp.o
+[216/444] Building CXX object src/CMakeFiles/llama.dir/models/modern-bert.cpp.o
+[217/444] Building CXX object src/CMakeFiles/llama.dir/models/phi2.cpp.o
+[218/444] Building CXX object src/CMakeFiles/llama.dir/models/minicpm3.cpp.o
+[219/444] Building CXX object src/CMakeFiles/llama.dir/models/olmoe.cpp.o
+[220/444] Building CXX object src/CMakeFiles/llama.dir/models/pangu-embed.cpp.o
+[221/444] Building CXX object src/CMakeFiles/llama.dir/models/phi3.cpp.o
+[222/444] Building CXX object src/CMakeFiles/llama.dir/models/nomic-bert.cpp.o
+[223/444] Building CXX object src/CMakeFiles/llama.dir/models/phimoe.cpp.o
+[224/444] Building CXX object src/CMakeFiles/llama.dir/models/plamo2.cpp.o
+[225/444] Building CXX object src/CMakeFiles/llama.dir/models/qwen.cpp.o
+[226/444] Building CXX object src/CMakeFiles/llama.dir/models/plamo.cpp.o
+[227/444] Building CXX object src/CMakeFiles/llama.dir/models/pockettts.cpp.o
+[228/444] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/softmax.cu.o
+[229/444] Building CXX object src/CMakeFiles/llama.dir/models/paddleocr.cpp.o
+[230/444] Building CXX object src/CMakeFiles/llama.dir/models/qwen3moe.cpp.o
+[231/444] Building CXX object src/CMakeFiles/llama.dir/models/qwen3tts.cpp.o
+[232/444] Building CXX object src/CMakeFiles/llama.dir/models/qwen35moe.cpp.o
+[233/444] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/gated_delta_net.cu.o
+[234/444] Building CXX object src/CMakeFiles/llama.dir/models/qwen3vl.cpp.o
+[235/444] Building CXX object src/CMakeFiles/llama.dir/models/qwen2moe.cpp.o
+[236/444] Building CXX object src/CMakeFiles/llama.dir/models/qwen3vlmoe.cpp.o
+[237/444] Building CXX object src/CMakeFiles/llama.dir/models/qwen3.cpp.o
+[238/444] Building CXX object src/CMakeFiles/llama.dir/models/qwen2vl.cpp.o
+[239/444] Building CXX object src/CMakeFiles/llama.dir/models/olmo2.cpp.o
+[240/444] Building CXX object src/CMakeFiles/llama.dir/models/plm.cpp.o
+[241/444] Building CXX object src/CMakeFiles/llama.dir/models/rwkv6-base.cpp.o
+[242/444] Building CXX object src/CMakeFiles/llama.dir/models/qwen3next.cpp.o
+[243/444] Building CXX object src/CMakeFiles/llama.dir/models/refact.cpp.o
+[244/444] Building CXX object src/CMakeFiles/llama.dir/models/rnd1.cpp.o
+[245/444] Building CXX object src/CMakeFiles/llama.dir/models/qwen2.cpp.o
+[246/444] Building CXX object common/CMakeFiles/llama-common.dir/arg.cpp.o
+[247/444] Building CXX object vendor/cpp-httplib/CMakeFiles/cpp-httplib.dir/httplib.cpp.o
+[248/444] Building CXX object common/CMakeFiles/llama-common.dir/chat-auto-parser-generator.cpp.o
+[249/444] Building CXX object common/CMakeFiles/llama-common.dir/chat-auto-parser-helpers.cpp.o
+[250/444] Building CXX object common/CMakeFiles/llama-common.dir/chat-diff-analyzer.cpp.o
+[251/444] Building CXX object src/CMakeFiles/llama.dir/models/seed-oss.cpp.o
+[252/444] Building CXX object common/CMakeFiles/llama-common.dir/chat.cpp.o
+[253/444] Building CXX object common/CMakeFiles/llama-common.dir/common.cpp.o
+[254/444] Linking CXX static library vendor/cpp-httplib/libcpp-httplib.a
+[255/444] Building CXX object common/CMakeFiles/llama-common.dir/chat-peg-parser.cpp.o
+[256/444] Building CXX object common/CMakeFiles/llama-common.dir/debug.cpp.o
+[257/444] Building CXX object common/CMakeFiles/llama-common.dir/console.cpp.o
+[258/444] Building CXX object src/CMakeFiles/llama.dir/models/smallthinker.cpp.o
+[259/444] Building CXX object src/CMakeFiles/llama.dir/models/stablelm.cpp.o
+[260/444] Building CXX object common/CMakeFiles/llama-common.dir/fit.cpp.o
+[261/444] Building CXX object common/CMakeFiles/llama-common.dir/kv-mean-center.cpp.o
+[262/444] Building CXX object common/CMakeFiles/llama-common.dir/download.cpp.o
+[263/444] Building CXX object common/CMakeFiles/llama-common.dir/llguidance.cpp.o
+[264/444] Building CXX object common/CMakeFiles/llama-common.dir/ngram-cache.cpp.o
+[265/444] Building CXX object src/CMakeFiles/llama.dir/models/starcoder.cpp.o
+[266/444] Building CXX object common/CMakeFiles/llama-common.dir/log.cpp.o
+[267/444] Building CXX object common/CMakeFiles/llama-common.dir/ngram-mod.cpp.o
+[268/444] Building CXX object common/CMakeFiles/llama-common.dir/ngram-map.cpp.o
+[269/444] Building CXX object src/CMakeFiles/llama.dir/models/smollm3.cpp.o
+[270/444] Building CXX object common/CMakeFiles/llama-common.dir/hf-cache.cpp.o
+[271/444] Building CXX object common/CMakeFiles/llama-common.dir/peg-parser.cpp.o
+[272/444] Building CXX object common/CMakeFiles/llama-common.dir/preset.cpp.o
+[273/444] Building CXX object src/CMakeFiles/llama.dir/models/qwen35.cpp.o
+[274/444] Building CXX object common/CMakeFiles/llama-common.dir/speculative.cpp.o
+[275/444] Building CXX object common/CMakeFiles/llama-common.dir/subproc.cpp.o
+[276/444] Building CXX object common/CMakeFiles/llama-common.dir/reasoning-budget.cpp.o
+[277/444] Building CXX object common/CMakeFiles/llama-common.dir/trie.cpp.o
+[278/444] Building CXX object common/CMakeFiles/llama-common.dir/unicode.cpp.o
+[279/444] Building CXX object common/CMakeFiles/llama-common.dir/jinja/lexer.cpp.o
+[280/444] Building CXX object src/CMakeFiles/llama.dir/models/rwkv6qwen2.cpp.o
+[281/444] Building CXX object common/CMakeFiles/llama-common.dir/jinja/parser.cpp.o
+[282/444] Building CXX object common/CMakeFiles/llama-common.dir/jinja/runtime.cpp.o
+[283/444] Building CXX object tools/llama-bench/CMakeFiles/llama-bench.dir/main.cpp.o
+[284/444] Building CUDA object common/CMakeFiles/llama-common.dir/dspark-markov.cu.o
+[285/444] Building CXX object common/CMakeFiles/llama-common.dir/sampling.cpp.o
+[286/444] Building CXX object common/CMakeFiles/llama-common.dir/jinja/caps.cpp.o
+[287/444] Building CXX object common/CMakeFiles/llama-common.dir/jinja/value.cpp.o
+[288/444] Building CXX object src/CMakeFiles/llama.dir/models/rwkv7.cpp.o
+[289/444] Building CXX object tests/CMakeFiles/test-backend-ops.dir/test-backend-ops.cpp.o
+[290/444] Building CXX object tools/llama-bench/CMakeFiles/llama-bench-impl.dir/llama-bench.cpp.o
+[291/444] Building CXX object common/CMakeFiles/llama-common.dir/jinja/string.cpp.o
+[292/444] Building CXX object src/CMakeFiles/llama.dir/models/talkie.cpp.o
+[293/444] Building CXX object src/CMakeFiles/llama.dir/models/rwkv6.cpp.o
+[294/444] Building CXX object src/CMakeFiles/llama.dir/models/wavtokenizer-dec.cpp.o
+[295/444] Building CXX object src/CMakeFiles/llama.dir/models/t5.cpp.o
+[296/444] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/solve_tri.cu.o
+[297/444] Building CXX object src/CMakeFiles/llama.dir/models/step35.cpp.o
+[298/444] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-tile-instance-dkq320-dv256.cu.o
+[299/444] Building CXX object src/CMakeFiles/llama.dir/models/t5encoder.cpp.o
+[300/444] Building CXX object src/CMakeFiles/llama.dir/models/plamo3.cpp.o
+[301/444] Building CXX object src/CMakeFiles/llama.dir/models/rwkv7-base.cpp.o
+[302/444] Building CXX object common/CMakeFiles/llama-common-base.dir/build-info.cpp.o
+[303/444] Linking CXX static library common/libllama-common-base.a
+[304/444] Building CXX object src/CMakeFiles/llama.dir/models/xverse.cpp.o
+[305/444] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/rope.cu.o
+[306/444] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/cpy.cu.o
+[307/444] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/convert.cu.o
+[308/444] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/unary.cu.o
+[309/444] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/sum.cu.o
+[310/444] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/mean.cu.o
+[311/444] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/topk-moe.cu.o
+[312/444] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/getrows.cu.o
+[313/444] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/ggml-cuda.cu.o
+In static member function ‘static _Tp* std::__copy_move<_IsMove, true, std::random_access_iterator_tag>::__copy_m(const _Tp*, const _Tp*, _Tp*) [with _Tp = ggml_op; bool _IsMove = false]’,
+    inlined from ‘_OI std::__copy_move_a2(_II, _II, _OI) [with bool _IsMove = false; _II = const ggml_op*; _OI = ggml_op*]’ at /usr/include/c++/11/bits/stl_algobase.h:494:141,
+    inlined from ‘_OI std::__copy_move_a1(_II, _II, _OI) [with bool _IsMove = false; _II = const ggml_op*; _OI = ggml_op*]’ at /usr/include/c++/11/bits/stl_algobase.h:522:40,
+    inlined from ‘_OI std::__copy_move_a(_II, _II, _OI) [with bool _IsMove = false; _II = const ggml_op*; _OI = ggml_op*]’ at /usr/include/c++/11/bits/stl_algobase.h:529:25,
+    inlined from ‘_OI std::copy(_II, _II, _OI) [with _II = const ggml_op*; _OI = ggml_op*]’ at /usr/include/c++/11/bits/stl_algobase.h:619:64,
+    inlined from ‘static _ForwardIterator std::__uninitialized_copy<true>::__uninit_copy(_InputIterator, _InputIterator, _ForwardIterator) [with _InputIterator = const ggml_op*; _ForwardIterator = ggml_op*]’ at /usr/include/c++/11/bits/stl_uninitialized.h:110:19,
+    inlined from ‘_ForwardIterator std::uninitialized_copy(_InputIterator, _InputIterator, _ForwardIterator) [with _InputIterator = const ggml_op*; _ForwardIterator = ggml_op*]’ at /usr/include/c++/11/bits/stl_uninitialized.h:148:131,
+    inlined from ‘_ForwardIterator std::__uninitialized_copy_a(_InputIterator, _InputIterator, _ForwardIterator, std::allocator<_Tp>&) [with _InputIterator = const ggml_op*; _ForwardIterator = ggml_op*; _Tp = ggml_op]’ at /usr/include/c++/11/bits/stl_uninitialized.h:333:33,
+    inlined from ‘void std::vector<_Tp, _Alloc>::_M_range_insert(std::vector<_Tp, _Alloc>::iterator, _ForwardIterator, _ForwardIterator, std::forward_iterator_tag) [with _ForwardIterator = const ggml_op*; _Tp = ggml_op; _Alloc = std::allocator<ggml_op>]’ at /usr/include/c++/11/bits/vector.tcc:751:28,
+    inlined from ‘std::vector<_Tp, _Alloc>::iterator std::vector<_Tp, _Alloc>::insert(std::vector<_Tp, _Alloc>::const_iterator, std::initializer_list<_Tp>) [with _Tp = ggml_op; _Alloc = std::allocator<ggml_op>]’ at /usr/include/c++/11/bits/stl_vector.h:1313:16,
+    inlined from ‘int ggml_cuda_try_fuse(ggml_backend_cuda_context*, ggml_cgraph*, int)’ at ../ggml/src/ggml-cuda/ggml-cuda.cu:3804:11:
+/usr/include/c++/11/bits/stl_algobase.h:431:25: warning: ‘void* __builtin_memcpy(void*, const void*, long unsigned int)’ writing 20 bytes into a region of size 4 overflows the destination [-Wstringop-overflow=]
+  431 |             __builtin_memmove(__result, __first, sizeof(_Tp) * _Num);
+      |             ~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/usr/include/c++/11/ext/new_allocator.h: In function ‘int ggml_cuda_try_fuse(ggml_backend_cuda_context*, ggml_cgraph*, int)’:
+/usr/include/c++/11/ext/new_allocator.h:127:49: note: at offset [24, 28] into destination object of size [24, 28] allocated by ‘operator new’
+  127 |         return static_cast<_Tp*>(::operator new(__n * sizeof(_Tp)));
+      |                                   ~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~
+/usr/include/c++/11/ext/new_allocator.h:127:49: note: at offset [20, 24] into destination object of size [20, 24] allocated by ‘operator new’
+  127 |         return static_cast<_Tp*>(::operator new(__n * sizeof(_Tp)));
+      |                                   ~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~
+[314/444] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/top-k.cu.o
+[315/444] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-mma-f16-instance-ncols1_2-ncols2_16.cu.o
+[316/444] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-mma-f16-instance-ncols1_4-ncols2_16.cu.o
+[317/444] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-mma-f16-instance-ncols1_2-ncols2_32.cu.o
+[318/444] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/lightning-indexer.cu.o
+[319/444] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/mmq.cu.o
+[320/444] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-mma-f16-instance-ncols1_1-ncols2_16.cu.o
+[321/444] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-mma-f16-instance-ncols1_1-ncols2_32.cu.o
+[322/444] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/ssm-scan.cu.o
+[323/444] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/mmf-instance-ncols_4.cu.o
+[324/444] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-mma-f16-instance-q4_0-ncols1_1-ncols2_8.cu.o
+[325/444] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-mma-f16-instance-q4_0-ncols1_2-ncols2_8.cu.o
+[326/444] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-mma-f16-instance-q8_0-ncols1_8-ncols2_2.cu.o
+[327/444] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-mma-f16-instance-q8_0-ncols1_2-ncols2_8.cu.o
+[328/444] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-mma-f16-instance-q4_0-ncols1_16-ncols2_2.cu.o
+[329/444] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/cumsum.cu.o
+[330/444] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-mma-f16-instance-q8_0-ncols1_1-ncols2_8.cu.o
+[331/444] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-mma-f16-instance-q8_0-ncols1_4-ncols2_8.cu.o
+[332/444] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-mma-f16-instance-q4_0-ncols1_4-ncols2_4.cu.o
+[333/444] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-mma-f16-instance-q8_0-ncols1_8-ncols2_4.cu.o
+[334/444] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/fwht.cu.o
+[335/444] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-mma-f16-instance-q8_0-ncols1_8-ncols2_1.cu.o
+[336/444] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/mmf-instance-ncols_2.cu.o
+[337/444] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-mma-f16-instance-q8_0-ncols1_2-ncols2_4.cu.o
+[338/444] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-mma-f16-instance-q4_0-ncols1_8-ncols2_4.cu.o
+[339/444] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-mma-f16-instance-q8_0-ncols1_4-ncols2_2.cu.o
+[340/444] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-vec-instance-f16-f16.cu.o
+[341/444] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-tile-instance-dkq80-dv80.cu.o
+[342/444] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/mmf-instance-ncols_15.cu.o
+[343/444] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-mma-f16-instance-q4_0-ncols1_2-ncols2_4.cu.o
+[344/444] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-tile-instance-dkq64-dv64.cu.o
+[345/444] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-mma-f16-instance-q8_0-ncols1_16-ncols2_1.cu.o
+[346/444] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-mma-f16-instance-q8_0-ncols1_8-ncols2_8.cu.o
+[347/444] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/mmf-instance-ncols_3.cu.o
+[348/444] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-mma-f16-instance-q4_0-ncols1_4-ncols2_2.cu.o
+[349/444] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-mma-f16-instance-q4_0-ncols1_32-ncols2_2.cu.o
+[350/444] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-vec-instance-bf16-bf16.cu.o
+[351/444] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-tile-instance-dkq40-dv40.cu.o
+[352/444] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-mma-f16-instance-q4_0-ncols1_8-ncols2_2.cu.o
+[353/444] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-mma-f16-instance-q8_0-ncols1_32-ncols2_1.cu.o
+[354/444] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-mma-f16-instance-q8_0-ncols1_16-ncols2_2.cu.o
+[355/444] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-mma-f16-instance-q8_0-ncols1_32-ncols2_2.cu.o
+[356/444] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-mma-f16-instance-q8_0-ncols1_4-ncols2_4.cu.o
+[357/444] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-mma-f16-instance-q4_0-ncols1_16-ncols2_4.cu.o
+[358/444] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-mma-f16-instance-q4_0-ncols1_32-ncols2_1.cu.o
+[359/444] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-mma-f16-instance-q4_0-ncols1_4-ncols2_8.cu.o
+[360/444] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-mma-f16-instance-q4_0-ncols1_8-ncols2_1.cu.o
+[361/444] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-mma-f16-instance-q4_0-ncols1_16-ncols2_1.cu.o
+[362/444] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/mmf-instance-ncols_1.cu.o
+[363/444] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/mmf-instance-ncols_10.cu.o
+[364/444] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/mmf-instance-ncols_5.cu.o
+[365/444] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-tile-instance-dkq112-dv112.cu.o
+[366/444] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/mmf-instance-ncols_7.cu.o
+[367/444] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-mma-f16-instance-q8_0-ncols1_64-ncols2_1.cu.o
+[368/444] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-tile-instance-dkq192-dv128.cu.o
+[369/444] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-vec-instance-q4_0-q4_0.cu.o
+[370/444] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-mma-f16-instance-q4_0-ncols1_64-ncols2_1.cu.o
+[371/444] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-mma-f16-instance-q8_0-ncols1_16-ncols2_4.cu.o
+[372/444] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/mmf-instance-ncols_8.cu.o
+[373/444] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/mmf-instance-ncols_9.cu.o
+[374/444] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-vec-instance-q8_0-q8_0.cu.o
+[375/444] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-tile-instance-dkq576-dv512.cu.o
+[376/444] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-mma-f16-instance-q4_0-ncols1_8-ncols2_8.cu.o
+[377/444] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/mmq-instance-pq2_0.cu.o
+../ggml/src/ggml-cuda/template-instances/../mmq.cuh(937): warning #177-D: variable "tile_y_next" was declared but never referenced
+      int * tile_y_next = tile_y + tile_y_stride;
+            ^
+          detected during:
+            instantiation of "void mul_mat_q<type,J,fallback>(const char *, const int *, const int32_t *, const int32_t *, float *, float *, const float *, uint3, int, int, int, int, int, uint3, uint3, int, int, int, uint3, uint3, int, int, int, uint3) [with type=GGML_TYPE_PQ2_0, J=8, fallback=false]" at line 1511
+            instantiation of "void launch_mul_mat_q<type,J,fallback>(ggml_backend_cuda_context &, const mmq_args &, cudaStream_t) [with type=GGML_TYPE_PQ2_0, J=8, fallback=false]" at line 1608
+            instantiation of "void mul_mat_q_switch_J<type,fallback>(ggml_backend_cuda_context &, const mmq_args &, cudaStream_t) [with type=GGML_TYPE_PQ2_0, fallback=false]" at line 1666
+            instantiation of "void mul_mat_q_case<type>(ggml_backend_cuda_context &, const mmq_args &, cudaStream_t) [with type=GGML_TYPE_PQ2_0]" at line 5 of ../ggml/src/ggml-cuda/template-instances/mmq-instance-pq2_0.cu
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+[378/444] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-mma-f16-instance-ncols1_2-ncols2_8.cu.o
+[379/444] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-mma-f16-instance-ncols1_1-ncols2_8.cu.o
+[380/444] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-mma-f16-instance-ncols1_2-ncols2_4.cu.o
+[381/444] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/mmf-instance-ncols_14.cu.o
+[382/444] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-tile-instance-dkq72-dv72.cu.o
+[383/444] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-tile-instance-dkq96-dv96.cu.o
+[384/444] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/mmq-instance-q2_0.cu.o
+../ggml/src/ggml-cuda/template-instances/../mmq.cuh(937): warning #177-D: variable "tile_y_next" was declared but never referenced
+      int * tile_y_next = tile_y + tile_y_stride;
+            ^
+          detected during:
+            instantiation of "void mul_mat_q<type,J,fallback>(const char *, const int *, const int32_t *, const int32_t *, float *, float *, const float *, uint3, int, int, int, int, int, uint3, uint3, int, int, int, uint3, uint3, int, int, int, uint3) [with type=GGML_TYPE_Q2_0, J=8, fallback=false]" at line 1511
+            instantiation of "void launch_mul_mat_q<type,J,fallback>(ggml_backend_cuda_context &, const mmq_args &, cudaStream_t) [with type=GGML_TYPE_Q2_0, J=8, fallback=false]" at line 1608
+            instantiation of "void mul_mat_q_switch_J<type,fallback>(ggml_backend_cuda_context &, const mmq_args &, cudaStream_t) [with type=GGML_TYPE_Q2_0, fallback=false]" at line 1666
+            instantiation of "void mul_mat_q_case<type>(ggml_backend_cuda_context &, const mmq_args &, cudaStream_t) [with type=GGML_TYPE_Q2_0]" at line 5 of ../ggml/src/ggml-cuda/template-instances/mmq-instance-q2_0.cu
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+[385/444] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/mmf-instance-ncols_16.cu.o
+[386/444] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/mmq-instance-iq3_s.cu.o
+../ggml/src/ggml-cuda/template-instances/../mmq.cuh(937): warning #177-D: variable "tile_y_next" was declared but never referenced
+      int * tile_y_next = tile_y + tile_y_stride;
+            ^
+          detected during:
+            instantiation of "void mul_mat_q<type,J,fallback>(const char *, const int *, const int32_t *, const int32_t *, float *, float *, const float *, uint3, int, int, int, int, int, uint3, uint3, int, int, int, uint3, uint3, int, int, int, uint3) [with type=GGML_TYPE_IQ3_S, J=8, fallback=false]" at line 1511
+            instantiation of "void launch_mul_mat_q<type,J,fallback>(ggml_backend_cuda_context &, const mmq_args &, cudaStream_t) [with type=GGML_TYPE_IQ3_S, J=8, fallback=false]" at line 1608
+            instantiation of "void mul_mat_q_switch_J<type,fallback>(ggml_backend_cuda_context &, const mmq_args &, cudaStream_t) [with type=GGML_TYPE_IQ3_S, fallback=false]" at line 1666
+            instantiation of "void mul_mat_q_case<type>(ggml_backend_cuda_context &, const mmq_args &, cudaStream_t) [with type=GGML_TYPE_IQ3_S]" at line 5 of ../ggml/src/ggml-cuda/template-instances/mmq-instance-iq3_s.cu
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+[387/444] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-tile-instance-dkq128-dv128.cu.o
+[388/444] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/mmf-instance-ncols_6.cu.o
+[389/444] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/mmf-instance-ncols_13.cu.o
+[390/444] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/binbcast.cu.o
+[391/444] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/fattn.cu.o
+[392/444] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-mma-f16-instance-ncols1_4-ncols2_4.cu.o
+[393/444] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/mmq-instance-iq2_xxs.cu.o
+../ggml/src/ggml-cuda/template-instances/../mmq.cuh(937): warning #177-D: variable "tile_y_next" was declared but never referenced
+      int * tile_y_next = tile_y + tile_y_stride;
+            ^
+          detected during:
+            instantiation of "void mul_mat_q<type,J,fallback>(const char *, const int *, const int32_t *, const int32_t *, float *, float *, const float *, uint3, int, int, int, int, int, uint3, uint3, int, int, int, uint3, uint3, int, int, int, uint3) [with type=GGML_TYPE_IQ2_XXS, J=8, fallback=false]" at line 1511
+            instantiation of "void launch_mul_mat_q<type,J,fallback>(ggml_backend_cuda_context &, const mmq_args &, cudaStream_t) [with type=GGML_TYPE_IQ2_XXS, J=8, fallback=false]" at line 1608
+            instantiation of "void mul_mat_q_switch_J<type,fallback>(ggml_backend_cuda_context &, const mmq_args &, cudaStream_t) [with type=GGML_TYPE_IQ2_XXS, fallback=false]" at line 1666
+            instantiation of "void mul_mat_q_case<type>(ggml_backend_cuda_context &, const mmq_args &, cudaStream_t) [with type=GGML_TYPE_IQ2_XXS]" at line 5 of ../ggml/src/ggml-cuda/template-instances/mmq-instance-iq2_xxs.cu
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+[394/444] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-mma-f16-instance-ncols1_4-ncols2_2.cu.o
+[395/444] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/mmq-instance-q1_0.cu.o
+../ggml/src/ggml-cuda/template-instances/../mmq.cuh(937): warning #177-D: variable "tile_y_next" was declared but never referenced
+      int * tile_y_next = tile_y + tile_y_stride;
+            ^
+          detected during:
+            instantiation of "void mul_mat_q<type,J,fallback>(const char *, const int *, const int32_t *, const int32_t *, float *, float *, const float *, uint3, int, int, int, int, int, uint3, uint3, int, int, int, uint3, uint3, int, int, int, uint3) [with type=GGML_TYPE_Q1_0, J=8, fallback=false]" at line 1511
+            instantiation of "void launch_mul_mat_q<type,J,fallback>(ggml_backend_cuda_context &, const mmq_args &, cudaStream_t) [with type=GGML_TYPE_Q1_0, J=8, fallback=false]" at line 1608
+            instantiation of "void mul_mat_q_switch_J<type,fallback>(ggml_backend_cuda_context &, const mmq_args &, cudaStream_t) [with type=GGML_TYPE_Q1_0, fallback=false]" at line 1666
+            instantiation of "void mul_mat_q_case<type>(ggml_backend_cuda_context &, const mmq_args &, cudaStream_t) [with type=GGML_TYPE_Q1_0]" at line 5 of ../ggml/src/ggml-cuda/template-instances/mmq-instance-q1_0.cu
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+[396/444] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-mma-f16-instance-ncols1_8-ncols2_4.cu.o
+[397/444] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/mmf-instance-ncols_12.cu.o
+[398/444] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-mma-f16-instance-ncols1_16-ncols2_1.cu.o
+[399/444] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-tile-instance-dkq512-dv512.cu.o
+[400/444] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-mma-f16-instance-ncols1_16-ncols2_2.cu.o
+[401/444] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-mma-f16-instance-ncols1_16-ncols2_4.cu.o
+[402/444] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/mmq-instance-ptq1_0.cu.o
+../ggml/src/ggml-cuda/template-instances/../mmq.cuh(937): warning #177-D: variable "tile_y_next" was declared but never referenced
+      int * tile_y_next = tile_y + tile_y_stride;
+            ^
+          detected during:
+            instantiation of "void mul_mat_q<type,J,fallback>(const char *, const int *, const int32_t *, const int32_t *, float *, float *, const float *, uint3, int, int, int, int, int, uint3, uint3, int, int, int, uint3, uint3, int, int, int, uint3) [with type=GGML_TYPE_PTQ1_0, J=8, fallback=false]" at line 1511
+            instantiation of "void launch_mul_mat_q<type,J,fallback>(ggml_backend_cuda_context &, const mmq_args &, cudaStream_t) [with type=GGML_TYPE_PTQ1_0, J=8, fallback=false]" at line 1608
+            instantiation of "void mul_mat_q_switch_J<type,fallback>(ggml_backend_cuda_context &, const mmq_args &, cudaStream_t) [with type=GGML_TYPE_PTQ1_0, fallback=false]" at line 1666
+            instantiation of "void mul_mat_q_case<type>(ggml_backend_cuda_context &, const mmq_args &, cudaStream_t) [with type=GGML_TYPE_PTQ1_0]" at line 6 of ../ggml/src/ggml-cuda/template-instances/mmq-instance-ptq1_0.cu
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+[403/444] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-mma-f16-instance-ncols1_8-ncols2_2.cu.o
+[404/444] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/mmq-instance-iq1_s.cu.o
+../ggml/src/ggml-cuda/template-instances/../mmq.cuh(937): warning #177-D: variable "tile_y_next" was declared but never referenced
+      int * tile_y_next = tile_y + tile_y_stride;
+            ^
+          detected during:
+            instantiation of "void mul_mat_q<type,J,fallback>(const char *, const int *, const int32_t *, const int32_t *, float *, float *, const float *, uint3, int, int, int, int, int, uint3, uint3, int, int, int, uint3, uint3, int, int, int, uint3) [with type=GGML_TYPE_IQ1_S, J=8, fallback=false]" at line 1511
+            instantiation of "void launch_mul_mat_q<type,J,fallback>(ggml_backend_cuda_context &, const mmq_args &, cudaStream_t) [with type=GGML_TYPE_IQ1_S, J=8, fallback=false]" at line 1608
+            instantiation of "void mul_mat_q_switch_J<type,fallback>(ggml_backend_cuda_context &, const mmq_args &, cudaStream_t) [with type=GGML_TYPE_IQ1_S, fallback=false]" at line 1666
+            instantiation of "void mul_mat_q_case<type>(ggml_backend_cuda_context &, const mmq_args &, cudaStream_t) [with type=GGML_TYPE_IQ1_S]" at line 5 of ../ggml/src/ggml-cuda/template-instances/mmq-instance-iq1_s.cu
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+[405/444] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/mmq-instance-iq4_xs.cu.o
+../ggml/src/ggml-cuda/template-instances/../mmq.cuh(937): warning #177-D: variable "tile_y_next" was declared but never referenced
+      int * tile_y_next = tile_y + tile_y_stride;
+            ^
+          detected during:
+            instantiation of "void mul_mat_q<type,J,fallback>(const char *, const int *, const int32_t *, const int32_t *, float *, float *, const float *, uint3, int, int, int, int, int, uint3, uint3, int, int, int, uint3, uint3, int, int, int, uint3) [with type=GGML_TYPE_IQ4_XS, J=8, fallback=false]" at line 1511
+            instantiation of "void launch_mul_mat_q<type,J,fallback>(ggml_backend_cuda_context &, const mmq_args &, cudaStream_t) [with type=GGML_TYPE_IQ4_XS, J=8, fallback=false]" at line 1608
+            instantiation of "void mul_mat_q_switch_J<type,fallback>(ggml_backend_cuda_context &, const mmq_args &, cudaStream_t) [with type=GGML_TYPE_IQ4_XS, fallback=false]" at line 1666
+            instantiation of "void mul_mat_q_case<type>(ggml_backend_cuda_context &, const mmq_args &, cudaStream_t) [with type=GGML_TYPE_IQ4_XS]" at line 5 of ../ggml/src/ggml-cuda/template-instances/mmq-instance-iq4_xs.cu
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+[406/444] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-mma-f16-instance-ncols1_32-ncols2_2.cu.o
+[407/444] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-mma-f16-instance-ncols1_4-ncols2_8.cu.o
+[408/444] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/quantize.cu.o
+[409/444] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-mma-f16-instance-ncols1_8-ncols2_8.cu.o
+[410/444] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/mmf-instance-ncols_11.cu.o
+[411/444] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/mmq-instance-q4_k.cu.o
+../ggml/src/ggml-cuda/template-instances/../mmq.cuh(937): warning #177-D: variable "tile_y_next" was declared but never referenced
+      int * tile_y_next = tile_y + tile_y_stride;
+            ^
+          detected during:
+            instantiation of "void mul_mat_q<type,J,fallback>(const char *, const int *, const int32_t *, const int32_t *, float *, float *, const float *, uint3, int, int, int, int, int, uint3, uint3, int, int, int, uint3, uint3, int, int, int, uint3) [with type=GGML_TYPE_Q4_K, J=8, fallback=false]" at line 1511
+            instantiation of "void launch_mul_mat_q<type,J,fallback>(ggml_backend_cuda_context &, const mmq_args &, cudaStream_t) [with type=GGML_TYPE_Q4_K, J=8, fallback=false]" at line 1608
+            instantiation of "void mul_mat_q_switch_J<type,fallback>(ggml_backend_cuda_context &, const mmq_args &, cudaStream_t) [with type=GGML_TYPE_Q4_K, fallback=false]" at line 1666
+            instantiation of "void mul_mat_q_case<type>(ggml_backend_cuda_context &, const mmq_args &, cudaStream_t) [with type=GGML_TYPE_Q4_K]" at line 5 of ../ggml/src/ggml-cuda/template-instances/mmq-instance-q4_k.cu
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+[412/444] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/mmq-instance-nvfp4.cu.o
+../ggml/src/ggml-cuda/template-instances/../mmq.cuh(937): warning #177-D: variable "tile_y_next" was declared but never referenced
+      int * tile_y_next = tile_y + tile_y_stride;
+            ^
+          detected during:
+            instantiation of "void mul_mat_q<type,J,fallback>(const char *, const int *, const int32_t *, const int32_t *, float *, float *, const float *, uint3, int, int, int, int, int, uint3, uint3, int, int, int, uint3, uint3, int, int, int, uint3) [with type=GGML_TYPE_NVFP4, J=8, fallback=false]" at line 1511
+            instantiation of "void launch_mul_mat_q<type,J,fallback>(ggml_backend_cuda_context &, const mmq_args &, cudaStream_t) [with type=GGML_TYPE_NVFP4, J=8, fallback=false]" at line 1608
+            instantiation of "void mul_mat_q_switch_J<type,fallback>(ggml_backend_cuda_context &, const mmq_args &, cudaStream_t) [with type=GGML_TYPE_NVFP4, fallback=false]" at line 1666
+            instantiation of "void mul_mat_q_case<type>(ggml_backend_cuda_context &, const mmq_args &, cudaStream_t) [with type=GGML_TYPE_NVFP4]" at line 5 of ../ggml/src/ggml-cuda/template-instances/mmq-instance-nvfp4.cu
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+[413/444] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/mmq-instance-iq3_xxs.cu.o
+../ggml/src/ggml-cuda/template-instances/../mmq.cuh(937): warning #177-D: variable "tile_y_next" was declared but never referenced
+      int * tile_y_next = tile_y + tile_y_stride;
+            ^
+          detected during:
+            instantiation of "void mul_mat_q<type,J,fallback>(const char *, const int *, const int32_t *, const int32_t *, float *, float *, const float *, uint3, int, int, int, int, int, uint3, uint3, int, int, int, uint3, uint3, int, int, int, uint3) [with type=GGML_TYPE_IQ3_XXS, J=8, fallback=false]" at line 1511
+            instantiation of "void launch_mul_mat_q<type,J,fallback>(ggml_backend_cuda_context &, const mmq_args &, cudaStream_t) [with type=GGML_TYPE_IQ3_XXS, J=8, fallback=false]" at line 1608
+            instantiation of "void mul_mat_q_switch_J<type,fallback>(ggml_backend_cuda_context &, const mmq_args &, cudaStream_t) [with type=GGML_TYPE_IQ3_XXS, fallback=false]" at line 1666
+            instantiation of "void mul_mat_q_case<type>(ggml_backend_cuda_context &, const mmq_args &, cudaStream_t) [with type=GGML_TYPE_IQ3_XXS]" at line 5 of ../ggml/src/ggml-cuda/template-instances/mmq-instance-iq3_xxs.cu
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+[414/444] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/mmq-instance-iq4_nl.cu.o
+../ggml/src/ggml-cuda/template-instances/../mmq.cuh(937): warning #177-D: variable "tile_y_next" was declared but never referenced
+      int * tile_y_next = tile_y + tile_y_stride;
+            ^
+          detected during:
+            instantiation of "void mul_mat_q<type,J,fallback>(const char *, const int *, const int32_t *, const int32_t *, float *, float *, const float *, uint3, int, int, int, int, int, uint3, uint3, int, int, int, uint3, uint3, int, int, int, uint3) [with type=GGML_TYPE_IQ4_NL, J=8, fallback=false]" at line 1511
+            instantiation of "void launch_mul_mat_q<type,J,fallback>(ggml_backend_cuda_context &, const mmq_args &, cudaStream_t) [with type=GGML_TYPE_IQ4_NL, J=8, fallback=false]" at line 1608
+            instantiation of "void mul_mat_q_switch_J<type,fallback>(ggml_backend_cuda_context &, const mmq_args &, cudaStream_t) [with type=GGML_TYPE_IQ4_NL, fallback=false]" at line 1666
+            instantiation of "void mul_mat_q_case<type>(ggml_backend_cuda_context &, const mmq_args &, cudaStream_t) [with type=GGML_TYPE_IQ4_NL]" at line 5 of ../ggml/src/ggml-cuda/template-instances/mmq-instance-iq4_nl.cu
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+[415/444] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/mmq-instance-q4_1.cu.o
+../ggml/src/ggml-cuda/template-instances/../mmq.cuh(937): warning #177-D: variable "tile_y_next" was declared but never referenced
+      int * tile_y_next = tile_y + tile_y_stride;
+            ^
+          detected during:
+            instantiation of "void mul_mat_q<type,J,fallback>(const char *, const int *, const int32_t *, const int32_t *, float *, float *, const float *, uint3, int, int, int, int, int, uint3, uint3, int, int, int, uint3, uint3, int, int, int, uint3) [with type=GGML_TYPE_Q4_1, J=8, fallback=false]" at line 1511
+            instantiation of "void launch_mul_mat_q<type,J,fallback>(ggml_backend_cuda_context &, const mmq_args &, cudaStream_t) [with type=GGML_TYPE_Q4_1, J=8, fallback=false]" at line 1608
+            instantiation of "void mul_mat_q_switch_J<type,fallback>(ggml_backend_cuda_context &, const mmq_args &, cudaStream_t) [with type=GGML_TYPE_Q4_1, fallback=false]" at line 1666
+            instantiation of "void mul_mat_q_case<type>(ggml_backend_cuda_context &, const mmq_args &, cudaStream_t) [with type=GGML_TYPE_Q4_1]" at line 5 of ../ggml/src/ggml-cuda/template-instances/mmq-instance-q4_1.cu
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+[416/444] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/mmq-instance-iq2_xs.cu.o
+../ggml/src/ggml-cuda/template-instances/../mmq.cuh(937): warning #177-D: variable "tile_y_next" was declared but never referenced
+      int * tile_y_next = tile_y + tile_y_stride;
+            ^
+          detected during:
+            instantiation of "void mul_mat_q<type,J,fallback>(const char *, const int *, const int32_t *, const int32_t *, float *, float *, const float *, uint3, int, int, int, int, int, uint3, uint3, int, int, int, uint3, uint3, int, int, int, uint3) [with type=GGML_TYPE_IQ2_XS, J=8, fallback=false]" at line 1511
+            instantiation of "void launch_mul_mat_q<type,J,fallback>(ggml_backend_cuda_context &, const mmq_args &, cudaStream_t) [with type=GGML_TYPE_IQ2_XS, J=8, fallback=false]" at line 1608
+            instantiation of "void mul_mat_q_switch_J<type,fallback>(ggml_backend_cuda_context &, const mmq_args &, cudaStream_t) [with type=GGML_TYPE_IQ2_XS, fallback=false]" at line 1666
+            instantiation of "void mul_mat_q_case<type>(ggml_backend_cuda_context &, const mmq_args &, cudaStream_t) [with type=GGML_TYPE_IQ2_XS]" at line 5 of ../ggml/src/ggml-cuda/template-instances/mmq-instance-iq2_xs.cu
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+[417/444] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/mmq-instance-q6_k.cu.o
+../ggml/src/ggml-cuda/template-instances/../mmq.cuh(937): warning #177-D: variable "tile_y_next" was declared but never referenced
+      int * tile_y_next = tile_y + tile_y_stride;
+            ^
+          detected during:
+            instantiation of "void mul_mat_q<type,J,fallback>(const char *, const int *, const int32_t *, const int32_t *, float *, float *, const float *, uint3, int, int, int, int, int, uint3, uint3, int, int, int, uint3, uint3, int, int, int, uint3) [with type=GGML_TYPE_Q6_K, J=8, fallback=false]" at line 1511
+            instantiation of "void launch_mul_mat_q<type,J,fallback>(ggml_backend_cuda_context &, const mmq_args &, cudaStream_t) [with type=GGML_TYPE_Q6_K, J=8, fallback=false]" at line 1608
+            instantiation of "void mul_mat_q_switch_J<type,fallback>(ggml_backend_cuda_context &, const mmq_args &, cudaStream_t) [with type=GGML_TYPE_Q6_K, fallback=false]" at line 1666
+            instantiation of "void mul_mat_q_case<type>(ggml_backend_cuda_context &, const mmq_args &, cudaStream_t) [with type=GGML_TYPE_Q6_K]" at line 5 of ../ggml/src/ggml-cuda/template-instances/mmq-instance-q6_k.cu
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+[418/444] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/mmq-instance-q3_k.cu.o
+../ggml/src/ggml-cuda/template-instances/../mmq.cuh(937): warning #177-D: variable "tile_y_next" was declared but never referenced
+      int * tile_y_next = tile_y + tile_y_stride;
+            ^
+          detected during:
+            instantiation of "void mul_mat_q<type,J,fallback>(const char *, const int *, const int32_t *, const int32_t *, float *, float *, const float *, uint3, int, int, int, int, int, uint3, uint3, int, int, int, uint3, uint3, int, int, int, uint3) [with type=GGML_TYPE_Q3_K, J=8, fallback=false]" at line 1511
+            instantiation of "void launch_mul_mat_q<type,J,fallback>(ggml_backend_cuda_context &, const mmq_args &, cudaStream_t) [with type=GGML_TYPE_Q3_K, J=8, fallback=false]" at line 1608
+            instantiation of "void mul_mat_q_switch_J<type,fallback>(ggml_backend_cuda_context &, const mmq_args &, cudaStream_t) [with type=GGML_TYPE_Q3_K, fallback=false]" at line 1666
+            instantiation of "void mul_mat_q_case<type>(ggml_backend_cuda_context &, const mmq_args &, cudaStream_t) [with type=GGML_TYPE_Q3_K]" at line 5 of ../ggml/src/ggml-cuda/template-instances/mmq-instance-q3_k.cu
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+[419/444] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-mma-f16-instance-ncols1_32-ncols2_1.cu.o
+[420/444] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/mmq-instance-iq2_s.cu.o
+../ggml/src/ggml-cuda/template-instances/../mmq.cuh(937): warning #177-D: variable "tile_y_next" was declared but never referenced
+      int * tile_y_next = tile_y + tile_y_stride;
+            ^
+          detected during:
+            instantiation of "void mul_mat_q<type,J,fallback>(const char *, const int *, const int32_t *, const int32_t *, float *, float *, const float *, uint3, int, int, int, int, int, uint3, uint3, int, int, int, uint3, uint3, int, int, int, uint3) [with type=GGML_TYPE_IQ2_S, J=8, fallback=false]" at line 1511
+            instantiation of "void launch_mul_mat_q<type,J,fallback>(ggml_backend_cuda_context &, const mmq_args &, cudaStream_t) [with type=GGML_TYPE_IQ2_S, J=8, fallback=false]" at line 1608
+            instantiation of "void mul_mat_q_switch_J<type,fallback>(ggml_backend_cuda_context &, const mmq_args &, cudaStream_t) [with type=GGML_TYPE_IQ2_S, fallback=false]" at line 1666
+            instantiation of "void mul_mat_q_case<type>(ggml_backend_cuda_context &, const mmq_args &, cudaStream_t) [with type=GGML_TYPE_IQ2_S]" at line 5 of ../ggml/src/ggml-cuda/template-instances/mmq-instance-iq2_s.cu
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+[421/444] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-mma-f16-instance-ncols1_64-ncols2_1.cu.o
+[422/444] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/mmq-instance-q5_1.cu.o
+../ggml/src/ggml-cuda/template-instances/../mmq.cuh(937): warning #177-D: variable "tile_y_next" was declared but never referenced
+      int * tile_y_next = tile_y + tile_y_stride;
+            ^
+          detected during:
+            instantiation of "void mul_mat_q<type,J,fallback>(const char *, const int *, const int32_t *, const int32_t *, float *, float *, const float *, uint3, int, int, int, int, int, uint3, uint3, int, int, int, uint3, uint3, int, int, int, uint3) [with type=GGML_TYPE_Q5_1, J=8, fallback=false]" at line 1511
+            instantiation of "void launch_mul_mat_q<type,J,fallback>(ggml_backend_cuda_context &, const mmq_args &, cudaStream_t) [with type=GGML_TYPE_Q5_1, J=8, fallback=false]" at line 1608
+            instantiation of "void mul_mat_q_switch_J<type,fallback>(ggml_backend_cuda_context &, const mmq_args &, cudaStream_t) [with type=GGML_TYPE_Q5_1, fallback=false]" at line 1666
+            instantiation of "void mul_mat_q_case<type>(ggml_backend_cuda_context &, const mmq_args &, cudaStream_t) [with type=GGML_TYPE_Q5_1]" at line 5 of ../ggml/src/ggml-cuda/template-instances/mmq-instance-q5_1.cu
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+[423/444] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/mmq-instance-mxfp4.cu.o
+../ggml/src/ggml-cuda/template-instances/../mmq.cuh(937): warning #177-D: variable "tile_y_next" was declared but never referenced
+      int * tile_y_next = tile_y + tile_y_stride;
+            ^
+          detected during:
+            instantiation of "void mul_mat_q<type,J,fallback>(const char *, const int *, const int32_t *, const int32_t *, float *, float *, const float *, uint3, int, int, int, int, int, uint3, uint3, int, int, int, uint3, uint3, int, int, int, uint3) [with type=GGML_TYPE_MXFP4, J=8, fallback=false]" at line 1511
+            instantiation of "void launch_mul_mat_q<type,J,fallback>(ggml_backend_cuda_context &, const mmq_args &, cudaStream_t) [with type=GGML_TYPE_MXFP4, J=8, fallback=false]" at line 1608
+            instantiation of "void mul_mat_q_switch_J<type,fallback>(ggml_backend_cuda_context &, const mmq_args &, cudaStream_t) [with type=GGML_TYPE_MXFP4, fallback=false]" at line 1666
+            instantiation of "void mul_mat_q_case<type>(ggml_backend_cuda_context &, const mmq_args &, cudaStream_t) [with type=GGML_TYPE_MXFP4]" at line 5 of ../ggml/src/ggml-cuda/template-instances/mmq-instance-mxfp4.cu
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+[424/444] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-mma-f16-instance-ncols1_8-ncols2_1.cu.o
+[425/444] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/mmq-instance-q4_0.cu.o
+../ggml/src/ggml-cuda/template-instances/../mmq.cuh(937): warning #177-D: variable "tile_y_next" was declared but never referenced
+      int * tile_y_next = tile_y + tile_y_stride;
+            ^
+          detected during:
+            instantiation of "void mul_mat_q<type,J,fallback>(const char *, const int *, const int32_t *, const int32_t *, float *, float *, const float *, uint3, int, int, int, int, int, uint3, uint3, int, int, int, uint3, uint3, int, int, int, uint3) [with type=GGML_TYPE_Q4_0, J=8, fallback=false]" at line 1511
+            instantiation of "void launch_mul_mat_q<type,J,fallback>(ggml_backend_cuda_context &, const mmq_args &, cudaStream_t) [with type=GGML_TYPE_Q4_0, J=8, fallback=false]" at line 1608
+            instantiation of "void mul_mat_q_switch_J<type,fallback>(ggml_backend_cuda_context &, const mmq_args &, cudaStream_t) [with type=GGML_TYPE_Q4_0, fallback=false]" at line 1666
+            instantiation of "void mul_mat_q_case<type>(ggml_backend_cuda_context &, const mmq_args &, cudaStream_t) [with type=GGML_TYPE_Q4_0]" at line 5 of ../ggml/src/ggml-cuda/template-instances/mmq-instance-q4_0.cu
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+[426/444] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/mmq-instance-q8_0.cu.o
+../ggml/src/ggml-cuda/template-instances/../mmq.cuh(937): warning #177-D: variable "tile_y_next" was declared but never referenced
+      int * tile_y_next = tile_y + tile_y_stride;
+            ^
+          detected during:
+            instantiation of "void mul_mat_q<type,J,fallback>(const char *, const int *, const int32_t *, const int32_t *, float *, float *, const float *, uint3, int, int, int, int, int, uint3, uint3, int, int, int, uint3, uint3, int, int, int, uint3) [with type=GGML_TYPE_Q8_0, J=8, fallback=false]" at line 1511
+            instantiation of "void launch_mul_mat_q<type,J,fallback>(ggml_backend_cuda_context &, const mmq_args &, cudaStream_t) [with type=GGML_TYPE_Q8_0, J=8, fallback=false]" at line 1608
+            instantiation of "void mul_mat_q_switch_J<type,fallback>(ggml_backend_cuda_context &, const mmq_args &, cudaStream_t) [with type=GGML_TYPE_Q8_0, fallback=false]" at line 1666
+            instantiation of "void mul_mat_q_case<type>(ggml_backend_cuda_context &, const mmq_args &, cudaStream_t) [with type=GGML_TYPE_Q8_0]" at line 5 of ../ggml/src/ggml-cuda/template-instances/mmq-instance-q8_0.cu
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+[427/444] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/mmq-instance-q5_k.cu.o
+../ggml/src/ggml-cuda/template-instances/../mmq.cuh(937): warning #177-D: variable "tile_y_next" was declared but never referenced
+      int * tile_y_next = tile_y + tile_y_stride;
+            ^
+          detected during:
+            instantiation of "void mul_mat_q<type,J,fallback>(const char *, const int *, const int32_t *, const int32_t *, float *, float *, const float *, uint3, int, int, int, int, int, uint3, uint3, int, int, int, uint3, uint3, int, int, int, uint3) [with type=GGML_TYPE_Q5_K, J=8, fallback=false]" at line 1511
+            instantiation of "void launch_mul_mat_q<type,J,fallback>(ggml_backend_cuda_context &, const mmq_args &, cudaStream_t) [with type=GGML_TYPE_Q5_K, J=8, fallback=false]" at line 1608
+            instantiation of "void mul_mat_q_switch_J<type,fallback>(ggml_backend_cuda_context &, const mmq_args &, cudaStream_t) [with type=GGML_TYPE_Q5_K, fallback=false]" at line 1666
+            instantiation of "void mul_mat_q_case<type>(ggml_backend_cuda_context &, const mmq_args &, cudaStream_t) [with type=GGML_TYPE_Q5_K]" at line 5 of ../ggml/src/ggml-cuda/template-instances/mmq-instance-q5_k.cu
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+[428/444] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/mmq-instance-q5_0.cu.o
+../ggml/src/ggml-cuda/template-instances/../mmq.cuh(937): warning #177-D: variable "tile_y_next" was declared but never referenced
+      int * tile_y_next = tile_y + tile_y_stride;
+            ^
+          detected during:
+            instantiation of "void mul_mat_q<type,J,fallback>(const char *, const int *, const int32_t *, const int32_t *, float *, float *, const float *, uint3, int, int, int, int, int, uint3, uint3, int, int, int, uint3, uint3, int, int, int, uint3) [with type=GGML_TYPE_Q5_0, J=8, fallback=false]" at line 1511
+            instantiation of "void launch_mul_mat_q<type,J,fallback>(ggml_backend_cuda_context &, const mmq_args &, cudaStream_t) [with type=GGML_TYPE_Q5_0, J=8, fallback=false]" at line 1608
+            instantiation of "void mul_mat_q_switch_J<type,fallback>(ggml_backend_cuda_context &, const mmq_args &, cudaStream_t) [with type=GGML_TYPE_Q5_0, fallback=false]" at line 1666
+            instantiation of "void mul_mat_q_case<type>(ggml_backend_cuda_context &, const mmq_args &, cudaStream_t) [with type=GGML_TYPE_Q5_0]" at line 5 of ../ggml/src/ggml-cuda/template-instances/mmq-instance-q5_0.cu
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+[429/444] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/mmq-instance-q2_k.cu.o
+../ggml/src/ggml-cuda/template-instances/../mmq.cuh(937): warning #177-D: variable "tile_y_next" was declared but never referenced
+      int * tile_y_next = tile_y + tile_y_stride;
+            ^
+          detected during:
+            instantiation of "void mul_mat_q<type,J,fallback>(const char *, const int *, const int32_t *, const int32_t *, float *, float *, const float *, uint3, int, int, int, int, int, uint3, uint3, int, int, int, uint3, uint3, int, int, int, uint3) [with type=GGML_TYPE_Q2_K, J=8, fallback=false]" at line 1511
+            instantiation of "void launch_mul_mat_q<type,J,fallback>(ggml_backend_cuda_context &, const mmq_args &, cudaStream_t) [with type=GGML_TYPE_Q2_K, J=8, fallback=false]" at line 1608
+            instantiation of "void mul_mat_q_switch_J<type,fallback>(ggml_backend_cuda_context &, const mmq_args &, cudaStream_t) [with type=GGML_TYPE_Q2_K, fallback=false]" at line 1666
+            instantiation of "void mul_mat_q_case<type>(ggml_backend_cuda_context &, const mmq_args &, cudaStream_t) [with type=GGML_TYPE_Q2_K]" at line 5 of ../ggml/src/ggml-cuda/template-instances/mmq-instance-q2_k.cu
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+[430/444] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/mmvf.cu.o
+[431/444] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/argsort.cu.o
+[432/444] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/template-instances/fattn-tile-instance-dkq256-dv256.cu.o
+[433/444] Building CUDA object ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/mmvq.cu.o
+[434/444] Linking CUDA shared library bin/libggml-cuda.so.0.21.0
+[435/444] Creating library symlink bin/libggml-cuda.so.0 bin/libggml-cuda.so
+[436/444] Linking CXX shared library bin/libggml.so.0.21.0
+[437/444] Creating library symlink bin/libggml.so.0 bin/libggml.so
+[438/444] Linking CXX shared library bin/libllama.so.0.2.0
+[439/444] Creating library symlink bin/libllama.so.0 bin/libllama.so
+[440/444] Linking CXX shared library bin/libllama-common.so.0.2.0
+[441/444] Creating library symlink bin/libllama-common.so.0 bin/libllama-common.so
+[442/444] Linking CXX shared library bin/libllama-bench-impl.so
+[443/444] Linking CXX executable bin/test-backend-ops
+[444/444] Linking CXX executable bin/llama-bench

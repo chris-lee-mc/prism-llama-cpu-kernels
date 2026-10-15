@@ -1,0 +1,193 @@
+{
+ "schema": 1,
+ "exp": "wrap_a3",
+ "gpu": "rtx4090",
+ "utc": "2026-10-15T03:47:47.979331+00:00",
+ "env": {
+  "gpu_name": "NVIDIA GeForce RTX 4090",
+  "gpu_tag": "rtx4090",
+  "cc": null,
+  "sm": null,
+  "driver": "580.178.04",
+  "cuda_runtime": "12.8",
+  "cuda_driver": "13.0",
+  "torch": "2.11.0+cu128",
+  "vram_bytes": null,
+  "sm_count": null,
+  "l2_bytes": null,
+  "persisting_l2_max_bytes": null,
+  "access_policy_window_max_bytes": null,
+  "persisting_l2_limit_bytes": null,
+  "git_sha": "f20e4bacf3e46f388a4be6330d34860daa61de2a",
+  "git_branch": "exp/cache-resident",
+  "hostname": "c0026ee62d28",
+  "pod_id": "oq5n12q6maqkm9",
+  "python": "3.10.12",
+  "counters_ok": null,
+  "transformers": "5.19.0"
+ },
+ "data": {
+  "config": {
+   "parts": [
+    "build",
+    "sass",
+    "t",
+    "b",
+    "f"
+   ],
+   "budget_min": 28.0,
+   "rounds": 4,
+   "builds": [
+    "base",
+    "head"
+   ],
+   "models": {
+    "pq2": {
+     "kind": "bonsai2",
+     "key": "PQ2_0",
+     "repo": "prism-ml/Ternary-Bonsai-2-27B-gguf",
+     "file": "Ternary-Bonsai-2-27B-PQ2_0.gguf",
+     "exists": true,
+     "source": "api",
+     "checked_utc": "2026-10-15T03:35:56.062427+00:00",
+     "alternatives": [],
+     "note": null
+    }
+   },
+   "targets": [
+    "llama-bench",
+    "test-backend-ops"
+   ],
+   "head_bin": "/workspace/repo/build-cuda/bin",
+   "quick": false
+  },
+  "rows": [],
+  "notes": [
+   "sass mul_mat_vec_pq2_0_mc sm_89: identical in both builds ({'head': 4680, 'base': 4680} instructions in {'head': 6, 'base': 6} kernels)",
+   "stop: test-backend-ops did not pass with the head build; parts b and f not run",
+   "Ada: the multi-column kernel runs in both builds (default on Ada); ggml_cuda_pdl_sync() is compiled out below sm_90"
+  ],
+  "counters_ok": false,
+  "gate": {
+   "gpu": "rtx4090",
+   "problem": null,
+   "cc": "89",
+   "allow_any_gpu": false
+  },
+  "build": {
+   "dir": "/workspace/a3/src",
+   "patch": "exps/data/a3_pq2_multicol.patch",
+   "base_commit": "4a4866a60778437aec748e5ad0c45439b14fd1db",
+   "applied": true,
+   "files": {
+    "ggml/src/ggml-cuda/common.cuh": {
+     "head": "41d15153a401bf76ad0506b310a2ec2325d4bf9146bd8ca70701ded3e947fc12",
+     "base": "a9de19ba99924fd87f1f5b9065c1b3676fbd5ecc88c29eaa12c478d95a0a6fdc"
+    },
+    "ggml/src/ggml-cuda/mmvq-pq2_0.cuh": {
+     "head": "aa1cadd578a5f9ed848417d3054b9e942bf2e1bada3c6aee0095bcc321aaca37",
+     "base": "49dffdcc6e91be521b5dbdcfeb8db167f23c9dd7b191c334243121fc7bef36a5"
+    }
+   },
+   "differs": true,
+   "cc": "89",
+   "head_cuda_arch": "89",
+   "head_build_type": "Release",
+   "cmake": [
+    "cmake",
+    "-S",
+    "<src>",
+    "-B",
+    "<src>/build-cuda",
+    "-G",
+    "Ninja",
+    "-DGGML_CUDA=ON",
+    "-DCMAKE_CUDA_ARCHITECTURES=89",
+    "-DCMAKE_BUILD_TYPE=Release",
+    "-DLLAMA_CURL=OFF",
+    "-DCMAKE_CUDA_COMPILER_LAUNCHER=ccache",
+    "-DCMAKE_C_COMPILER_LAUNCHER=ccache",
+    "-DCMAKE_CXX_COMPILER_LAUNCHER=ccache"
+   ],
+   "build_cmd": [
+    "cmake",
+    "--build",
+    "/workspace/a3/src/build-cuda",
+    "-j",
+    "152",
+    "--target",
+    "llama-bench",
+    "test-backend-ops"
+   ],
+   "build_s": 376.46353606600314,
+   "returncode": 0
+  },
+  "sass": {
+   "kernel": "mul_mat_vec_pq2_0_mc",
+   "arch": "sm_89",
+   "tool": "cuobjdump",
+   "n_kernels": {
+    "head": 6,
+    "base": 6
+   },
+   "n_instructions": {
+    "head": 4680,
+    "base": 4680
+   },
+   "different": [],
+   "identical": true
+  },
+  "tbo": [
+   {
+    "cmd": [
+     "/workspace/repo/build-cuda/bin/test-backend-ops",
+     "test",
+     "-o",
+     "MUL_MAT",
+     "-b",
+     "CUDA0",
+     "-p",
+     "type_a=pq2_0,"
+    ],
+    "passed": 0,
+    "total": 0,
+    "fail_lines": [],
+    "n_fail": 0,
+    "returncode": 0,
+    "ok": true,
+    "config": "head"
+   },
+   {
+    "cmd": [
+     "/workspace/a3/src/build-cuda/bin/test-backend-ops",
+     "test",
+     "-o",
+     "MUL_MAT",
+     "-b",
+     "CUDA0",
+     "-p",
+     "type_a=pq2_0,"
+    ],
+    "passed": 0,
+    "total": 0,
+    "fail_lines": [],
+    "n_fail": 0,
+    "returncode": 0,
+    "ok": true,
+    "config": "base"
+   }
+  ],
+  "bench": [],
+  "bench_summary": {
+   "pp": {},
+   "tg": {}
+  },
+  "bench_paired": {
+   "a": "base",
+   "b": "head",
+   "pp": {},
+   "tg": {}
+  },
+  "perf": null
+ }
+}

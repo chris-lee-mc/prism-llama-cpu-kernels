@@ -228,6 +228,7 @@
   "failsafe_min": 40,
   "build_llama": true,
   "disk_gb": 80,
+  "min_power_frac": 0.75,
   "desc": "Wrap A (A1 + A2), fork PR evidence for the PQ2_0 multi-column kernel on sm_120 (GGML_CUDA_PQ2_MULTICOL prototype, pdl_sync) on one 600 W PRO 6000 (Workstation or Server; the driver refuses a Max-Q; cascade capped at the community price ~1.75/hr): (t) test-backend-ops MUL_MAT pq2_0 on three times, off; (b) paired llama-bench -p 1..9 -n 0 -r 5 and tg128, off/on alternating over 4 rounds, gain per round, health checked before and during (an unhealthy round is left out, UNHEALTHY HOST verdict, exit 1); (s) llama-server on the R2a balanced subset (12 prompts, -lv 4): target alone, draft-simple K=4 Q8_0 draft with the kernel off and on, interleaved by 2 prompt blocks, speedup with bootstrap CIs, ms per step split from the server statistics; no --allow-long (failsafe 40 = clone, apt, torch and cold CUDA build ~15 + downloads <= 6 + run 12 + end reserve 5; est 18 = downloads 6 + run 12)"
  },
  "wrap_a3": {
@@ -251,6 +252,7 @@
   "failsafe_min": 55,
   "build_llama": true,
   "disk_gb": 80,
+  "min_power_frac": 0.75,
   "desc": "Wrap B, test build for the upstream investigations on a Max-Q PRO 6000 or an RTX 5090 (no 600 W gate: every comparison is paired inside the pod, not PR evidence): (r) rollback probe (cr_rs_rollback_probe): n_rs_seq 4 on the Q8_0 draft and the PQ2_0 target (one-token decodes vs one batch), n_rs_seq 16 and 64 on the target (verify batches); each probe batch has n_rs_seq + 1 tokens, so the rollback == n_rs_seq row of a full rejection is covered (reported as boundary); (m) R2a balanced subset (24 prompts, -lv 4) interleaved by 2 prompt blocks: target alone, draft-simple K=4 Q8_0 draft, with GGML_EXP_DRAFT_CKPT=1 (correct draft state), with GGML_EXP_DRAFT_CKPT=1 and GGML_EXP_DRAFT_TIME=1 (target synchronized, draft-context decode of the verify batch timed: the isolated cost, with the end-to-end ms per step delta against k4q8_ckpt as the lower bound of the saving), ngram-mod (checkpoint path), with GGML_EXP_NGRAM_RS=16 and 64 (B2); alpha as the draft-state check, per-category speedups and pairs with bootstrap CIs, ms per step split, ngram-mod resets, path verification; needs --allow-long (failsafe 55 = clone, apt, torch and cold CUDA build ~15 + downloads <= 6 + run 22 + end reserve 5; est 28 = downloads 6 + run 22)"
  },
  "wrap_ab": {
@@ -262,6 +264,7 @@
   "failsafe_min": 60,
   "build_llama": true,
   "disk_gb": 80,
+  "min_power_frac": 0.75,
   "result_exp": "wrap_a",
   "desc": "Wrap A then wrap B in one 600 W PRO 6000 session: one clone, bootstrap, cold CUDA build and download for both (about 15 + 6 min of the pod time are shared); wrap_b runs even when wrap_a stops on an unhealthy host; the exit code is wrap_a's if it failed, else wrap_b's. Results go to results/wrap_a and results/wrap_b. Use it instead of the two single entries when the 600 W card is wanted for B as well; needs --allow-long (failsafe 60 = bootstrap and build ~15 + downloads <= 6 + wrap_a 12 + wrap_b 22 + end reserve 5)"
  }
