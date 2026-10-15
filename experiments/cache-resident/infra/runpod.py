@@ -460,6 +460,8 @@ def launch(exp: str, gpu: str | None = None, *, cmd=None, cloud="any", failsafe_
         env["CR_CMD"] = cmd
     if ent.get("min_power_frac"):
         env["CR_MIN_POWER_FRAC"] = ent["min_power_frac"]      # bootstrap stops on a capped host before the slow steps
+    if ent.get("power_tol"):
+        env["CR_POWER_TOL"] = ent["power_tol"]                # PR evidence: the limit must be the default within this fraction
     script = startup_script(env)
 
     client = client or RunPod()

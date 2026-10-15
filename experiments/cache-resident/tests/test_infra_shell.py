@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import hashlib
+import os
 import pathlib
 import re
+import stat
 import subprocess
 
 import pytest
@@ -53,3 +56,40 @@ def test_llama_target_grep_pattern():
     for line in ("llama-bench: phony", ".. llama-bench", "ninja: llama-bench"):
         assert re.search(pat, line)
     assert not re.search(pat, "llama-bench-impl: phony")
+
+
+def _host_check(tmp_path, power, env_extra):
+    """Run bootstrap.sh with a fake nvidia-smi (power.limit,power.default_limit = power) and a fake python3 (cuInit ok). A matching stamp makes
+    the script stop after the host check, so nothing is installed. Returns (exit code, bootstrap.log text)."""
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    for name, body in (("nvidia-smi", "#!/bin/sh\necho '%s'\n" % power), ("python3", "#!/bin/sh\nexit 0\n")):
+        f = bin_dir / name
+        f.write_text(body)
+        f.chmod(f.stat().st_mode | stat.S_IXUSR)
+    script = INFRA / "bootstrap.sh"
+    lines = "".join("%s  %s\n" % (hashlib.sha256(p.read_bytes()).hexdigest(), p) for p in (INFRA / "requirements-pod.txt", script))
+    stamp = tmp_path / "stamp"
+    stamp.write_text(hashlib.sha256(lines.encode()).hexdigest()[:16] + "-llama0\n")
+    env = dict(os.environ, PATH="%s:%s" % (bin_dir, os.environ["PATH"]), CR_RESULTS_DIR=str(tmp_path / "res"), CR_BOOTSTRAP_STAMP=str(stamp), **env_extra)
+    env.pop("CR_BUILD_LLAMA", None)
+    r = subprocess.run(["bash", str(script)], env=env, capture_output=True, text=True, timeout=60)
+    return r.returncode, (tmp_path / "res" / "_status" / "bootstrap.log").read_text()
+
+
+@pytest.mark.parametrize("power,ok", [("600.00, 600.00", True), ("598.00, 600.00", True), ("450.00, 600.00", False), ("[N/A], 600.00", False),
+                                      ("660.00, 600.00", False)])
+def test_bootstrap_power_tol_needs_the_default_limit(tmp_path, power, ok):
+    code, log = _host_check(tmp_path, power, {"CR_POWER_TOL": "0.01"})
+    if ok:
+        assert code == 0 and "host check: power limit,default %s W ok" % power.replace(" ", "") in log and "stamp matches" in log
+    else:
+        assert code == 3 and "is not the default within 0.01 (or unreadable), stop" in log and "stamp matches" not in log
+
+
+def test_bootstrap_min_power_frac_only_stops_a_capped_host(tmp_path):
+    for sub, power, env, want in (("a", "500.00, 600.00", {"CR_MIN_POWER_FRAC": "0.75"}, 0), ("b", "300.00, 600.00", {"CR_MIN_POWER_FRAC": "0.75"}, 3),
+                                  ("c", "300.00, 600.00", {}, 0)):                              # c: no gate set, no check
+        (tmp_path / sub).mkdir()
+        code, log = _host_check(tmp_path / sub, power, env)
+        assert code == want and (want == 0 or "capped host" in log), (sub, code, log)

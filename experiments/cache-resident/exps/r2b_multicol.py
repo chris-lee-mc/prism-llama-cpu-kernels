@@ -31,10 +31,12 @@ from __future__ import annotations
 
 import argparse
 import os
+import pathlib
 import re
 import shutil
 import subprocess
 import sys
+import time
 
 from exps import common, e4_bonsai, e4_pdl, e5_cost, hf_ids, r1, r1_step
 
@@ -59,6 +61,8 @@ ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
 TBO_FAIL_RE = re.compile(r"\bFAIL\b")
 GPU600_TAGS = ("pro6000-ws", "pro6000-server")     # the 600 W editions; a Max-Q (300 W) gives other timings
 GPU600_MIN_DEFAULT_W = 550.0
+POWER_TOL = 0.01                                    # PR evidence: power.limit must equal power.default_limit within this fraction
+BOOT_POWER_RE = re.compile(r"host check: power limit,default ([0-9.]+),([0-9.]+) W ok")
 
 
 # ---------------------------------------------------------------- pure helpers
@@ -140,6 +144,51 @@ def gpu600_problem(tag: str, smi: dict | None) -> str | None:
     if dflt is not None and dflt < GPU600_MIN_DEFAULT_W:
         return f"default power limit {dflt:.0f} W < {GPU600_MIN_DEFAULT_W:.0f} W"
     return None
+
+
+def power_problem(limit, default, tol: float = POWER_TOL) -> str | None:
+    """Why the power limit is not the default (within tol), else None. An unreadable limit counts: the host cannot be shown healthy."""
+    if not limit or not default:
+        return "power limit or default limit not readable"
+    if abs(limit - default) > tol * default:
+        return "power limit %.0f W is not the default %.0f W (tolerance %.0f%%)" % (limit, default, 100 * tol)
+    return None
+
+
+def bootstrap_power(path=None) -> dict | None:
+    """The limit and default the bootstrap host check printed (the last such line of bootstrap.log), else None."""
+    from infra.results import results_root
+    p = pathlib.Path(path) if path else results_root() / "_status" / "bootstrap.log"
+    try:
+        found = BOOT_POWER_RE.findall(p.read_text(errors="replace"))
+    except OSError:
+        return None
+    return {"limit": float(found[-1][0]), "default": float(found[-1][1])} if found else None
+
+
+class PowerGuard:
+    """PR evidence must come from a card at its default power limit. check() reads nvidia-smi, records both values and returns the problem
+    (None when the limit is the default within tol, or when enforce is off: the values are recorded either way). doc goes into the result."""
+
+    def __init__(self, enforce: bool = True, tol: float = POWER_TOL, bootstrap: dict | None = None):
+        self.enforce = enforce
+        self.doc: dict = {"tol": tol, "enforced": enforce, "bootstrap": bootstrap, "checks": [], "first_problem": None}
+
+    def check(self, label: str) -> str | None:
+        smi = e4_pdl.smi_sample() or {}
+        limit, default = smi.get("power.limit"), smi.get("power.default_limit")
+        bad = power_problem(limit, default, self.doc["tol"])
+        self.doc["checks"].append({"at": label, "limit": limit, "default": default, "problem": bad, "t": time.time()})
+        if bad and self.doc["first_problem"] is None:
+            self.doc["first_problem"] = {"at": label, "problem": bad}
+        return bad if self.enforce else None
+
+
+def power_line(power: dict) -> str:
+    """One notes line with every recorded limit/default pair."""
+    pairs = ", ".join("%s %s/%s W%s" % (c["at"], c["limit"], c["default"], " PROBLEM" if c.get("problem") else "") for c in power.get("checks", []))
+    boot = power.get("bootstrap")
+    return "power limit/default: bootstrap %s, %s" % ("%s/%s W" % (boot["limit"], boot["default"]) if boot else "not seen", pairs or "no check")
 
 
 def round_configs(configs: list, rnd: int) -> list:
@@ -251,14 +300,15 @@ def tbo_part(bin_dir, budget: common.Budget, notes: list, order: list | None = N
     return out
 
 
-def path_probe(nsys: str | None, bin_dir, model: str, budget: common.Budget, notes: list) -> dict:
-    """Kernel names of llama-bench -p 4 -n 0 under nsys, per config (off, on). Never raises; the nsys files are deleted."""
+def path_probe(nsys: str | None, bin_dir, model: str, budget: common.Budget, notes: list, configs: list | None = None) -> dict:
+    """Kernel names of llama-bench -p 4 -n 0 under nsys, per config (default off, on; configs: [(name, env)] in the order to run).
+    Never raises; the nsys files are deleted."""
     out: dict = {"cmd": bench_pp_cmd(bin_dir, "<model.gguf>", [4], 1), "configs": {}}
     if not nsys:
         out["error"] = "nsys not found (CR_NSYS, PATH, /usr/local/cuda*/bin, /opt/nvidia/nsight-systems)"
         notes.append("k: " + out["error"])
         return out
-    for name, cenv in CONFIGS[:2]:
+    for name, cenv in (CONFIGS[:2] if configs is None else configs):
         if budget.expired(45):
             notes.append(f"k: time budget used up, config {name} skipped")
             continue
@@ -330,10 +380,11 @@ def bench_entries(cmd: list[str], env: dict, timeout: float) -> tuple[list[dict]
 
 def bench_part(bin_dir, model: str, budget: common.Budget, notes: list, rows: list, allow_power_cap: bool, save,
                configs: list | None = None, rounds: int = ROUNDS, bins: dict | None = None, tag: str = "r2b_mc",
-               health: dict | None = None) -> None:
+               health: dict | None = None, power_tol: float | None = None) -> None:
     """configs: [(name, env)] (default CONFIGS); bins: {name: bin_dir} when the configs are different builds.
     health: filled with first_bad_round and problem at the first run that fails the health check; rows from that round on are flagged
-    unhealthy (the caller leaves them out with before_round)."""
+    unhealthy (the caller leaves them out with before_round). power_tol: the power cap seen during a run must also equal the default
+    within that fraction (PR evidence), else the run counts as unhealthy."""
     unhealthy = False
     configs = CONFIGS if configs is None else configs
     for rnd in range(rounds):
@@ -347,6 +398,8 @@ def bench_part(bin_dir, model: str, budget: common.Budget, notes: list, rows: li
                     got, err = bench_entries(cmd, run_env(cenv), budget.timeout(900, reserve_s=30))
                 smi = watch.summary()
                 bad = e4_pdl.health_problem(smi, check_power=not allow_power_cap)
+                if not bad and power_tol and not allow_power_cap:
+                    bad = power_problem(smi.get("power_cap_w"), smi.get("power_default_w"), power_tol)
                 if bad and not unhealthy:
                     unhealthy = True
                     notes.append(f"host health: {bad} during round {rnd} {name} {kind}; timings after this may be invalid")

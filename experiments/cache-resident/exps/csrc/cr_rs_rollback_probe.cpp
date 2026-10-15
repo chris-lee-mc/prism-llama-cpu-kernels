@@ -2,6 +2,9 @@
 // Decode a prompt, then n extra tokens either one at a time (as draft-simple drafts) or as one batch (as a verify batch), roll back
 // to m kept tokens, decode one probe token and compare its logits with a context that decoded only the m kept tokens the same way.
 // n_extra may be n_rs + 1: a verify batch of K + 1 tokens with n_rs = K. Then kept 1 is the largest rollback the server does (K), kept 0 is out of the window.
+// Batch-shape control (batch mode): the reference decodes the kept tokens as a batch of m, the test a batch of n_extra and rolls back, so the two
+// differ by the batch shape as well as by the rollback. The control decodes the same tokens in the same two shapes with no seq_rm and compares the
+// logits of kept token m - 1 (only that row has an output in both): its difference is the numerics floor of the shapes.
 // Build: see exps/wrap_b.py build_probe(). Prints one JSON line.
 #include "llama.h"
 
@@ -21,11 +24,12 @@ static void batch_add(llama_batch & b, llama_token t, llama_pos p, bool logits) 
     b.n_tokens++;
 }
 
-static bool decode(llama_context * ctx, const std::vector<llama_token> & toks, llama_pos p0, bool single) {
+// logit_idx: the batch row with an output in batch mode (-1: the last row)
+static bool decode(llama_context * ctx, const std::vector<llama_token> & toks, llama_pos p0, bool single, int logit_idx = -1) {
     llama_batch b = llama_batch_init((int) std::max<size_t>(toks.size(), 1), 0, 1);
     bool ok = true;
     for (size_t i = 0; i < toks.size() && ok; ++i) {
-        batch_add(b, toks[i], p0 + (llama_pos) i, single || i + 1 == toks.size());
+        batch_add(b, toks[i], p0 + (llama_pos) i, single || (logit_idx < 0 ? i + 1 == toks.size() : (int) i == logit_idx));
         if (single) {
             ok = llama_decode(ctx, b) == 0;
             b.n_tokens = 0;
@@ -115,6 +119,17 @@ int main(int argc, char ** argv) {
         return out;
     };
 
+    // logits of kept token m - 1 after: prompt, then n_dec extra tokens as one batch with an output only at row m - 1 (no seq_rm)
+    auto run_shape = [&](int n_dec, int m) -> std::vector<float> {
+        llama_memory_clear(mem, true);
+        std::vector<float> out;
+        if (!decode(ctx, prompt, 0, false)) return out;
+        if (!decode(ctx, std::vector<llama_token>(extra.begin(), extra.begin() + n_dec), n_prompt, false, m - 1)) return out;
+        const float * l = llama_get_logits_ith(ctx, m - 1);
+        if (l) out.assign(l, l + n_vocab);
+        return out;
+    };
+
     printf("{\"model\": \"%s\", \"n_vocab\": %d, \"n_rs_seq\": %u, \"n_prompt\": %d, \"n_extra\": %d, \"ngl\": %d, \"cases\": [",
            model.substr(model.find_last_of('/') + 1).c_str(), n_vocab, llama_n_rs_seq(ctx), n_prompt, n_extra, n_gpu);
     bool first = true;
@@ -131,6 +146,18 @@ int main(int argc, char ** argv) {
                 const cmp c = compare(got.data(), ref.data(), n_vocab);
                 printf("%s{\"kept\": %d, \"rollback\": %d, \"decode\": \"%s\", \"seq_rm_ok\": %s, \"max_abs_diff\": %.6g, \"max_abs_ref\": %.6g, \"top1_equal\": %s}",
                        first ? "" : ", ", m, n_extra - m, single ? "single" : "batch", ok_rm ? "true" : "false", c.max_abs, c.max_ref, c.top1_eq ? "true" : "false");
+            }
+            first = false;
+        }
+        if (modes != "single" && m >= 1) {
+            const auto ref = run_shape(m, m);
+            const auto got = run_shape(n_extra, m);
+            if (ref.empty() || got.empty()) {
+                printf("%s{\"kept\": %d, \"rollback\": %d, \"decode\": \"shape\", \"error\": \"decode failed\"}", first ? "" : ", ", m, n_extra - m);
+            } else {
+                const cmp c = compare(got.data(), ref.data(), n_vocab);
+                printf("%s{\"kept\": %d, \"rollback\": %d, \"decode\": \"shape\", \"max_abs_diff\": %.6g, \"max_abs_ref\": %.6g, \"top1_equal\": %s}",
+                       first ? "" : ", ", m, n_extra - m, c.max_abs, c.max_ref, c.top1_eq ? "true" : "false");
             }
             first = false;
         }

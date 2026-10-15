@@ -238,6 +238,40 @@ def test_probe_verdict_reports_the_rollback_equal_n_rs_row():
     assert "not probed" in wrap_b.probe_notes("n4", "pq2", dict(PROBE_OUT, verdict=old))
 
 
+CONTROL_OUT = {"n_vocab": 10, "n_rs_seq": 4, "n_prompt": 64, "n_extra": 5, "ngl": 99, "cases": [
+    {"kept": 0, "rollback": 5, "decode": "batch", "error": "decode failed"},
+    {"kept": 1, "rollback": 4, "decode": "batch", "seq_rm_ok": True, "max_abs_diff": 0.05, "max_abs_ref": 9.0, "top1_equal": True},
+    {"kept": 1, "rollback": 4, "decode": "shape", "max_abs_diff": 0.04, "max_abs_ref": 9.0, "top1_equal": True},
+    {"kept": 2, "rollback": 3, "decode": "batch", "seq_rm_ok": True, "max_abs_diff": 2e-6, "max_abs_ref": 9.0, "top1_equal": True},
+    {"kept": 2, "rollback": 3, "decode": "shape", "max_abs_diff": 1e-6, "max_abs_ref": 9.0, "top1_equal": True},
+    {"kept": 3, "rollback": 2, "decode": "batch", "seq_rm_ok": True, "max_abs_diff": 3.0, "max_abs_ref": 9.0, "top1_equal": False},
+    {"kept": 3, "rollback": 2, "decode": "shape", "max_abs_diff": 0.01, "max_abs_ref": 9.0, "top1_equal": True},
+    {"kept": 4, "rollback": 1, "decode": "batch", "seq_rm_ok": True, "max_abs_diff": 0.5, "max_abs_ref": 9.0, "top1_equal": True},
+    {"kept": 4, "rollback": 1, "decode": "shape", "error": "decode failed"}]}
+
+
+def test_probe_verdict_attributes_the_batch_rows_with_the_shape_control():
+    v = wrap_b.probe_verdict(CONTROL_OUT)
+    assert v["control"]["n"] == 3 and v["control"]["max_abs_diff"] == 0.04 and v["control"]["top1_equal"] == 3         # the failed control row has no entry
+    assert v["control"]["by_kept"] == {"1": 0.04, "2": 1e-6, "3": 0.01}
+    att = v["batch"]["attribution"]
+    # kept 1: 0.05 <= 2 x 0.04 (batch shape); kept 2: exact; kept 3: 3.0 and another top-1 (rollback); kept 4 has no control row: not attributed
+    assert (att["exact"], att["batch_shape"], att["rollback"]) == (1, 1, 1) and att["max_over_control"] == pytest.approx(300.0)
+    assert v["batch"]["exact"] is False and v["boundary"]["attribution"] == "batch_shape" and v["boundary"]["control_diff"] == 0.04
+    assert wrap_b.probe_verdict(BOUNDARY_OUT).get("control") is None and "attribution" not in wrap_b.probe_verdict(BOUNDARY_OUT)["batch"]
+    line = wrap_b.probe_notes("n4", "pq2", dict(CONTROL_OUT, verdict=v))
+    assert "batch-shape control (same tokens, no seq_rm): max logit diff 0.04, top-1 equal 3/3; batch rows exact 1, batch_shape 1, rollback 1" in line
+    # a failed seq_rm is a rollback row even when the diff is inside the control diff
+    bad = dict(CONTROL_OUT, cases=[dict(c, seq_rm_ok=False) if c["kept"] == 1 and c["decode"] == "batch" and "error" not in c else c for c in CONTROL_OUT["cases"]])
+    assert wrap_b.probe_verdict(bad)["boundary"]["attribution"] == "rollback"
+
+
+def test_probe_source_has_the_batch_shape_control():
+    src = wrap_b.PROBE_SRC.read_text()
+    assert '"decode\\": \\"shape\\"' in src and 'modes != "single" && m >= 1' in src and "run_shape(n_extra, m)" in src and "run_shape(m, m)" in src
+    assert "(int) i == logit_idx" in src and "llama_get_logits_ith(ctx, m - 1)" in src and "seq_rm" not in src[src.index("auto run_shape"):src.index("printf(\"{\\\"model")]
+
+
 def test_probe_runs_cover_the_b2_windows():
     runs = {l: (m, a) for l, m, a in wrap_b.PROBE_RUNS}
     assert set(runs) == {"n4", "n16", "n64"} and runs["n4"][0] == ("draft_q8_0", "pq2") and runs["n16"][0] == runs["n64"][0] == ("pq2",)
@@ -383,12 +417,14 @@ def wpod(tmp_path, monkeypatch):
     r2bt._script(b / "test-backend-ops", r2bt.FAKE_TBO)
     r2bt._script(b / "llama-server", FAKE_SERVER)
     r2bt._script(tmp_path / "probe", FAKE_PROBE)
+    r2bt._script(tmp_path / "nsys", r2bt.FAKE_NSYS)
     files = {"pq2": "target.gguf", "draft_q8_0": "draft-q8.gguf"}
     for n in files.values():
         (tmp_path / n).write_bytes(b"gguf")
     monkeypatch.setenv("CR_RESULTS_DIR", str(tmp_path / "results"))
     monkeypatch.setenv("CR_GPU_TAG", "pro6000-ws")
     monkeypatch.setenv("CR_LLAMA_BIN", str(b))
+    monkeypatch.setenv("CR_NSYS", str(tmp_path / "nsys"))
     monkeypatch.setenv("HF_TOKEN", "hf_secretsecret123")
     monkeypatch.setenv("RUNPOD_API_KEY", "rpa_secretsecret456")
     for k in [k for k in os.environ if k.startswith("GGML_EXP_") or k == mc.ENV_VAR]:
@@ -406,9 +442,19 @@ def _result(tmp, exp, gpu):
 
 
 def test_wrap_a_end_to_end_with_fakes(wpod):
+    (wpod / "results" / "_status").mkdir(parents=True)
+    (wpod / "results" / "_status" / "bootstrap.log").write_text("[bootstrap 10:00:00] host check: power limit,default 600.00,600.00 W ok\n")
     assert wrap_a.main(["--budget-min", "10", "--per-category", "2", "--blocks", "2"]) == 0
     d = _result(wpod, "wrap_a", "pro6000-ws")["data"]
-    assert d["gate"]["problem"] is None and [t["config"] for t in d["tbo"]] == ["on", "on", "on", "off"] and all(mc.tbo_passed(t) for t in d["tbo"])
+    assert d["gate"]["problem"] is None and [t["config"] for t in d["tbo"]] == ["on", "off", "on", "on"] and all(mc.tbo_passed(t) for t in d["tbo"])
+    assert d["path"]["status"] == "ok" and d["path"]["on_uses_mc_kernel"] is True and d["path"]["off_uses_mc_kernel"] is False
+    assert list(d["path"]["configs"]) == ["on", "off"] and any(n.startswith("k: kernel path ok") for n in d["notes"])
+    pw = d["power"]
+    labels = [c["at"] for c in pw["checks"]]
+    assert labels[:3] == ["start", "before b", "after b"] and labels[3] == "before s" and labels[4:-1] == ["s run %d" % i for i in range(1, 7)]
+    assert labels[-1] == "after s" and all(c["limit"] == 600.0 and c["default"] == 600.0 and c["problem"] is None for c in pw["checks"])
+    assert pw["bootstrap"] == {"limit": 600.0, "default": 600.0} and pw["tol"] == 0.01 and pw["enforced"] is True and pw["first_problem"] is None
+    assert any(n.startswith("power limit/default: bootstrap 600.0/600.0 W, start 600.0/600.0 W") for n in d["notes"]) and "power_problem" not in d["spec"]
     assert d["bench_health"] == {} and d["host_b"]["problem"] is None
     assert len(d["bench"]) == 4 * 2 * 10 and [r["config"] for r in d["bench"][::10]] == ["off", "on", "on", "off", "off", "on", "on", "off"]
     bp = d["bench_paired"]
@@ -430,6 +476,120 @@ def test_wrap_a_end_to_end_with_fakes(wpod):
     assert "hf_secretsecret123" not in json.dumps(d) and not (wpod / "results" / "wrap_a" / "pro6000-ws" / "raw" / "partial.json").exists()
     raw = {f.name.split("-", 1)[1] for f in (wpod / "results" / "wrap_a" / "pro6000-ws" / "raw").glob("*-server-*.log")}
     assert {"server-b0-base.log", "server-b1-k4q8_on.log"} <= raw
+
+
+def _drop_power_at(monkeypatch, label, limit=450.0):
+    """nvidia-smi reports a power limit of `limit` from the guard check with this label on."""
+    state = {"limit": 600.0}
+    orig = mc.PowerGuard.check
+
+    def check(self, lbl):
+        if lbl == label:
+            state["limit"] = limit
+        return orig(self, lbl)
+    monkeypatch.setattr(mc.PowerGuard, "check", check)
+    monkeypatch.setattr(mc.e4_pdl, "smi_sample", lambda: dict(SMI, **{"power.limit": state["limit"]}))
+
+
+def test_power_problem_and_bootstrap_line(tmp_path):
+    assert mc.power_problem(600.0, 600.0) is None and mc.power_problem(595.0, 600.0) is None and mc.power_problem(606.0, 600.0) is None
+    assert "not the default 600 W" in mc.power_problem(593.0, 600.0) and "not the default" in mc.power_problem(660.0, 600.0)      # above counts too
+    assert "not readable" in mc.power_problem(None, 600.0) and "not readable" in mc.power_problem(600.0, 0)
+    log = tmp_path / "bootstrap.log"
+    assert mc.bootstrap_power(log) is None
+    log.write_text("x\nhost check: power limit,default 300.00,600.00 W ok\nhost check: power limit,default 599.50,600.00 W ok\n")
+    assert mc.bootstrap_power(log) == {"limit": 599.5, "default": 600.0}
+    log.write_text("host check: power limit,default 300,600 W, limit is not the default within 0.01 (or unreadable), stop\n")
+    assert mc.bootstrap_power(log) is None
+    g = mc.PowerGuard(enforce=False)
+    assert g.check("x") is None and g.doc["checks"][0]["problem"] and g.doc["first_problem"]["at"] == "x"      # recorded, not enforced (no smi here)
+
+
+def test_wrap_a_skips_the_timing_when_the_power_limit_drops_before_b(wpod, monkeypatch):
+    _drop_power_at(monkeypatch, "before b")
+    assert wrap_a.main(["--budget-min", "10", "--per-category", "2", "--blocks", "2"]) == 1
+    d = _result(wpod, "wrap_a", "pro6000-ws")["data"]
+    assert d["tbo"] and all(mc.tbo_passed(t) for t in d["tbo"]) and d["bench"] == [] and d["spec"] is None            # correctness ran, no timing
+    assert d["power"]["first_problem"]["at"] == "before b" and "power limit 450 W is not the default 600 W" in d["power"]["first_problem"]["problem"]
+    assert sum(1 for n in d["notes"] if n.startswith("UNHEALTHY HOST: power limit 450 W")) == 2          # parts b and s
+    assert any("power limit/default" in n and "before b 450.0/600.0 W PROBLEM" in n for n in d["notes"])
+
+
+def test_wrap_a_stops_the_server_runs_when_the_power_limit_drops(wpod, monkeypatch):
+    _drop_power_at(monkeypatch, "s run 4")
+    assert wrap_a.main(["--budget-min", "10", "--per-category", "2", "--blocks", "2"]) == 1
+    d = _result(wpod, "wrap_a", "pro6000-ws")["data"]
+    assert d["bench_health"] == {} and d["bench_paired"]["pp"]["4"]["n"] == 4
+    s = d["spec"]
+    assert s["stopped"]["why"].startswith("power limit 450 W") and len(s["stopped"]["left"]) == 3 and s["power_problem"]["at"] == "s run 4"
+    assert sum(len(r["blocks"]) for r in s["runs"].values()) == 3
+    assert s["summary"]["verdict"] is None or s["summary"]["verdict"].startswith("UNHEALTHY HOST (power limit 450 W")
+    assert any(n.startswith("UNHEALTHY HOST: power limit 450 W") and "s run 4" in n for n in d["notes"])
+
+
+def test_wrap_a_marks_a_drop_after_part_b(wpod, monkeypatch):
+    _drop_power_at(monkeypatch, "after b")
+    assert wrap_a.main(["--parts", "b", "--budget-min", "10"]) == 1
+    d = _result(wpod, "wrap_a", "pro6000-ws")["data"]
+    assert d["bench_health"]["first_bad_round"] == 3 and d["bench_health"]["where"] == "after part b" and d["bench_paired"]["pp"]["4"]["rounds"] == [0, 1, 2]
+    assert any(n.startswith("UNHEALTHY HOST (power limit 450 W") and "width 4" in n for n in d["notes"])
+
+
+def test_wrap_a_judges_the_power_cap_during_a_bench_run(wpod, monkeypatch):
+    # nvidia-smi says 600 W at the guard checks but the samples of the second round show 560 W (7% below the default)
+    state = {"n": 0}
+
+    def smi():
+        state["n"] += 1
+        return dict(SMI, **{"power.limit": 560.0 if state["n"] > 14 else 600.0})
+    monkeypatch.setattr(mc.e4_pdl, "smi_sample", smi)
+    monkeypatch.setattr(wrap_a.r1, "host_health", lambda smi_, probe_smi, check_power=True: (None, None))
+    assert wrap_a.main(["--parts", "b", "--budget-min", "10"]) == 1
+    d = _result(wpod, "wrap_a", "pro6000-ws")["data"]
+    assert d["bench_health"]["first_bad_round"] in (0, 1) and "power limit 560 W is not the default" in d["bench_health"]["problem"]
+
+
+def test_wrap_a_allow_power_cap_records_the_values_only(wpod, monkeypatch):
+    _drop_power_at(monkeypatch, "before b")
+    assert wrap_a.main(["--budget-min", "10", "--per-category", "2", "--blocks", "2", "--allow-power-cap"]) == 0
+    d = _result(wpod, "wrap_a", "pro6000-ws")["data"]
+    assert d["power"]["enforced"] is False and d["power"]["first_problem"]["at"] == "before b" and len(d["bench"]) == 80 and d["spec"]["runs"]
+
+
+def test_wrap_a_does_not_time_when_the_mc_kernel_is_not_active(wpod, monkeypatch):
+    r2bt._script(wpod / "nsys", r2bt.FAKE_NSYS.replace('on = open(os.path.join(os.path.dirname(rep), "mc_env.txt")).read() == "1"', "on = False"))
+    assert wrap_a.main(["--budget-min", "10", "--per-category", "2", "--blocks", "2"]) == 1
+    d = _result(wpod, "wrap_a", "pro6000-ws")["data"]
+    assert d["path"]["status"] == "bad" and d["bench"] == [] and d["spec"] is None and d["tbo"]
+    assert any(n.startswith("KERNEL NOT ACTIVE: no mul_mat_vec_pq2_0_mc launch") for n in d["notes"])
+    assert sum(1 for n in d["notes"] if n.startswith("part ") and "kernel not active" in n) == 2
+
+
+def test_wrap_a_without_nsys_runs_the_timing_and_says_unverified(wpod, monkeypatch):
+    monkeypatch.setenv("CR_NSYS", str(wpod / "no-such-nsys"))
+    monkeypatch.setattr(wrap_a.e4_bonsai, "find_nsys", lambda: None)
+    assert wrap_a.main(["--budget-min", "10", "--per-category", "2", "--blocks", "2"]) == 0
+    d = _result(wpod, "wrap_a", "pro6000-ws")["data"]
+    assert d["path"]["status"] == "unverified" and "nsys not found" in d["path"]["why"] and len(d["bench"]) == 80 and d["spec"]["runs"]
+    assert any(n.startswith("k: kernel path unverified") for n in d["notes"])
+
+
+def test_wrap_a_part_t_runs_off_second_and_flags_a_missing_off(wpod, monkeypatch):
+    assert [n for n, _ in wrap_a.TBO_ORDER] == ["on", "off", "on", "on"] and wrap_a.TBO_MIN_S >= 150
+    monkeypatch.setattr(wrap_a, "TBO_ORDER", [wrap_a.KCONFIGS[1]])
+    assert wrap_a.main(["--parts", "t", "--budget-min", "6"]) == 1
+    d = _result(wpod, "wrap_a", "pro6000-ws")["data"]
+    assert [t["config"] for t in d["tbo"]] == ["on"] and any(n.startswith("INCOMPLETE: test-backend-ops did not run with the kernel off") for n in d["notes"])
+
+
+def test_kernel_status():
+    ok = {"configs": {"on": {"mc_kernel_instances": 12, "mc_widths": [4]}, "off": {"mc_kernel_instances": 0}}}
+    assert wrap_a.kernel_status(ok)[0] == "ok"
+    assert wrap_a.kernel_status({"configs": {"on": ok["configs"]["on"]}})[1].endswith("(off not probed)")
+    assert wrap_a.kernel_status({"configs": {"on": {"mc_kernel_instances": 0}, "off": {"mc_kernel_instances": 0}}})[0] == "bad"
+    assert wrap_a.kernel_status({"configs": {"on": ok["configs"]["on"], "off": {"mc_kernel_instances": 3}}})[0] == "bad"
+    assert wrap_a.kernel_status({"error": "nsys not found"}) == ("unverified", "nsys not found")
+    assert wrap_a.kernel_status({"configs": {"on": {"error": "nsys profile exit 1"}}})[0] == "unverified" and wrap_a.kernel_status(None)[0] == "unverified"
 
 
 def test_wrap_a_refuses_a_max_q_and_stops_on_a_failing_kernel(wpod, monkeypatch):
@@ -486,13 +646,17 @@ def test_wrap_b_end_to_end_with_fakes(wpod):
     assert set(p["ngram_rs64_vs_ngram"]["by_category"]) == set(make_prompts.R2A_CATEGORIES)
     assert summ["ngram_cut"]["ngram_rs16"]["ngram-mod"]["rs_window"] == 16 and summ["ngram_cut"]["ngram_rs16"]["ngram-mod"]["cut_tokens"] == 60
     assert "resets" in summ["ngram_cut"]["ngram"]["ngram-mod"] and "cut_drafts" not in summ["ngram_cut"]["ngram"]["ngram-mod"]
-    assert set(summ["reeval"]) == {"k4q8_ckpt_t"} and summ["reeval"]["k4q8_ckpt_t"]["reeval_ms_per_call"] > 0
+    assert set(summ["reeval"]) == {"k4q8_ckpt_t", "k4q8_t"} and summ["reeval"]["k4q8_ckpt_t"]["reeval_ms_per_call"] > 0
+    assert p["k4q8_t_vs_k4q8"]["all"]["speedup"] == pytest.approx(1.0)
+    assert summ["reeval_bounds"]["timed"] == "k4q8_ckpt_t" and summ["reeval_bounds_stale"]["timed"] == "k4q8_t" and summ["reeval_bounds_stale"]["reference"] == "k4q8"
+    assert summ["draft_state"]["stale_path"]["same"] is True and m["runs"]["k4q8_t"]["blocks"][0]["exp_switches"] == [wrap_b.TIME]
     assert summ["draft_state"]["reference"] == "k4q8_ckpt" and all(summ["draft_state"]["matches_reference"].values())
     assert summ["vs_base"]["ngram"]["checks"]["rollback_path"] == "checkpoint" and summ["vs_base"]["ngram_rs64"]["checks"]["n_rs_seq_target"] == 64
     assert m["runs"]["k4q8_ckpt"]["blocks"][0]["exp_switches"] == [wrap_b.CKPT] and m["runs"]["k4q8"]["blocks"][0]["exp_switches"] == []
     assert m["runs"]["k4q8_ckpt_t"]["blocks"][0]["exp_switches"] == [wrap_b.CKPT, wrap_b.TIME]
     assert d["config"]["envs"]["ngram_rs64"] == {wrap_b.NGRAM_RS: "64"} and wrap_b.NOTE_EQ in d["notes"]
     assert any(n.startswith("draft state: alpha") for n in d["notes"]) and any("ms per step" in n and "at most" in n and "at least" in n for n in d["notes"])
+    assert any(n.startswith("stale draft-state path: alpha k4q8_t") for n in d["notes"]) and any(n.startswith("k4q8_t: draft-context decode") for n in d["notes"])
     assert "rpa_secretsecret456" not in json.dumps(d)
 
 
@@ -514,7 +678,7 @@ def test_wrap_b_flags_a_switch_that_did_not_take_effect(wpod, monkeypatch):
     assert any("path verification failed" in n for n in d["notes"])
 
 
-def test_wrap_a3_end_to_end_with_a_fake_base_build(wpod, monkeypatch):
+def _a3_fake_build(wpod, monkeypatch):
     monkeypatch.setenv("CR_GPU_TAG", "rtx4090")
     base = wpod / "base" / "bin"
     base.mkdir(parents=True)
@@ -526,8 +690,33 @@ def test_wrap_a3_end_to_end_with_a_fake_base_build(wpod, monkeypatch):
         return base, str(wpod / "target.gguf")
     monkeypatch.setattr(wrap_a3, "build_part", fake_build)
     monkeypatch.setattr(wrap_a3, "find_cuobjdump", lambda: None)
+
+
+def test_wrap_a3_skips_the_timing_when_the_power_limit_drops(wpod, monkeypatch):
+    _a3_fake_build(wpod, monkeypatch)
+    _drop_power_at(monkeypatch, "before b")
+    assert wrap_a3.main(["--budget-min", "10"]) == 1
+    d = _result(wpod, "wrap_a3", "rtx4090")["data"]
+    assert d["tbo"] and d["bench"] == [] and d["perf"] is None and d["power"]["first_problem"]["at"] == "before b"       # t ran; b and f did not
+    assert sum(1 for n in d["notes"] if n.startswith("UNHEALTHY HOST: power limit 450 W")) == 2
+    _drop_power_at(monkeypatch, "before f")
+    assert wrap_a3.main(["--budget-min", "10"]) == 1
+
+
+def test_wrap_a3_marks_a_drop_during_and_after_the_timing(wpod, monkeypatch):
+    _a3_fake_build(wpod, monkeypatch)
+    _drop_power_at(monkeypatch, "after b")
+    assert wrap_a3.main(["--budget-min", "10"]) == 1
+    d = _result(wpod, "wrap_a3", "rtx4090")["data"]
+    assert d["bench_health"]["first_bad_round"] == 3 and d["bench_paired"]["pp"]["4"]["rounds"] == [0, 1, 2] and d["perf"] is None
+    assert any(n.startswith("UNHEALTHY HOST (power limit 450 W") for n in d["notes"])
+
+
+def test_wrap_a3_end_to_end_with_a_fake_base_build(wpod, monkeypatch):
+    _a3_fake_build(wpod, monkeypatch)
     assert wrap_a3.main(["--budget-min", "10"]) == 0
     d = _result(wpod, "wrap_a3", "rtx4090")["data"]
+    assert [c["at"] for c in d["power"]["checks"]] == ["start", "before b", "after b", "before f", "after f"] and d["bench_health"] == {}
     assert d["sass"]["error"] == "cuobjdump not found" and any("sass: cuobjdump not found" in n for n in d["notes"])
     assert [t["config"] for t in d["tbo"]] == ["head", "base"] and all(mc.tbo_passed(t) for t in d["tbo"])
     assert len(d["bench"]) == 4 * 2 * 10 and {r["config"] for r in d["bench"]} == {"base", "head"}

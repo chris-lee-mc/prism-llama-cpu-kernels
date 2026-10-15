@@ -1,6 +1,6 @@
 """Wrap B: test build for two upstream investigations (measure first, issue before code), one pod session on a sm_120 card.
 
-  python -m exps.fetch_models --models pq2,draft_q8_0 --timeout-min 6 && python -m exps.wrap_b [--parts r,m] [--budget-min 22]
+  python -m exps.fetch_models --models pq2,draft_q8_0 --timeout-min 6 && python -m exps.wrap_b [--parts r,m] [--budget-min 24]
 
 Experiment-only switches in this branch (env, default off, read once):
 - GGML_EXP_DRAFT_CKPT=1 (the correct draft state): the server treats the draft context as FULL, so it saves the draft state before drafting
@@ -26,10 +26,17 @@ r  rollback probe (exps/csrc/cr_rs_rollback_probe.cpp, built against libllama of
    target; n16 and n64 (n_rs_seq 16 / 64, 17 / 65 extra, batch mode only) on the target: the window sizes B2 uses. The batch has n_rs_seq + 1
    tokens like a verify batch (K + 1 with K = n_rs_seq): rollbacks of 1 to n_rs_seq tokens, the last one (kept 1, a full rejection, snapshot
    plane n_rs_seq) is reported as the boundary row. kept 0 (whole batch) is out of the window and not a server case. Untimed.
+   Batch-shape control (batch runs): the reference decodes the kept tokens as a batch of m, the test a batch of n_extra and rolls back, so
+   a diff mixes the batch shape (other kernels, other accumulation order) with the rollback. For every kept m the control decodes the same
+   tokens in the same two shapes with no seq_rm and compares the logits of kept token m - 1 (data.probe.runs.*.models.*.verdict.control).
+   Each batch row is then exact, batch_shape (not exact but at most CONTROL_FACTOR times the control diff of the same kept, same top-1) or
+   rollback (more than the shapes explain): only a rollback row points at the snapshot path. Single-token rows have identical shapes, no control.
 m  matrix, the R2a balanced subset (24 prompts, 8 per category, same seed, ctx 16384, -lv 4), interleaved by prompt blocks (--blocks,
    default 2, a fresh server per block and config, config order changes per block):
    base         target alone
    k4q8         draft-simple K=4, Qwen3.5-0.8B Q8_0 draft (the CONFIG-GUIDANCE setting; stale draft state after partial acceptance)
+   k4q8_t       k4q8 with GGML_EXP_DRAFT_TIME=1: B1 on the stale-state path (the real hybrid Q8_0 draft as it runs in the fork today); dur_p
+                bounds as for k4q8_ckpt_t, against k4q8 (reeval_bounds_stale); its alpha must equal that of k4q8 (the timing must not change the drafts)
    k4q8_ckpt    k4q8 with GGML_EXP_DRAFT_CKPT=1 (correct draft state, the reference)
    k4q8_ckpt_t  k4q8_ckpt with GGML_EXP_DRAFT_TIME=1 (target and draft synchronized, draft-context decode of the verify batch timed; this
                 removes the overlap with the target, so it is a separate config and k4q8_ckpt_t vs k4q8_ckpt is the end-to-end delta that
@@ -38,10 +45,10 @@ m  matrix, the R2a balanced subset (24 prompts, 8 per category, same seed, ctx 1
    ngram_rs16   ngram with GGML_EXP_NGRAM_RS=16 (drafts cut to 16: a draft-length setting as well as the rollback path)
    ngram_rs64   ngram with GGML_EXP_NGRAM_RS=64 (no cut at the fork default n_max 64: the clean rollback-path comparison with ngram)
    Reported: per config and category tok/s, speedup over base with bootstrap 95% CIs (prompts paired), r, alpha, greedy text equality
-   vs base; the pairs k4q8_ckpt vs k4q8, k4q8_ckpt_t vs k4q8_ckpt, rs16 / rs64 vs ngram per category with paired bootstrap CIs; ms per
+   vs base; the pairs k4q8_ckpt vs k4q8 (B1 draft state: alpha and speedup), k4q8_t vs k4q8, k4q8_ckpt_t vs k4q8_ckpt, rs16 / rs64 vs ngram per category with paired bootstrap CIs; ms per
    step and its split from the server statistics (dur g of the drafting implementation vs the rest); the re-eval time per step of
-   k4q8_ckpt_t (reeval_ms_per_step, the isolated cost, and its share of the step) next to the end-to-end ms per step delta of k4q8_ckpt_t
-   over k4q8_ckpt (reeval_bounds); the low-acceptance resets of ngram-mod per config (ngram_cut.*.resets: the
+   k4q8_ckpt_t and k4q8_t (reeval_ms_per_step, the isolated cost, and its share of the step) next to the end-to-end ms per step delta over
+   k4q8_ckpt and k4q8 (reeval_bounds, reeval_bounds_stale); the low-acceptance resets of ngram-mod per config (ngram_cut.*.resets: the
    cut drafts of rs16 change the acceptance fraction and so the reset rule); path verification from the -lv 4 logs (n_rs_seq of the
    target and the draft, rollback path, the GGML_EXP_* switch lines, the cut counters).
    The draft state is checked by alpha, not by text: the target verifies every token, so a wrong draft state lowers alpha and leaves the
@@ -51,7 +58,7 @@ m  matrix, the R2a balanced subset (24 prompts, 8 per category, same seed, ctx 1
    ngram config, so the pairs stay fair).
 Parts run in the order r, m with weights 3 : 20 of --budget-min. An unhealthy host skips m (r still runs).
 Result: results/wrap_b/<gpu>/<stamp>.json with data.gate, data.probe, data.matrix (runs, summary, pairs, paths), data.host.
-Time: failsafe 55 min = bootstrap with the cold build ~14, downloads <= 6, wrap_b 22, reserve 5 (the cost model gives about 16 min for the matrix with 2 blocks, 19 with 4).
+Time: failsafe 55 min = bootstrap with the cold build ~14, downloads <= 6, wrap_b 24, reserve 5 (the cost model gives about 18 min for the matrix of 8 configs with 2 blocks; the budget share of m is 20 min).
 """
 from __future__ import annotations
 
@@ -66,15 +73,15 @@ from exps import common, e4_bonsai, e4_pdl, hf_ids, make_prompts, r1, r2a_longct
 
 EXP = "wrap_b"
 SKIP, CKPT, TIME, NGRAM_RS = "GGML_EXP_SKIP_DRAFT_REEVAL", "GGML_EXP_DRAFT_CKPT", "GGML_EXP_DRAFT_TIME", "GGML_EXP_NGRAM_RS"
-CONFIG_NAMES = ["base", "k4q8", "k4q8_ckpt", "k4q8_ckpt_t", "ngram", "ngram_rs16", "ngram_rs64"]
-PAIRS = [("k4q8_ckpt", "k4q8"), ("k4q8_ckpt_t", "k4q8_ckpt"), ("ngram_rs64", "ngram"), ("ngram_rs16", "ngram"), ("ngram_rs64", "ngram_rs16")]
+CONFIG_NAMES = ["base", "k4q8", "k4q8_t", "k4q8_ckpt", "k4q8_ckpt_t", "ngram", "ngram_rs16", "ngram_rs64"]
+PAIRS = [("k4q8_ckpt", "k4q8"), ("k4q8_t", "k4q8"), ("k4q8_ckpt_t", "k4q8_ckpt"), ("ngram_rs64", "ngram"), ("ngram_rs16", "ngram"), ("ngram_rs64", "ngram_rs16")]
 DRAFT_STATE_REF = "k4q8_ckpt"           # alpha of this config is the draft-state reference
 DRAFT_STATE_CHECK = ("k4q8", "k4q8_ckpt_t")
 ALPHA_TOL = 0.02
 BLOCKS = 2
 PARTS = "rm"
 WEIGHTS = {"r": 3.0, "m": 20.0}
-DEFAULT_TOTAL_MIN = 22.0
+DEFAULT_TOTAL_MIN = 24.0
 WB_TAGS = ("pro6000-ws", "pro6000-server", "pro6000-maxq", "rtx5090")        # sm_120, >= 32 GB (n_rs_seq 64 keeps 65 snapshots of the 27B state)
 END_RESERVE_S = 25.0
 PROBE_SRC = common.EXP_DIR / "exps" / "csrc" / "cr_rs_rollback_probe.cpp"
@@ -85,6 +92,7 @@ PROBE_RUNS = [("n4", ("draft_q8_0", "pq2"), ["--n-rs", "4", "--prompt", "64", "-
               ("n64", ("pq2",), ["--n-rs", "64", "--prompt", "64", "--extra", "65", "--modes", "batch"])]
 PROBE_ARGS = PROBE_RUNS[0][2]
 EXACT_REL = 1e-3          # a rollback is exact when the logits differ by less than this fraction of the largest logit
+CONTROL_FACTOR = 2.0      # a row that is not exact is a batch-shape effect when its diff is at most this many times the control diff of the same kept
 REPO_ROOT = common.EXP_DIR.parent.parent
 
 
@@ -99,6 +107,8 @@ def matrix_configs(names=CONFIG_NAMES) -> list[dict]:
     allc = {
         "base": dict(by["base"], env={}),
         "k4q8": dict(k, name="k4q8", env={}, desc="draft-simple K=4, Qwen3.5-0.8B Q8_0 draft (draft state rolled back with seq_rm: stale)"),
+        "k4q8_t": dict(k, name="k4q8_t", env={TIME: "1"},
+                       desc="k4q8 (stale draft state), the draft-context decode of the verify batch timed (synchronizes)"),
         "k4q8_ckpt": dict(k, name="k4q8_ckpt", env={CKPT: "1"}, desc="k4q8, draft state restored from a checkpoint after drafting (reference)"),
         "k4q8_ckpt_t": dict(k, name="k4q8_ckpt_t", env={CKPT: "1", TIME: "1"},
                             desc="k4q8_ckpt, the draft-context decode of the verify batch timed (synchronizes)"),
@@ -149,7 +159,8 @@ def matrix_summary(cfgs: list[dict], runs: dict) -> dict:
     split = {n: r.get("step_split") for n, r in runs.items()}
     return {"vs_base": vs_base, "pairs": {f"{a}_vs_{b}": sp.pair_by_category(runs, a, b) for a, b in PAIRS if a in runs and b in runs},
             "step_split": split, "paths": verify_paths(cfgs, runs), "ngram_cut": {n: v for n, v in cut.items() if v},
-            "draft_state": draft_state(vs_base), "reeval_bounds": reeval_bounds(split), "reeval": {n: {k: v for k, v in (d or {}).items() if k.startswith(("reeval", "prefill"))}
+            "draft_state": draft_state(vs_base), "reeval_bounds": reeval_bounds(split),
+            "reeval_bounds_stale": reeval_bounds(split, "k4q8_t", "k4q8"), "reeval": {n: {k: v for k, v in (d or {}).items() if k.startswith(("reeval", "prefill"))}
                                                             for n, d in split.items() if d and "reeval_ms" in d}}
 
 
@@ -171,8 +182,12 @@ def draft_state(vs_base: dict) -> dict | None:
     ref = alpha.get(DRAFT_STATE_REF)
     if ref is None:
         return None
-    return {"reference": DRAFT_STATE_REF, "alpha": alpha, "tol": ALPHA_TOL,
-            "matches_reference": {n: abs(alpha[n] - ref) <= ALPHA_TOL if alpha.get(n) is not None else None for n in DRAFT_STATE_CHECK}}
+    out = {"reference": DRAFT_STATE_REF, "alpha": alpha, "tol": ALPHA_TOL,
+           "matches_reference": {n: abs(alpha[n] - ref) <= ALPHA_TOL if alpha.get(n) is not None else None for n in DRAFT_STATE_CHECK}}
+    a_t, a_s = [((vs_base.get(n) or {}).get("all") or {}).get("alpha") for n in ("k4q8_t", "k4q8")]
+    if a_t is not None and a_s is not None:       # the timed stale-path config must keep the stale-path alpha (the synchronizes must not change the drafts)
+        out["stale_path"] = {"alpha_k4q8_t": a_t, "alpha_k4q8": a_s, "same": abs(a_t - a_s) <= ALPHA_TOL}
+    return out
 
 
 NOTE_EQ = ("text equality checks only the target side (it verifies every token) and has a numerics floor of 88-100% from batch shapes; "
@@ -191,11 +206,16 @@ def verdict_lines(summ: dict) -> list[str]:
     if ds:
         out.append("draft state: alpha " + ", ".join("%s %s" % (n, _f(v)) for n, v in ds["alpha"].items()) + "; within %.2f of %s: %s" % (
             ds["tol"], ds["reference"], ds["matches_reference"]))
-    rb = summ.get("reeval_bounds")
+        sp_ = ds.get("stale_path")
+        if sp_:
+            out.append("stale draft-state path: alpha k4q8_t %s vs k4q8 %s (the timing synchronizes keep the drafts: %s)" % (
+                _f(sp_["alpha_k4q8_t"]), _f(sp_["alpha_k4q8"]), sp_["same"]))
+    rbs = [b for b in (summ.get("reeval_bounds"), summ.get("reeval_bounds_stale")) if b]
     for n, d in (summ.get("reeval") or {}).items():
+        rb = next((b for b in rbs if b["timed"] == n), None)
         line = "%s: draft-context decode of the verify batch, isolated cost (target synchronized first): %s ms per call, %s ms per step (%s of the step)" % (
             n, _f(d.get("reeval_ms_per_call")), _f(d.get("reeval_ms_per_step")), _f(d.get("reeval_share_of_step")))
-        if rb and rb["timed"] == n:
+        if rb:
             line += ("; end-to-end %s minus %s: %s ms per step (the overlap with the target hides the rest in the untimed path); achievable "
                      "saving of skipping the re-eval per step: at most %s ms (isolated), at least %s ms (end-to-end delta)" % (
                          rb["timed"], rb["reference"], _f(rb["end_to_end_delta_ms_per_step"]), _f(rb["isolated_ms_per_step"]),
@@ -276,7 +296,32 @@ def probe_verdict(res: dict) -> dict:
         c = cb[0]
         out["boundary"] = {"rollback": n_rs, "kept": c["kept"], "max_abs_diff": c["max_abs_diff"], "max_abs_ref": c["max_abs_ref"],
                            "top1_equal": c["top1_equal"], "exact": _case_exact(c)}
+    ctrl = {c["kept"]: c for c in res.get("cases", []) if c.get("decode") == "shape" and "max_abs_diff" in c}
+    if ctrl:
+        out["control"] = {"max_abs_diff": max(c["max_abs_diff"] for c in ctrl.values()), "max_abs_ref": max(c["max_abs_ref"] for c in ctrl.values()),
+                          "top1_equal": sum(1 for c in ctrl.values() if c["top1_equal"]), "n": len(ctrl),
+                          "by_kept": {str(k): c["max_abs_diff"] for k, c in sorted(ctrl.items())}}
+        rows = [c for c in res.get("cases", []) if c.get("decode") == "batch" and "max_abs_diff" in c and c.get("kept", 0) >= 1 and c["kept"] in ctrl]
+        if rows and "batch" in out:
+            att = {"exact": 0, "batch_shape": 0, "rollback": 0}
+            for c in rows:
+                att[_attribute(c, ctrl[c["kept"]])] += 1
+            out["batch"]["attribution"] = dict(att, max_over_control=max(c["max_abs_diff"] / max(ctrl[c["kept"]]["max_abs_diff"], 1e-9) for c in rows))
+        if "boundary" in out and out["boundary"]["kept"] in ctrl:
+            b = out["boundary"]
+            b["control_diff"] = ctrl[b["kept"]]["max_abs_diff"]
+            b["attribution"] = _attribute(cb[0], ctrl[b["kept"]])
     return out
+
+
+def _attribute(c: dict, ctrl: dict) -> str:
+    """exact: within EXACT_REL. batch_shape: not exact, but no more than CONTROL_FACTOR times the control diff of the same kept (the two batch
+    shapes alone give that much), same top-1, seq_rm true. rollback: more than the shapes explain."""
+    if _case_exact(c):
+        return "exact"
+    if c.get("seq_rm_ok", True) and c["top1_equal"] and c["max_abs_diff"] <= CONTROL_FACTOR * ctrl["max_abs_diff"]:
+        return "batch_shape"
+    return "rollback"
 
 
 def _case_exact(c: dict) -> bool:
@@ -293,6 +338,10 @@ def probe_notes(label: str, name: str, res: dict) -> str:
                                                                                                b["top1_equal"], b["exact"]))
     elif "batch" in v:
         parts.append("rollback == n_rs_seq not probed (largest batch rollback %d)" % v["batch"]["max_rollback"])
+    if "control" in v:
+        att = (v.get("batch") or {}).get("attribution") or {}
+        parts.append("batch-shape control (same tokens, no seq_rm): max logit diff %.3g, top-1 equal %d/%d; batch rows exact %s, batch_shape %s, rollback %s" % (
+            v["control"]["max_abs_diff"], v["control"]["top1_equal"], v["control"]["n"], att.get("exact"), att.get("batch_shape"), att.get("rollback")))
     return "r %s %s (n_rs_seq %s): " % (label, name, res.get("n_rs_seq")) + "; ".join(parts)
 
 

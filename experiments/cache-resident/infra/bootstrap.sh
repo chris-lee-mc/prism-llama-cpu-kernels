@@ -29,16 +29,21 @@ if [ -d /workspace ]; then
 fi
 export DEBIAN_FRONTEND=noninteractive PIP_BREAK_SYSTEM_PACKAGES=1 PIP_DISABLE_PIP_VERSION_CHECK=1
 
-# 0) host check before the slow steps: CUDA must init, and with CR_MIN_POWER_FRAC the power limit must be >= that share of the default
+# 0) host check before the slow steps: CUDA must init. With CR_MIN_POWER_FRAC the power limit must be >= that share of the default,
+# with CR_POWER_TOL (PR evidence) it must equal the default within that fraction
 if command -v nvidia-smi >/dev/null 2>&1; then
   if command -v python3 >/dev/null 2>&1 && ! python3 -c 'import ctypes, sys; sys.exit(ctypes.CDLL("libcuda.so.1").cuInit(0))'; then
     say "host check: cuInit failed (bad host), stop"
     exit 3
   fi
-  if [ -n "${CR_MIN_POWER_FRAC:-}" ]; then
+  if [ -n "${CR_MIN_POWER_FRAC:-}" ] || [ -n "${CR_POWER_TOL:-}" ]; then
     PW="$(nvidia-smi --query-gpu=power.limit,power.default_limit --format=csv,noheader,nounits 2>/dev/null | head -1 | tr -d ' ')"
-    if awk -F, -v f="$CR_MIN_POWER_FRAC" '$1 != "" && $2 > 0 && $1 < f * $2 { found = 1 } END { exit !found }' <<<"$PW"; then
+    if [ -n "${CR_MIN_POWER_FRAC:-}" ] && awk -F, -v f="$CR_MIN_POWER_FRAC" '$1 != "" && $2 > 0 && $1 < f * $2 { found = 1 } END { exit !found }' <<<"$PW"; then
       say "host check: power limit,default $PW W, limit < $CR_MIN_POWER_FRAC of default (capped host), stop"
+      exit 3
+    fi
+    if [ -n "${CR_POWER_TOL:-}" ] && ! awk -F, -v t="$CR_POWER_TOL" '$1 + 0 > 0 && $2 + 0 > 0 && $1 >= (1 - t) * $2 && $1 <= (1 + t) * $2 { ok = 1 } END { exit !ok }' <<<"$PW"; then
+      say "host check: power limit,default $PW W, limit is not the default within $CR_POWER_TOL (or unreadable), stop"
       exit 3
     fi
     say "host check: power limit,default $PW W ok"

@@ -11,8 +11,8 @@ from infra import gpus
 EXP = pathlib.Path(__file__).resolve().parent.parent
 MAN = json.loads((EXP / "exps" / "manifest.json").read_text())
 KEYS = {"cmd", "gpus", "est_min", "failsafe_min", "build_llama", "disk_gb", "desc"}
-OPTIONAL_KEYS = {"result_exp", "min_power_frac"}    # result_exp: a chained entry, the exp dir of its first command
-LONG_FAILSAFE = {"e4_pdl": 70, "r1": 55, "r2a": 55, "r2b_mc": 55, "r2b_spec": 55, "wrap_a3": 55, "wrap_b": 55, "wrap_ab": 60}  # clone + cold build + downloads + the runs; launch needs --allow-long
+OPTIONAL_KEYS = {"result_exp", "min_power_frac", "power_tol"}    # result_exp: a chained entry, the exp dir of its first command
+LONG_FAILSAFE = {"e4_pdl": 70, "r1": 55, "r2a": 55, "r2b_mc": 55, "r2b_spec": 55, "wrap_a3": 55, "wrap_b": 55, "wrap_ab": 64}  # clone + cold build + downloads + the runs; launch needs --allow-long
 EXPECTED = {"p0_smoke", "p0_l2", "e1", "e2_08b", "e2_2b", "e3", "e3d", "e4_pq2", "e4_ptq1", "e4_pdl", "e5_base", "e5_k4", "e5_k6", "e5_k8", "e5_cost", "r1", "r2a", "r2b_mc", "r2b_spec", "wrap_a", "wrap_a3", "wrap_b", "wrap_ab"}
 
 
@@ -156,7 +156,7 @@ def test_wrap_entries_fit_one_session_each():
     assert MAN["wrap_a"]["gpus"] == ["pro6000_600w"] and MAN["wrap_b"]["gpus"] == ["pro6000_maxq", "rtx5090"] and MAN["wrap_a3"]["gpus"] == ["rtx4090"]
     assert not any("Max-Q" in n for n in gpus.RUNPOD_CANDIDATES["pro6000_600w"])
     # wrap_a at the trimmed budget stays inside the 40 min limit that needs no --allow-long
-    assert MAN["wrap_a"]["failsafe_min"] <= 40 and MAN["wrap_a"]["est_min"] == 18
+    assert MAN["wrap_a"]["failsafe_min"] <= 40 and MAN["wrap_a"]["est_min"] == 20
 
 
 def test_wrap_ab_runs_both_in_one_600w_session():
@@ -172,6 +172,12 @@ def test_wrap_ab_runs_both_in_one_600w_session():
     assert e["est_min"] + runpod.BOOTSTRAP_MIN + runpod.LLAMA_BUILD_MIN <= e["failsafe_min"] - 5
     # one session shares the bootstrap and the build: cheaper than two 600 W sessions
     assert e["failsafe_min"] < MAN["wrap_a"]["failsafe_min"] + MAN["wrap_b"]["failsafe_min"]
+
+
+def test_power_gates_of_the_pr_evidence_entries():
+    # PR evidence (A1, A2, A3 and the chain that contains A) needs the default power limit within 1% at bootstrap; B only needs 75%
+    assert {k for k in MAN if MAN[k].get("power_tol")} == {"wrap_a", "wrap_a3", "wrap_ab"} and all(MAN[k]["power_tol"] == 0.01 for k in ("wrap_a", "wrap_a3", "wrap_ab"))
+    assert {k for k in MAN if MAN[k].get("min_power_frac")} == {"wrap_b"} and MAN["wrap_b"]["min_power_frac"] == 0.75
 
 
 def test_wrap_a_budget_gate_reserve_is_inside_the_stated_cost():

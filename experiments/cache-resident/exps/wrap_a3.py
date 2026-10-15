@@ -11,6 +11,11 @@ ccache):
         test-backend-ops are built (ccache with CCACHE_BASEDIR reuses the CPU objects of the head build). The model download runs while
         the base build runs.
 Gate: the GPU tag must be rtx4090 (Ada, cc 8.9); --allow-any-gpu for development.
+Health: PR evidence, so the card must run at its default power limit: power.limit equal to power.default_limit within 1% (the bootstrap
+checks it first, CR_POWER_TOL; data.power.bootstrap). PowerGuard records both values at the start and before and after each timed part
+(b, f) in data.power.checks; a drop before a part skips it (exit 1), during part b the first unhealthy round and later ones are left out
+of the paired gains (data.bench_health), a drop seen after part f marks data.perf.power_problem. Parts build, sass and t are never
+skipped for power. --allow-power-cap turns the power checks into recorded values (development only).
 The pod query asks for 16 vCPUs when the llama build is on (infra/runpod.py), the base build gets 14 of 28 min (weight 14 of 28); a build
 that does not finish ends the run with exit 1 and no timing.
 sass  cuobjdump -sass of mul_mat_vec_pq2_0_mc from both builds (sm_89), instruction text without offsets and encodings. On sm_89 the
@@ -21,7 +26,8 @@ t  test-backend-ops test -o MUL_MAT -b CUDA0 -p type_a=pq2_0, with head, then ba
 b  llama-bench on Bonsai 2 27B PQ2_0 (flags of r2b_multicol): -p 1,...,9 -n 0 -r 5 and -p 0 -n 128 -r 5, base and head alternating,
    --rounds rounds (default 4). Reported: ms per width per build, the gain of head over base per round, and its median / min / max.
 f  test-backend-ops perf -o MUL_MAT -b CUDA0 -p type_a=pq2_0, (us per op, widths 1-32 at the 27B shapes), base and head.
-Result: results/wrap_a3/<gpu>/<stamp>.json with data.gate, data.build, data.tbo, data.bench, data.bench_summary, data.bench_paired, data.perf.
+Result: results/wrap_a3/<gpu>/<stamp>.json with data.gate, data.power, data.build, data.tbo, data.bench, data.bench_summary, data.bench_paired,
+data.bench_health, data.perf.
 Time: failsafe 55 min = bootstrap with the head build ~15, wrap_a3 28 (base build up to 14, download overlapped, runs ~10), reserve 5.
 Cost at the 4090 community price of about $0.34 per hour: about 50 min of pod time, about $0.3.
 """
@@ -257,13 +263,20 @@ def sass_part(bins: dict, cc: str, budget: common.Budget, notes: list) -> dict:
     return out
 
 
-def bench_verdict(paired: dict) -> list[str]:
+def bench_verdict(paired: dict, health: dict | None = None) -> list[str]:
+    """Paired gains per width. After an unhealthy host every line starts with UNHEALTHY HOST and says which rounds were left out."""
+    pre = ""
+    if health and health.get("first_bad_round") is not None:
+        pre = "UNHEALTHY HOST (%s during round %d %s; that round and later ones left out): " % (
+            health["problem"], health["first_bad_round"], health.get("where", ""))
     out = []
     for w, e in paired.get("pp", {}).items():
-        out.append("width %s: head over base %+.1f%% (rounds %s, min %+.1f%%, max %+.1f%%)" % (w, e["median"], e["n"], e["min"], e["max"]))
+        out.append("%swidth %s: head over base %+.1f%% (rounds %s, min %+.1f%%, max %+.1f%%)" % (pre, w, e["median"], e["n"], e["min"], e["max"]))
     tg = paired.get("tg", {}).get("1")
     if tg:
-        out.append("decode tg128: head over base %+.1f%% (min %+.1f%%, max %+.1f%%)" % (tg["median"], tg["min"], tg["max"]))
+        out.append("%sdecode tg128: head over base %+.1f%% (min %+.1f%%, max %+.1f%%)" % (pre, tg["median"], tg["min"], tg["max"]))
+    if pre and not out:
+        out.append(pre + "no healthy round: no paired gain")
     return out
 
 
@@ -281,12 +294,15 @@ def run(args) -> int:
     secrets = r1.secret_values()
     config = {"parts": args.parts, "budget_min": args.budget_min, "rounds": args.rounds, "builds": [b for b, _ in BUILDS], "models": {},
               "targets": TARGETS, "head_bin": str(head_bin), "quick": args.quick}
-    doc: dict = {"gate": None, "build": None, "sass": None, "tbo": [], "bench": [], "bench_summary": {}, "bench_paired": {}, "perf": None}
+    guard = mc.PowerGuard(enforce=not args.allow_power_cap, bootstrap=mc.bootstrap_power())
+    doc: dict = {"gate": None, "power": guard.doc, "build": None, "sass": None, "tbo": [], "bench": [], "bench_summary": {}, "bench_paired": {},
+                 "bench_health": {}, "perf": None}
     rows: list[dict] = doc["bench"]
+    health: dict = doc["bench_health"]          # first_bad_round / problem of part b; rounds from there on are left out of the gains
 
     def save(final: bool = False) -> None:
-        doc["bench_summary"] = mc.summarize_bench(rows, [b for b, _ in BUILDS], ref="base")
-        doc["bench_paired"] = mc.paired_rounds(rows, "base", "head")
+        doc["bench_summary"] = mc.summarize_bench(rows, [b for b, _ in BUILDS], ref="base", before_round=health.get("first_bad_round"))
+        doc["bench_paired"] = mc.paired_rounds(rows, "base", "head", before_round=health.get("first_bad_round"))
         (common.write_result if final else common.write_partial)(EXP, args, r1.scrub(config, secrets), [], r1.scrub(notes, secrets), False,
                                                                  extra=r1.scrub(doc, secrets))
 
@@ -306,6 +322,9 @@ def run(args) -> int:
     model = None
     rc = 0
     cut = {"part": None}
+    bad = guard.check("start")
+    if bad:
+        notes.append(f"UNHEALTHY HOST: {bad} at the start; build, sass and correctness still run, no timing")
     try:
         for i, p in enumerate(parts):
             sub_s = part_budget_s(total.left(), p, parts[i:])
@@ -348,9 +367,32 @@ def run(args) -> int:
                 elif p == "b":
                     if model is None:
                         model, config["models"]["pq2"] = e4_pdl.model_path("pq2", notes)
-                    mc.bench_part(head_bin, model, sub, notes, rows, args.allow_power_cap, save, configs=BUILDS, rounds=args.rounds, bins=bins, tag=EXP)
+                    pbad = guard.check("before b")
+                    if pbad:
+                        notes.append(f"UNHEALTHY HOST: {pbad}; part b skipped (the timings need the default power limit)")
+                        rc = 1
+                    else:
+                        mc.bench_part(head_bin, model, sub, notes, rows, args.allow_power_cap, save, configs=BUILDS, rounds=args.rounds, bins=bins,
+                                      tag=EXP, health=health, power_tol=None if args.allow_power_cap else mc.POWER_TOL)
+                        pbad = guard.check("after b")
+                        if pbad and health.get("first_bad_round") is None:
+                            last = max([r["round"] for r in rows], default=0)
+                            health.update(first_bad_round=last, problem=pbad, where="after part b")
+                            notes.append(f"UNHEALTHY HOST: {pbad} after part b; round {last} and later left out")
+                        if health.get("first_bad_round") is not None:
+                            rc = 1
                 else:
-                    doc["perf"] = perf_part(bins, sub, notes)
+                    pbad = guard.check("before f")
+                    if pbad:
+                        notes.append(f"UNHEALTHY HOST: {pbad}; part f skipped (the timings need the default power limit)")
+                        rc = 1
+                    else:
+                        doc["perf"] = perf_part(bins, sub, notes)
+                        pbad = guard.check("after f")
+                        if pbad:
+                            doc["perf"]["power_problem"] = {"at": "after f", "problem": pbad}
+                            notes.append(f"UNHEALTHY HOST: {pbad} after part f; the perf timings are not valid")
+                            rc = 1
             except Exception as e:  # a failed part must not lose the others
                 notes.append(f"part {p} crashed: {type(e).__name__}: {e}")
             cut["part"] = None
@@ -358,7 +400,8 @@ def run(args) -> int:
     finally:
         if cut["part"]:
             notes.append(f"run cut during part {cut['part']}: the results of that part are partial")
-        notes.extend(bench_verdict(mc.paired_rounds(rows, "base", "head")))
+        notes.extend(bench_verdict(mc.paired_rounds(rows, "base", "head", before_round=health.get("first_bad_round")), health))
+        notes.append(mc.power_line(doc["power"]))
         notes.append("Ada: the multi-column kernel runs in both builds (default on Ada); ggml_cuda_pdl_sync() is compiled out below sm_90")
         save(final=True)
     return rc
@@ -414,7 +457,7 @@ def plan_json(a) -> dict:
             "patch": os.path.relpath(PATCH, common.EXP_DIR), "patch_files": PATCH_FILES, "targets": TARGETS,
             "cmake": cmake_cmd("<src>", "<src>/build-cuda", a.cc, True), "model": hf_ids.resolve("bonsai2", "PQ2_0", offline=True),
             "tbo_cmd": mc.tbo_cmd(bin_dir), "bench_pp_cmd": mc.bench_pp_cmd(bin_dir, "<pq2.gguf>"), "bench_tg_cmd": mc.bench_tg_cmd(bin_dir, "<pq2.gguf>"),
-            "bench_order": [[n for n, _ in mc.round_configs(BUILDS, r)] for r in range(a.rounds)], "quick": a.quick}
+            "bench_order": [[n for n, _ in mc.round_configs(BUILDS, r)] for r in range(a.rounds)], "power_tol": mc.POWER_TOL, "quick": a.quick}
 
 
 def main(argv=None) -> int:

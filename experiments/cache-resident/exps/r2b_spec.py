@@ -384,10 +384,11 @@ def pair_by_category(runs: dict, a: str, b: str, ci: bool = True) -> dict | None
 
 
 def run_blocks(*, cfgs: list[dict], blocks: list[list[dict]], orders: list[list[str]], bin_dir, target: str, cmd_for, budget_s: float,
-               notes: list, gpu: str, exp: str, ctx: int = CTX, on_update=None, tag: str = "spec") -> dict:
+               notes: list, gpu: str, exp: str, ctx: int = CTX, on_update=None, tag: str = "spec", should_stop=None) -> dict:
     """Configs interleaved by prompt blocks: for every block, one fresh server per config (in that block's order) runs the block's
     prompts. A config's env (cfg["env"]) is the server's extra environment. Rows of all blocks are merged per config; per block the
-    server log is kept (raw/) and its statistics lines are parsed. Never raises; a cut leaves whole blocks of some configs."""
+    server log is kept (raw/) and its statistics lines are parsed. Never raises; a cut leaves whole blocks of some configs.
+    should_stop: called before each server run; a text it returns stops the run (out["stopped"], the runs so far stay)."""
     from infra.results import artifact_path
     by = {c["name"]: c for c in cfgs}
     runs = {c["name"]: {"name": c["name"], "spec_type": c["spec_type"], "k": c["k"], "draft": c.get("draft") if has_draft_model(c) else None,
@@ -397,6 +398,11 @@ def run_blocks(*, cfgs: list[dict], blocks: list[list[dict]], orders: list[list[
     t_end = time.monotonic() + budget_s
     todo = [(b, n) for b, o in enumerate(orders) for n in o if n in by]
     for i, (b, name) in enumerate(todo):
+        why = should_stop() if should_stop else None
+        if why:
+            out["stopped"] = {"block": b, "config": name, "why": why, "left": [f"{n}/b{bb}" for bb, n in todo[i:]]}
+            notes.append(f"{tag}: stopped before block {b} config {name}: {why}; {len(todo) - i} block runs skipped")
+            break
         left = t_end - time.monotonic()
         if left < 30:
             out["cut"] = {"block": b, "config": name, "left": [f"{n}/b{bb}" for bb, n in todo[i:]]}

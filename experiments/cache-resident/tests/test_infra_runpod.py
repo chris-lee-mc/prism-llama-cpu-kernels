@@ -302,6 +302,20 @@ def test_launch_cmd_override_and_build_llama(env, monkeypatch):
     assert keys["CR_CMD"] == "echo zz" and keys["CR_BUILD_LLAMA"] == "1"
 
 
+def test_launch_passes_the_power_gates_to_the_bootstrap(env, monkeypatch):
+    res, led = env
+    serve_http(monkeypatch)
+    api = FakeAPI()
+    man = {"p0_x": dict(MAN["p0_x"], power_tol=0.01, min_power_frac=0.75)}
+    assert runpod.launch("p0_x", "rtx5090", manifest=man, client=api, ledger=led) == 0
+    keys = {e["key"]: e["value"] for e in api.created[0]["env"]}
+    assert keys["CR_POWER_TOL"] == "0.01" and keys["CR_MIN_POWER_FRAC"] == "0.75"
+    api = FakeAPI()
+    assert runpod.launch("p0_x", "rtx5090", manifest=MAN, client=api, ledger=led) == 0
+    keys = {e["key"]: e["value"] for e in api.created[0]["env"]}
+    assert "CR_POWER_TOL" not in keys and "CR_MIN_POWER_FRAC" not in keys
+
+
 def test_cascade_falls_back_on_no_capacity(env, monkeypatch):
     res, led = env
     serve_http(monkeypatch)
