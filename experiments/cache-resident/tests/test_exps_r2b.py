@@ -547,3 +547,14 @@ def test_r2b_spec_dry_run_and_args(capsys):
     with pytest.raises(SystemExit):
         sp.parse_args(["--configs", "base,k9"])
     assert sp.parse_args(["--quick"]).per_category == 2
+
+
+def test_run_tbo_ok_needs_a_test_to_have_run(tmp_path):
+    def fake(out, rc):
+        f = tmp_path / ("tbo_%s_%d.py" % (rc, len(out)))
+        f.write_text("#!%s\nimport sys\nprint(%r)\nsys.exit(%d)\n" % (sys.executable, out, rc))
+        f.chmod(0o755)
+        return [str(f)]
+    assert mc.run_tbo(fake("  0/0 tests passed", 0), dict(os.environ), 30)["ok"] is False
+    assert mc.run_tbo(fake("  219/219 tests passed", 0), dict(os.environ), 30)["ok"] is True
+    assert mc.run_tbo(fake("  219/219 tests passed", 1), dict(os.environ), 30)["ok"] is False

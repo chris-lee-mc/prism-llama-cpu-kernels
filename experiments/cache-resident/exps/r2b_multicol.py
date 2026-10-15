@@ -222,7 +222,8 @@ def run_tbo(cmd: list[str], env: dict, timeout: float) -> dict:
     except subprocess.TimeoutExpired:
         row.update(ok=False, error="timeout")
         return row
-    row.update(parse_tbo(p.stdout), returncode=p.returncode, ok=p.returncode == 0)
+    parsed = parse_tbo(p.stdout)
+    row.update(parsed, returncode=p.returncode, ok=p.returncode == 0 and parsed["total"] > 0)  # 0/0 tests (no CUDA) is not ok
     if not row["ok"]:     # keep what failed: the console has no FAIL line for an allocation or setup error
         text = ANSI_RE.sub("", (p.stdout or "") + "\n" + (p.stderr or ""))
         bad = [ln.strip()[:300] for ln in text.splitlines() if ln.strip() and not ln.rstrip().endswith(("OK", "not supported [CPU]"))]
@@ -241,7 +242,7 @@ def tbo_part(bin_dir, budget: common.Budget, notes: list, order: list | None = N
             notes.append(f"t: time budget used up, config {name} skipped")
             continue
         row = run_tbo(tbo_cmd(bin_dir), run_env(cenv), budget.timeout(600, reserve_s=30))
-        if not row.get("total") and row.get("ok"):          # the filter matched nothing: run MUL_MAT whole
+        if not row.get("total") and row.get("returncode") == 0:        # the filter matched nothing: run MUL_MAT whole
             notes.append(f"t {name}: no test matched {PQ2_FILTER!r}; MUL_MAT run whole")
             row = dict(run_tbo(tbo_cmd(bin_dir, filt=None), run_env(cenv), budget.timeout(900, reserve_s=30)), filter=None)
         row.update(config=name, env=cenv)

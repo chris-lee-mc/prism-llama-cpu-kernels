@@ -7,7 +7,8 @@ Scope: Bonsai 2 27B PQ2_0 target on llama-server in this fork, one slot, greedy,
 | Workload | Setting | Speedup |
 |---|---|---|
 | Full-file edits (answer copies the prompt) | ngram-mod, or ngram-mod,draft-simple | 2.3-2.6x |
-| Long-context agentic mix (2-8K prompts) | ngram-mod, or ngram-mod,draft-simple | 1.3-1.4x |
+| Long-context tool traces alone | ngram-mod, or ngram-mod,draft-simple | 1.05-1.12x |
+| Long-context mixed (2-8K prompts) | ngram-mod, or ngram-mod,draft-simple | 1.3-1.4x, driven by the full-file edits |
 | Diff edits | no speculation | all modes 0.85-0.96x |
 | Short chat, planning, code-fix prompts | no speculation | all modes below 1.0x |
 | draft-simple, any draft | use the Q8_0 draft, not BF16 | +9% vs BF16 |
@@ -30,10 +31,11 @@ R2a (53 long-context prompts, ctx 16384, drift check 0.998):
 
 R2b spec (PRO 6000 Max-Q, 24 prompts, 8 per category; exploratory, rely on the intervals):
 - Q8_0 vs BF16 draft: same alpha (0.757), step 23.5 vs 25.8 ms. Paired Q8_0/BF16 = 1.09x [1.07, 1.13] overall, 1.08-1.13x per category. Clock and run order explain part of it; the gain is at least about 4%.
-- ngram-mod,draft-simple (BF16 draft): 1.31x [1.06, 1.74] overall, 2.54x [1.97, 3.47] full-file, 0.89x diff, 1.05x tool trace. ngram-mod alone on R2a prompts: 1.33x, 2.32x (different host, not paired). Combined with a Q8_0 draft is untested. Not tried on short prompts.
+- ngram-mod,draft-simple (BF16 draft): 1.31x [1.06, 1.74] overall, 2.54x [1.97, 3.47] full-file, 0.89x diff, 1.05x tool trace. ngram-mod alone on R2a prompts: 1.33x, 2.32x (different host, not paired). The combined type with a Q8_0 draft is untested (measured with the BF16 draft). Not tried on short prompts.
 
 Other caveats:
 - draft-simple numbers may be lower bounds. On CPU with a tiny hybrid model, the fork's draft context restores a stale recurrent state after every partial acceptance (acceptance 0.001 against 0.106 with the correct state, see PLAN.md, Status); upstream does not have this (its draft context takes the checkpoint path). The effect on the real draft is unmeasured (R2b alpha was 0.757 with the default path); `wrap_b` measures it (k4q8 vs k4q8_ckpt) before any guidance changes.
+- Stale-state rollback with hybrid drafts is confirmed at logit level on GPU (one-token draft decodes then seq_rm leave stale recurrent state), but the acceptance impact is unmeasured. It may partly explain the R1 alpha of 0.43 against an agreement of 0.76 (hypothesis only).
 - ngram-mod alone checkpoints on every drafting step (n_rs_seq = 0 on the hybrid target), so its numbers are lower bounds. With draft-simple in the list, drafts up to K roll back in the batch.
 - Speculation changes outputs slightly through batch numerics: 88-100% of outputs matched target alone token for token.
 - Results are for this model, hardware and prompt mix. Re-measure for other workloads.

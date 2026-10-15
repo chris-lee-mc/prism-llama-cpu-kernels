@@ -251,7 +251,8 @@ def run_tbo(bin_dir, budget: common.Budget, notes: list) -> list[dict]:
         row = {"prefetch": n, "cmd": tbo_cmd(bin_dir)}
         try:
             p = subprocess.run(row["cmd"], env=env, capture_output=True, text=True, timeout=budget.timeout(900, reserve_s=300))
-            row.update(parse_tbo(p.stdout), returncode=p.returncode, ok=p.returncode == 0)
+            parsed = parse_tbo(p.stdout)
+            row.update(parsed, returncode=p.returncode, ok=p.returncode == 0 and parsed["total"] > 0)
         except subprocess.TimeoutExpired:
             row.update(ok=False, error="timeout")
         out.append(row)
