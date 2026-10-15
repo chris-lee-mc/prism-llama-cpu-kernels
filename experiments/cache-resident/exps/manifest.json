@@ -218,5 +218,38 @@
   "build_llama": true,
   "disk_gb": 80,
   "desc": "R2b spec on one PRO 6000: a balanced R2a subset (8 prompts per category, the first 24 of the R2a seeded order, same prompts and order for every config, -lv 4): (m) target alone, draft-simple K=4 with the Qwen3.5-0.8B BF16 draft (anchor to R2a), K=4 with the ggml-org Q8_0 draft (HF API check, llama-quantize fallback), and --spec-type ngram-mod,draft-simple (ngram-mod fork defaults, K=4), base again at the end as a drift bound, per category and overall tok/s, speedup, r, alpha with bootstrap 95% CIs, greedy equality against target alone, anchor ratios against the R2a rows of the same prompts; (p) -lv 5 probe (LLAMA_TRACE=1, private log dir) of k4, ngram-mod (fork defaults), the two short n-gram configs and the combined type: which implementation drafted, draft lengths against n_rs_seq, truncation, checkpoints created and restored; needs --allow-long (failsafe 55 = clone, apt, torch and cold CUDA build ~14 + downloads <= 6 + run 22 + end reserve 5; est 28 = downloads 6 + run 22)"
+ },
+ "wrap_a": {
+  "cmd": "python3 -m exps.fetch_models --models pq2,draft_q8_0 --timeout-min 6 && python3 -m exps.wrap_a --budget-min 20",
+  "gpus": [
+   "pro6000_600w"
+  ],
+  "est_min": 26,
+  "failsafe_min": 55,
+  "build_llama": true,
+  "disk_gb": 80,
+  "desc": "Wrap A (A1 + A2), fork PR evidence for the PQ2_0 multi-column kernel on sm_120 (GGML_CUDA_PQ2_MULTICOL prototype, pdl_sync) on one 600 W PRO 6000 (Workstation or Server; the driver refuses a Max-Q): (t) test-backend-ops MUL_MAT pq2_0 on, off; (b) paired llama-bench -p 1..9 -n 0 -r 5 and tg128, off/on alternating over 4 rounds, gain per round; (s) llama-server on the R2a balanced subset (24 prompts, -lv 4): target alone, draft-simple K=4 Q8_0 draft with the kernel off and on, interleaved by 4 prompt blocks (fresh server per block and config), speedup with bootstrap CIs, greedy equality on vs off, ms per step split from the server statistics; needs --allow-long (failsafe 55 = clone, apt, torch and cold CUDA build ~14 + downloads <= 6 + run 20 + end reserve 5; est 26 = downloads 6 + run 20)"
+ },
+ "wrap_a3": {
+  "cmd": "python3 -m exps.wrap_a3 --budget-min 26",
+  "gpus": [
+   "rtx4090"
+  ],
+  "est_min": 26,
+  "failsafe_min": 55,
+  "build_llama": true,
+  "disk_gb": 80,
+  "desc": "Wrap A3, Ada regression check of the multi-column PR change on one RTX 4090: head = the bootstrap build of this branch, base = a copy of the tree with exps/data/a3_pq2_multicol.patch reversed (common.cuh and mmvq-pq2_0.cuh of 4a4866a60), built on the pod with the same cmake flags (llama-bench and test-backend-ops only, ccache, model download during the build); (t) test-backend-ops MUL_MAT pq2_0 both builds; (b) llama-bench -p 1..9 -n 0 -r 5 and tg128, base/head alternating over 4 rounds; (f) test-backend-ops perf; needs --allow-long (failsafe 55 = clone, apt, torch and cold CUDA build ~14 + run 26 incl. base build ~8 + end reserve 5)"
+ },
+ "wrap_b": {
+  "cmd": "python3 -m exps.fetch_models --models pq2,draft_q8_0 --timeout-min 6 && python3 -m exps.wrap_b --budget-min 24",
+  "gpus": [
+   "pro6000_600w"
+  ],
+  "est_min": 30,
+  "failsafe_min": 55,
+  "build_llama": true,
+  "disk_gb": 80,
+  "desc": "Wrap B, test build for the upstream investigations on one 600 W PRO 6000: (r) rollback probe (cr_rs_rollback_probe) on the Q8_0 draft and the PQ2_0 target: state after seq_rm over one-token decodes vs one batch; (m) R2a balanced subset (24 prompts, -lv 4) interleaved by 4 prompt blocks: target alone, draft-simple K=4 Q8_0 draft, with GGML_EXP_SKIP_DRAFT_REEVAL=1 (B1), with GGML_EXP_DRAFT_CKPT=1 (draft state from a checkpoint), ngram-mod (checkpoint path), with GGML_EXP_NGRAM_RS=16 and 64 (B2, in-batch rollback, drafts cut to N); greedy equality, per-category speedups and pairs with bootstrap CIs, ms per step split from the server statistics, path verification; needs --allow-long (failsafe 55 = clone, apt, torch and cold CUDA build ~14 + downloads <= 6 + run 24 + end reserve 5; est 30 = downloads 6 + run 24)"
  }
 }

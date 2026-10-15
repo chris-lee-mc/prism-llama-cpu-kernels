@@ -43,6 +43,7 @@ import pathlib
 import re
 import subprocess
 import sys
+import time
 
 from exps import common, e4_bonsai, e4_pdl, e5_spec, hf_ids, make_prompts, r1, r2a_longctx as r2a
 
@@ -62,6 +63,12 @@ Q8_FILE = hf_ids.DRAFT_GGUF[1].replace("BF16", "Q8_0")
 ANCHOR_CONFIGS = ("base", "k4")
 CALLED_RE = re.compile(r"called impl (\S+), hist size = (\d+), call_count = (\d+), gen = (\d+)")
 TRUNC_RE = re.compile(r"truncating draft to (\d+) tokens")
+STATS_RE = re.compile(r"statistics\s+(\S+): #calls\(b,g,a\) =\s*(\d+)\s+(\d+)\s+(\d+), #gen drafts =\s*(\d+), #acc drafts =\s*(\d+), "
+                      r"#gen tokens =\s*(\d+), #acc tokens =\s*(\d+).*?dur\(b,g,a\) = ([0-9.]+), ([0-9.]+), ([0-9.]+) ms")
+EXP_SKIP_RE = re.compile(r"exp skip-reeval\s+(\S+): skipped batches = (\d+), catch-up tokens = (\d+)")
+EXP_CUT_RE = re.compile(r"exp ngram-rs\s+(\S+): window = (\d+), cut drafts = (\d+), cut tokens = (\d+)")
+EXP_MARK_RE = re.compile(r"(GGML_EXP_\w+): (.*)$")       # SRV_INF line of the server when an experiment switch is active
+STATS_KEYS = ("calls_b", "calls_g", "calls_a", "gen_drafts", "acc_drafts", "gen_tokens", "acc_tokens", "dur_b_ms", "dur_g_ms", "dur_a_ms")
 N_RS_SEQ_NOTE = ("need_n_rs_seq() is the draft n_max with draft-simple in the list: the target keeps n_rs_seq = K, so the "
                  "combo takes the in-batch path for drafts up to K and a checkpoint for longer n-gram drafts")
 
@@ -254,6 +261,163 @@ def anchor(runs: dict, old: dict, names=ANCHOR_CONFIGS) -> dict:
         eq = [now[i].get("text") == was[i].get("text") for i in ids if now[i].get("text") is not None and was[i].get("text") is not None]
         out[name] = {"n": len(ids), "tok_s_now": a["tok_s"], "tok_s_r2a": b["tok_s"], "ratio": a["tok_s"] / b["tok_s"] if a["tok_s"] and b["tok_s"] else None,
                      "r_now": a["r"], "r_r2a": b["r"], "text_equal_frac": sum(eq) / len(eq) if eq else None}
+    return out
+
+
+# ---------------------------------------------------------------- prompt blocks (configs interleaved by blocks of prompts)
+
+def prompt_blocks(order: list[dict], n_blocks: int) -> list[list[dict]]:
+    """The balanced order cut into n_blocks blocks with the same number of prompts per category (block b takes the b-th share of
+    every category, in order). A category that does not divide evenly gives its extra prompts to the first blocks."""
+    by: dict = {}
+    for p in order:
+        by.setdefault(p["category"], []).append(p)
+    blocks: list[list[dict]] = [[] for _ in range(max(n_blocks, 1))]
+    for ps in by.values():
+        q, rem = divmod(len(ps), len(blocks))
+        i = 0
+        for b in range(len(blocks)):
+            n = q + (1 if b < rem else 0)
+            blocks[b] += ps[i:i + n]
+            i += n
+    pos = {p["id"]: i for i, p in enumerate(order)}
+    return [sorted(b, key=lambda p: pos[p["id"]]) for b in blocks if b]
+
+
+def block_orders(names: list[str], n_blocks: int) -> list[list[str]]:
+    """Config order per block: the list rotated by b // 2 and reversed on odd blocks, so each pair runs in both orders."""
+    out = []
+    for b in range(n_blocks):
+        s = (b // 2) % max(len(names), 1)
+        o = names[s:] + names[:s]
+        out.append(list(reversed(o)) if b % 2 else o)
+    return out
+
+
+def parse_stats(text: str) -> dict:
+    """{impl: [cumulative stats per request]} from the 'statistics' lines (-lv 4) the server prints after every request, plus the
+    experiment counter lines (exp skip-reeval, exp ngram-rs) in the same order."""
+    out: dict = {}
+    for ln in text.splitlines():
+        if (m := STATS_RE.search(ln)):
+            v = [int(x) for x in m.groups()[1:8]] + [float(x) for x in m.groups()[8:11]]
+            out.setdefault(m.group(1), []).append(dict(zip(STATS_KEYS, v)))
+        elif (m := EXP_SKIP_RE.search(ln)) and out.get(m.group(1)):
+            out[m.group(1)][-1].update(skipped_batches=int(m.group(2)), catchup_tokens=int(m.group(3)))
+        elif (m := EXP_CUT_RE.search(ln)) and out.get(m.group(1)):
+            out[m.group(1)][-1].update(rs_window=int(m.group(2)), cut_drafts=int(m.group(3)), cut_tokens=int(m.group(4)))
+    return out
+
+
+def timed_stats(stats: dict) -> dict:
+    """Per impl: the counters of the timed requests of one server (last line minus the first, which is the warm-up request)."""
+    out: dict = {}
+    for impl, lines in stats.items():
+        if not lines:
+            continue
+        first, last = lines[0], lines[-1]
+        d = {k: last[k] - first[k] for k in last if k in first and k != "rs_window"}
+        d["n_requests"] = len(lines) - 1
+        if "rs_window" in last:
+            d["rs_window"] = last["rs_window"]
+        out[impl] = d
+    return out
+
+
+def add_stats(a: dict, b: dict) -> dict:
+    out = {k: dict(v) for k, v in a.items()}
+    for impl, d in b.items():
+        cur = out.setdefault(impl, {})
+        for k, v in d.items():
+            cur[k] = v if k == "rs_window" else cur.get(k, 0) + v
+    return out
+
+
+def step_split(run: dict) -> dict:
+    """ms per step of a config and the part the drafting implementation reports as its draft time (dur g of the statistics lines). The
+    draft re-eval of the verify batch is an async decode on the draft context, so its GPU time lands in the next draft call: dur g is
+    draft generation plus re-eval, the rest is target verify, sampling and host work."""
+    rows = [r for r in run.get("rows", []) if e5_spec._ok(r)]
+    if not rows:
+        return {}
+    agg = e5_spec._agg(rows, run.get("spec_type") or "none")
+    out = {"ms_per_step": agg["ms_per_step"], "steps": agg["steps"], "predicted_ms": agg["ms"]}
+    st = run.get("stats") or {}
+    dur = sum(d.get("dur_g_ms", 0.0) for d in st.values())
+    calls = sum(d.get("calls_g", 0) for d in st.values())
+    if st:
+        out.update(dur_g_ms=dur, calls_g=calls, draft_ms_per_call=dur / calls if calls else None,
+                   draft_ms_per_step=dur / agg["steps"] if agg["steps"] else None, impls=st)
+        if out["draft_ms_per_step"] is not None and agg["ms_per_step"]:
+            out["rest_ms_per_step"] = agg["ms_per_step"] - out["draft_ms_per_step"]
+    return out
+
+
+def pair_by_category(runs: dict, a: str, b: str, ci: bool = True) -> dict | None:
+    """Config a against config b on the prompts both finished, overall and per category: speedup (a over b) with a bootstrap CI,
+    r, alpha, ms per step and greedy text equality."""
+    ra = {r["id"]: r for r in (runs.get(a) or {}).get("rows", []) if e5_spec._ok(r)}
+    rb = {r["id"]: r for r in (runs.get(b) or {}).get("rows", []) if e5_spec._ok(r)}
+    ids = [i for i in ra if i in rb]
+    if not ids:
+        return None
+    sa, sb = runs[a].get("spec_type") or "none", runs[b].get("spec_type") or "none"
+    out = {"a": a, "b": b, "all": e5_spec._pair_stats([ra[i] for i in ids], [rb[i] for i in ids], sa, ci, sb), "by_category": {}}
+    for cat in sorted({ra[i]["category"] for i in ids}):
+        sel = [i for i in ids if ra[i]["category"] == cat]
+        out["by_category"][cat] = e5_spec._pair_stats([ra[i] for i in sel], [rb[i] for i in sel], sa, ci, sb)
+    return out
+
+
+def run_blocks(*, cfgs: list[dict], blocks: list[list[dict]], orders: list[list[str]], bin_dir, target: str, cmd_for, budget_s: float,
+               notes: list, gpu: str, exp: str, ctx: int = CTX, on_update=None, tag: str = "spec") -> dict:
+    """Configs interleaved by prompt blocks: for every block, one fresh server per config (in that block's order) runs the block's
+    prompts. A config's env (cfg["env"]) is the server's extra environment. Rows of all blocks are merged per config; per block the
+    server log is kept (raw/) and its statistics lines are parsed. Never raises; a cut leaves whole blocks of some configs."""
+    from infra.results import artifact_path
+    by = {c["name"]: c for c in cfgs}
+    runs = {c["name"]: {"name": c["name"], "spec_type": c["spec_type"], "k": c["k"], "draft": c.get("draft") if has_draft_model(c) else None,
+                        "env": dict(c.get("env") or {}), "desc": c.get("desc"), "rows": [], "blocks": [], "checks": None, "stats": {},
+                        "planned": sum(len(b) for b in blocks)} for c in cfgs}
+    out = {"blocks": [[p["id"] for p in b] for b in blocks], "orders": orders, "runs": runs, "cut": None}
+    t_end = time.monotonic() + budget_s
+    todo = [(b, n) for b, o in enumerate(orders) for n in o if n in by]
+    for i, (b, name) in enumerate(todo):
+        left = t_end - time.monotonic()
+        if left < 30:
+            out["cut"] = {"block": b, "config": name, "left": [f"{n}/b{bb}" for bb, n in todo[i:]]}
+            notes.append(f"{tag}: time budget used up at block {b} config {name}; {len(todo) - i} block runs skipped")
+            break
+        costs = [r2a.config_cost_s(by[n], blocks[bb]) for bb, n in todo[i:]]
+        share = e5_spec.time_shares(costs, left)[0]
+        cfg = by[name]
+        log = str(artifact_path(exp, f"server-b{b}-{name}.log", gpu))
+        res = r2a.run_config(cfg, bin_dir=bin_dir, target=target, draft=None, prompts=blocks[b], budget_s=max(share, 30.0), notes=notes,
+                             ctx=ctx, log_path=log, env=cfg.get("env") or None, cmd=cmd_for(cfg))
+        try:
+            text = pathlib.Path(log).read_text(errors="replace")
+        except OSError:
+            text = ""
+        st = timed_stats(parse_stats(text))
+        marks = sorted({m.group(1) for ln in text.splitlines() if (m := EXP_MARK_RE.search(ln))})
+        run = runs[name]
+        run["rows"] += [dict(r, block=b) for r in res.get("rows") or []]
+        run["cmd"] = res.get("cmd")
+        run["stats"] = add_stats(run["stats"], st)
+        run["checks"] = run["checks"] or res.get("checks")
+        run["blocks"].append({"block": b, "n_rows": len(res.get("rows") or []), "error": res.get("error"), "startup_s": res.get("startup_s"),
+                              "wall_s": res.get("wall_s"), "smi": res.get("smi"), "checks": res.get("checks"), "stats": st,
+                              "exp_switches": marks, "log": os.path.basename(log)})
+        if res.get("error"):
+            run["error"] = res["error"]
+        notes.extend(r2a.config_notes(f"{name}/b{b}", res))
+        print(f"[{tag}] block {b} {name}: {len(res.get('rows') or [])} prompts, {res.get('wall_s') or 0:.0f} s", flush=True)
+        if on_update:
+            on_update(out)
+    for run in runs.values():
+        paths = {(bl.get("checks") or {}).get("rollback_path") for bl in run["blocks"]}
+        run["path_same_in_all_blocks"] = len(paths) <= 1
+        run["step_split"] = step_split(run)
     return out
 
 

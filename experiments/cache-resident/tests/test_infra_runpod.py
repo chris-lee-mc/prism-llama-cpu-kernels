@@ -413,6 +413,8 @@ def test_is_result_json_accepts_tag_variants_and_nesting():
     assert not f("e2_08b/pro6000-server/logs/x.log", "e2_08b", "pro6000")
     assert not f("e2_08b/rtx5090/x.json", "e2_08b", "pro6000")
     assert not f("e3/rtx5090/x.json", "e2_08b", "rtx5090")
+    assert f("wrap_a/pro6000-ws/20261015T000000Z.json", "wrap_a", "pro6000_600w")          # the 600 W key writes pro6000-* tags
+    assert not f("wrap_a/rtx5090/20261015T000000Z.json", "wrap_a", "pro6000_600w")
 
 
 def test_create_pod_cuda_filter_is_opt_in(env, monkeypatch):

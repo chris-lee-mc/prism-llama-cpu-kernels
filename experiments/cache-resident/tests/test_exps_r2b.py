@@ -286,8 +286,11 @@ def test_fork_accepts_a_type_list_and_the_source_facts_hold():
     arg = (REPO / "common" / "arg.cpp").read_text()
     assert "comma-separated list of types of speculative decoding" in arg and "string_split<std::string>(value, ',')" in arg
     com = (REPO / "common" / "common.h").read_text()
-    need = com[com.index("uint32_t need_n_rs_seq()"):][:700]
-    assert "COMMON_SPECULATIVE_TYPE_DRAFT_SIMPLE" in need and "return needs_rs_seq ? draft.n_max : 0u;" in need and "NGRAM" not in need
+    need = com[com.index("uint32_t need_n_rs_seq()"):]
+    need = need[:need.index("\n    }\n")]
+    lam = need[:need.index("});")]
+    assert "COMMON_SPECULATIVE_TYPE_DRAFT_SIMPLE" in lam and "NGRAM" not in lam and "needs_rs_seq ? draft.n_max : 0u;" in need
+    assert "if (common_exp_ngram_rs() > 0 &&" in need                                     # the n-gram window only with GGML_EXP_NGRAM_RS
     spec = (REPO / "common" / "speculative.cpp").read_text()
     init = spec[spec.index("add_config_if_enabled(COMMON_SPECULATIVE_TYPE_NGRAM_SIMPLE)"):]
     assert init.index("COMMON_SPECULATIVE_TYPE_NGRAM_MOD") < init.index("COMMON_SPECULATIVE_TYPE_DRAFT_SIMPLE")         # n-gram types come first

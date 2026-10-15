@@ -23,6 +23,8 @@ if [ -d /workspace ]; then
   export PIP_CACHE_DIR="${PIP_CACHE_DIR:-/workspace/.cache/pip}"
   export CCACHE_DIR="${CCACHE_DIR:-/workspace/.ccache}"
   export HF_HOME="${HF_HOME:-/workspace/hf}"
+  # relative paths in the ccache keys, so a second source tree under /workspace (exps.wrap_a3) reuses the objects
+  export CCACHE_BASEDIR="${CCACHE_BASEDIR:-/workspace}" CCACHE_NOHASHDIR=1
   mkdir -p "$PIP_CACHE_DIR" "$CCACHE_DIR" "$HF_HOME" 2>/dev/null || true
 fi
 export DEBIAN_FRONTEND=noninteractive PIP_BREAK_SYSTEM_PACKAGES=1 PIP_DISABLE_PIP_VERSION_CHECK=1

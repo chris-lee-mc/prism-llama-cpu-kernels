@@ -21,14 +21,14 @@ import signal
 import sys
 import time
 
-from .gpus import RUNPOD_CANDIDATES, cascade
+from .gpus import RUNPOD_CANDIDATES, cascade, tag_prefix
 
 EXP_DIR = pathlib.Path(__file__).resolve().parent.parent
 GRAPHQL_URL = "https://api.runpod.io/graphql"
 IMAGE = "nvidia/cuda:12.8.1-devel-ubuntu22.04"
 DEFAULT_REPO = "https://github.com/chris-lee-mc/prism-llama-cpu-kernels"
 DEFAULT_BRANCH = "exp/cache-resident"
-DEFAULT_MAX_PRICE = {"rtx3090": 0.50, "rtx4090": 0.80, "rtx5090": 1.30, "pro6000": 2.60, "l40s": 1.20}
+DEFAULT_MAX_PRICE = {"rtx3090": 0.50, "rtx4090": 0.80, "rtx5090": 1.30, "pro6000": 2.60, "pro6000_600w": 2.60, "l40s": 1.20}
 MAX_FAILSAFE_MIN = 90
 CAPACITY_HINTS = ("no longer any instances", "no instances", "not available", "unavailable", "out of stock",
                   "capacity", "no gpus", "required specifications", "does not have the resources")
@@ -387,8 +387,8 @@ def _is_result_json(path: str, exp: str, key: str) -> bool:
     parts = pathlib.PurePosixPath(path).parts
     if len(parts) < 3 or parts[0] != exp or not parts[-1].endswith(".json") or ".partial" in parts[-1]:
         return False
-    tag = parts[-2]
-    return tag == key or tag.startswith(key + "-")
+    tag, pre = parts[-2], tag_prefix(key)
+    return tag == pre or tag.startswith(pre + "-")
 
 
 def _fetch_results(base: str, files: list[dict], dest: pathlib.Path) -> bool:

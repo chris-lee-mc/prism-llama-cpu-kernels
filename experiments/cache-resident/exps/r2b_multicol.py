@@ -57,6 +57,8 @@ GEN_KERNEL_RE = re.compile(r"mul_mat_vec_q<\(ggml_type\)142,\s*(?:\(int\))?(\d+)
 PERF_RE = re.compile(r"MUL_MAT\((type_a=pq2_0,[^)]*)\):\s+(\d+) runs -\s+([0-9.]+) us/run")
 ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
 TBO_FAIL_RE = re.compile(r"\bFAIL\b")
+GPU600_TAGS = ("pro6000-ws", "pro6000-server")     # the 600 W editions; a Max-Q (300 W) gives other timings
+GPU600_MIN_DEFAULT_W = 550.0
 
 
 # ---------------------------------------------------------------- pure helpers
@@ -130,9 +132,42 @@ def mc_kernels(kerns: list[dict]) -> dict:
                     for k in sorted(kerns, key=lambda x: -x["time_ns"])[:6]]}
 
 
-def summarize_bench(rows: list[dict], cfg_names: list[str]) -> dict:
+def gpu600_problem(tag: str, smi: dict | None) -> str | None:
+    """Why this host is not a 600 W RTX PRO 6000 (Workstation or Server Edition), else None. smi: one e4_pdl.smi_sample()."""
+    if tag not in GPU600_TAGS:
+        return f"GPU tag {tag} is not a 600 W RTX PRO 6000 ({' or '.join(GPU600_TAGS)})"
+    dflt = (smi or {}).get("power.default_limit")
+    if dflt is not None and dflt < GPU600_MIN_DEFAULT_W:
+        return f"default power limit {dflt:.0f} W < {GPU600_MIN_DEFAULT_W:.0f} W"
+    return None
+
+
+def round_configs(configs: list, rnd: int) -> list:
+    """Even rounds in the given order, odd rounds reversed: with an even round count every config runs first equally often."""
+    return list(configs) if rnd % 2 == 0 else list(reversed(configs))
+
+
+def paired_rounds(rows: list[dict], a: str = "off", b: str = "on") -> dict:
+    """Gain of b over a per width and kind, round by round (ms_a / ms_b - 1 in percent, each from the median of the round's reps),
+    and over the rounds: median, min, max and whether every round has the same sign. A round counts when both configs ran it."""
+    cell: dict = {}
+    for r in rows:
+        if r.get("tok_s"):
+            cell.setdefault((r["kind"], r["width"]), {}).setdefault(r["round"], {})[r["config"]] = r["tok_s"]
+    out: dict = {"a": a, "b": b, "pp": {}, "tg": {}}
+    for (kind, width), by_r in sorted(cell.items()):
+        rnds = [rnd for rnd in sorted(by_r) if a in by_r[rnd] and b in by_r[rnd]]
+        if not rnds:
+            continue
+        g = [100.0 * (by_r[rnd][b] / by_r[rnd][a] - 1.0) for rnd in rnds]
+        out[kind][str(width)] = {"rounds": rnds, "gain_pct": g, "median": common.median(g), "min": min(g), "max": max(g), "n": len(g),
+                                 "same_sign": all(x > 0 for x in g) or all(x < 0 for x in g)}
+    return out
+
+
+def summarize_bench(rows: list[dict], cfg_names: list[str], ref: str = "off") -> dict:
     """rows: {config, round, kind (pp|tg), width, tok_s}. Per width: median ms per batch of each config over the rounds in which every
-    config has the width, and gain_pct_<cfg> = ms_off / ms_<cfg> - 1 in percent. tg: median decode tok/s per config."""
+    config has the width, and gain_pct_<cfg> = ms_<ref> / ms_<cfg> - 1 in percent. tg: median decode tok/s per config."""
     cells: dict = {}
     for r in rows:
         if r.get("tok_s"):
@@ -149,12 +184,12 @@ def summarize_bench(rows: list[dict], cfg_names: list[str]) -> dict:
         ms = {c: 1e3 * width / tok[c] for c in cfg_names if tok[c]}
         ent = {"ms": ms, "tok_s": tok, "rounds": rounds, "uses_kernel": width in MC_WIDTHS}
         for c in cfg_names:
-            if c != "off" and ms.get("off") and ms.get(c):
-                ent[f"gain_pct_{c}"] = 100.0 * (ms["off"] / ms[c] - 1.0)
+            if c != ref and ms.get(ref) and ms.get(c):
+                ent[f"gain_pct_{c}"] = 100.0 * (ms[ref] / ms[c] - 1.0)
         out["pp"][str(width)] = ent
     base = out["tg"].get("1") or next(iter(out["tg"].values()), None)
-    if base and base["tok_s"].get("off"):
-        out["tg_gain_pct"] = {c: 100.0 * (base["tok_s"][c] / base["tok_s"]["off"] - 1.0) for c in cfg_names if base["tok_s"].get(c)}
+    if base and base["tok_s"].get(ref):
+        out["tg_gain_pct"] = {c: 100.0 * (base["tok_s"][c] / base["tok_s"][ref] - 1.0) for c in cfg_names if base["tok_s"].get(c)}
     return out
 
 
@@ -195,12 +230,12 @@ def run_tbo(cmd: list[str], env: dict, timeout: float) -> dict:
     return row
 
 
-def tbo_part(bin_dir, budget: common.Budget, notes: list) -> list[dict]:
+def tbo_part(bin_dir, budget: common.Budget, notes: list, order: list | None = None) -> list[dict]:
     out = []
     if not (bin_dir / "test-backend-ops").exists():
         notes.append(f"{bin_dir / 'test-backend-ops'} not found; part t and f skipped")
         return out
-    for name, cenv in TBO_ORDER:
+    for name, cenv in (TBO_ORDER if order is None else order):
         if budget.expired(60):
             notes.append(f"t: time budget used up, config {name} skipped")
             continue
@@ -291,12 +326,15 @@ def bench_entries(cmd: list[str], env: dict, timeout: float) -> tuple[list[dict]
     return got, None if got else "no entries in llama-bench output"
 
 
-def bench_part(bin_dir, model: str, budget: common.Budget, notes: list, rows: list, allow_power_cap: bool, save) -> None:
+def bench_part(bin_dir, model: str, budget: common.Budget, notes: list, rows: list, allow_power_cap: bool, save,
+               configs: list | None = None, rounds: int = ROUNDS, bins: dict | None = None, tag: str = "r2b_mc") -> None:
+    """configs: [(name, env)] (default CONFIGS); bins: {name: bin_dir} when the configs are different builds."""
     unhealthy = False
-    for rnd in range(ROUNDS):
-        order = CONFIGS if rnd % 2 == 0 else list(reversed(CONFIGS))
-        for name, cenv in order:
-            for kind, cmd in (("pp", bench_pp_cmd(bin_dir, model)), ("tg", bench_tg_cmd(bin_dir, model))):
+    configs = CONFIGS if configs is None else configs
+    for rnd in range(rounds):
+        for name, cenv in round_configs(configs, rnd):
+            bd = (bins or {}).get(name, bin_dir)
+            for kind, cmd in (("pp", bench_pp_cmd(bd, model)), ("tg", bench_tg_cmd(bd, model))):
                 if budget.expired(60):
                     notes.append(f"b: time budget used up, round {rnd} {name} {kind} and later skipped")
                     return
@@ -314,7 +352,7 @@ def bench_part(bin_dir, model: str, budget: common.Budget, notes: list, rows: li
                                  "width": r["width"], "tok_s": r["tok_s"], "stddev": r["stddev"], "ms_per_batch": r["ms_per_batch"],
                                  "samples_ts": r["samples_ts"], "smi": smi})
                 save()
-                print("[r2b_mc] r%d %s %s sm %s MHz" % (rnd, name, kind, smi.get("sm_mhz_med")), flush=True)
+                print("[%s] r%d %s %s sm %s MHz" % (tag, rnd, name, kind, smi.get("sm_mhz_med")), flush=True)
 
 
 def part_budget_s(left_s: float, part: str, remaining: list[str]) -> float:

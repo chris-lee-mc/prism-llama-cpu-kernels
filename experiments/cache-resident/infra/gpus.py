@@ -33,11 +33,21 @@ RUNPOD_CANDIDATES: dict[str, list[str]] = {
         "NVIDIA RTX PRO 6000 Blackwell Server Edition",
         "NVIDIA RTX PRO 6000 Blackwell Max-Q Workstation Edition",
     ],
+    # 600 W editions only (paired kernel and spec runs that must not land on a Max-Q)
+    "pro6000_600w": [
+        "NVIDIA RTX PRO 6000 Blackwell Workstation Edition",
+        "NVIDIA RTX PRO 6000 Blackwell Server Edition",
+    ],
     "rtx5090": ["NVIDIA GeForce RTX 5090"],
     "rtx4090": ["NVIDIA GeForce RTX 4090"],
     "rtx3090": ["NVIDIA GeForce RTX 3090"],
     "l40s": ["NVIDIA L40S"],
 }
+
+
+def tag_prefix(key: str) -> str:
+    """Result dir tag prefix of a cascade key: the GPU tags of pro6000_600w start with pro6000."""
+    return key.split("_")[0]
 
 
 def tag_from_name(name: str | None) -> str:

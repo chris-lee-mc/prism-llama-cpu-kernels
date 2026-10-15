@@ -33,6 +33,7 @@ R2b spec (PRO 6000 Max-Q, 24 prompts, 8 per category; exploratory, rely on the i
 - ngram-mod,draft-simple (BF16 draft): 1.31x [1.06, 1.74] overall, 2.54x [1.97, 3.47] full-file, 0.89x diff, 1.05x tool trace. ngram-mod alone on R2a prompts: 1.33x, 2.32x (different host, not paired). Combined with a Q8_0 draft is untested. Not tried on short prompts.
 
 Other caveats:
+- draft-simple numbers may be lower bounds. On CPU with a tiny hybrid model, the fork's draft context restores a stale recurrent state after every drafting step (see PLAN.md, Status); `wrap_b` measures the effect on the real draft (k4q8 vs k4q8_ckpt) before any guidance changes.
 - ngram-mod alone checkpoints on every drafting step (n_rs_seq = 0 on the hybrid target), so its numbers are lower bounds. With draft-simple in the list, drafts up to K roll back in the batch.
 - Speculation changes outputs slightly through batch numerics: 88-100% of outputs matched target alone token for token.
 - Results are for this model, hardware and prompt mix. Re-measure for other workloads.

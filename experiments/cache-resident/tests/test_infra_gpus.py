@@ -58,3 +58,9 @@ def test_cascade_errors():
     with pytest.raises(ValueError):
         gpus.cascade("rtx5090", "moon")
     assert set(gpus.RUNPOD_CANDIDATES) >= {"pro6000", "rtx5090", "rtx4090", "rtx3090", "l40s"}
+
+
+def test_pro6000_600w_excludes_max_q_and_maps_to_the_pro6000_tags():
+    c = gpus.cascade("pro6000_600w")
+    assert len(c) == 4 and not any("Max-Q" in n for n, _ in c) and "Workstation" in c[0][0] and "Server" in c[2][0]
+    assert gpus.tag_prefix("pro6000_600w") == "pro6000" and gpus.tag_prefix("rtx4090") == "rtx4090"
