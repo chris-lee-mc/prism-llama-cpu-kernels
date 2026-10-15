@@ -357,7 +357,7 @@ def step_split(run: dict) -> dict:
         if out["draft_ms_per_step"] is not None and agg["ms_per_step"]:
             out["rest_ms_per_step"] = agg["ms_per_step"] - out["draft_ms_per_step"]
         if any("dur_p_ms" in d for d in st.values()):
-            # GGML_EXP_DRAFT_TIME: the draft-context decode of the verify batch (synchronized), the most a skipped re-eval could save
+            # GGML_EXP_DRAFT_TIME: the draft-context decode of the verify batch, isolated (target synchronized before, draft after): the most a skipped re-eval could save
             dp, cp = sum(d.get("dur_p_ms", 0.0) for d in st.values()), sum(d.get("calls_p", 0) for d in st.values())
             out.update(reeval_ms=dp, reeval_calls=cp, reeval_ms_per_call=dp / cp if cp else None,
                        reeval_ms_per_step=dp / agg["steps"] if agg["steps"] else None,

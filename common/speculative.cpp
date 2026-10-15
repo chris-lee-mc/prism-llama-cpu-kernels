@@ -143,7 +143,7 @@ static bool common_speculative_are_compatible(
 
 using common_speculative_draft_params_vec = std::vector<common_speculative_draft_params>;
 
-// experiment: GGML_EXP_DRAFT_TIME=1 times the decode of the verify batch on the draft context (synchronizes, changes the timing)
+// experiment: GGML_EXP_DRAFT_TIME=1 times the decode of the verify batch on the draft context (waits for the target first, synchronizes, changes the timing)
 static bool common_exp_draft_time() {
     static const bool enabled = [] {
         const char * env = std::getenv("GGML_EXP_DRAFT_TIME");
@@ -1054,6 +1054,10 @@ struct common_speculative_impl_draft_simple : public common_speculative_impl {
                 batch_dft = this->batch;
                 batch_dft.logits = nullptr;
             }
+        }
+
+        if (exp_draft_time && params.ctx_tgt) {
+            llama_synchronize(params.ctx_tgt); // decode is async: wait for the target verify so only the draft cost is timed
         }
 
         const int64_t t_us = exp_draft_time ? ggml_time_us() : 0;

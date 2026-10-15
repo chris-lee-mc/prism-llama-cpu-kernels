@@ -36,6 +36,8 @@ def test_switches_are_env_gated_and_default_off():
     assert "if (exp_skip_reeval && batch.token" in proc and "batch.n_tokens <= (int32_t) n_batch_dft" in proc and "llama_memory_seq_pos_max(mem, s)" in proc
     assert proc.index("const int ret = llama_decode(ctx_dft, batch_dft);") > proc.index("exp_skip_reeval")
     assert "if (exp_draft_time) {\n            llama_synchronize(ctx_dft);" in proc                                   # the timing needs the synchronize
+    # llama_decode is async: the target verify must be done before the timed window opens, else dur_p includes target time
+    assert proc.index("llama_synchronize(params.ctx_tgt);") < proc.index("const int64_t t_us = exp_draft_time") < proc.index("llama_decode(ctx_dft, batch_dft)")
     assert "batch.n_tokens + (dp.n_past - p0) + (llama_pos) n_seq <= (llama_pos) n_batch_dft" in spec                  # catch-up fits the batch
     assert "common_sampler_sample(smpl, ctx_dft, i == 0 ? i_last[seq_id] : i_batch, true);" in spec       # id_last may not be batch row 0
     srv = (REPO / "tools" / "server" / "server-context.cpp").read_text()
@@ -211,14 +213,41 @@ def test_probe_verdict_keeps_the_whole_batch_case_apart():
     assert v["batch"]["exact"] is True and v["single"]["exact"] is False and v["batch_whole"]["exact"] is False
 
 
+BOUNDARY_OUT = {"n_vocab": 10, "n_rs_seq": 4, "n_prompt": 64, "n_extra": 5, "ngl": 99, "cases": [
+    {"kept": 0, "rollback": 5, "decode": "batch", "error": "decode failed"},
+    {"kept": 1, "rollback": 4, "decode": "batch", "seq_rm_ok": True, "max_abs_diff": 2e-6, "max_abs_ref": 9.0, "top1_equal": True},
+    {"kept": 2, "rollback": 3, "decode": "batch", "seq_rm_ok": True, "max_abs_diff": 1e-6, "max_abs_ref": 9.0, "top1_equal": True},
+    {"kept": 4, "rollback": 1, "decode": "batch", "seq_rm_ok": True, "max_abs_diff": 1e-6, "max_abs_ref": 9.0, "top1_equal": True},
+    {"kept": 1, "rollback": 4, "decode": "single", "seq_rm_ok": True, "max_abs_diff": 12.0, "max_abs_ref": 9.0, "top1_equal": False}]}
+
+
+def test_probe_verdict_reports_the_rollback_equal_n_rs_row():
+    v = wrap_b.probe_verdict(BOUNDARY_OUT)
+    assert "batch_whole" not in v                                                  # kept 0 failed to decode: out of the window, no entry
+    assert v["batch"]["n"] == 3 and v["batch"]["max_rollback"] == 4 and v["batch"]["exact"] is True and set(v["batch"]["by_rollback"]) == {"4", "3", "1"}
+    assert v["boundary"] == {"rollback": 4, "kept": 1, "max_abs_diff": 2e-6, "max_abs_ref": 9.0, "top1_equal": True, "exact": True}
+    assert v["single"]["max_rollback"] == 4 and v["single"]["exact"] is False
+    line = wrap_b.probe_notes("n4", "pq2", dict(BOUNDARY_OUT, verdict=v))
+    assert "rollback 4 == n_rs_seq (kept 1)" in line and "exact True" in line
+    # a boundary row with a failed seq_rm is not exact even when the logits agree
+    bad = dict(BOUNDARY_OUT, cases=[dict(c, seq_rm_ok=False) if c["kept"] == 1 and c["decode"] == "batch" and "error" not in c else c for c in BOUNDARY_OUT["cases"]])
+    assert wrap_b.probe_verdict(bad)["boundary"]["exact"] is False and wrap_b.probe_verdict(bad)["batch"]["exact"] is False
+    # the old shape (n_extra == n_rs): no boundary row beyond the largest kept >= 1 case, kept 0 stays the whole-batch case
+    old = wrap_b.probe_verdict(PROBE_OUT)
+    assert old["batch_whole"]["by_rollback"] == {"4": 11.0} and old["batch"]["max_rollback"] == 3 and "boundary" not in old
+    assert "not probed" in wrap_b.probe_notes("n4", "pq2", dict(PROBE_OUT, verdict=old))
+
+
 def test_probe_runs_cover_the_b2_windows():
     runs = {l: (m, a) for l, m, a in wrap_b.PROBE_RUNS}
     assert set(runs) == {"n4", "n16", "n64"} and runs["n4"][0] == ("draft_q8_0", "pq2") and runs["n16"][0] == runs["n64"][0] == ("pq2",)
     for label, n in (("n16", 16), ("n64", 64)):
         a = runs[label][1]
-        assert a[a.index("--n-rs") + 1] == a[a.index("--extra") + 1] == str(n) and a[a.index("--modes") + 1] == "batch"
+        assert a[a.index("--n-rs") + 1] == str(n) and a[a.index("--extra") + 1] == str(n + 1) and a[a.index("--modes") + 1] == "batch"
+    a = runs["n4"][1]
+    assert a[a.index("--n-rs") + 1] == "4" and a[a.index("--extra") + 1] == "5"       # K + 1 tokens, rollback up to K == n_rs_seq
     src = wrap_b.PROBE_SRC.read_text()
-    assert '--modes' in src and 'modes == "batch"' in src and "n_extra > n_rs" in src
+    assert '--modes' in src and 'modes == "batch"' in src and "n_extra > n_rs + 1" in src and "n_extra - m > n_rs) continue" in src
 
 
 def test_wrap_b_gate_and_draft_state_check():
@@ -227,11 +256,17 @@ def test_wrap_b_gate_and_draft_state_check():
     vs = {n: {"all": {"alpha": a}} for n, a in (("k4q8_ckpt", 0.60), ("k4q8", 0.01), ("k4q8_ckpt_t", 0.61))}
     ds = wrap_b.draft_state(vs)
     assert ds["matches_reference"] == {"k4q8": False, "k4q8_ckpt_t": True} and wrap_b.draft_state({}) is None
-    lines = wrap_b.verdict_lines({"pairs": {}, "draft_state": ds, "reeval": {"k4q8_ckpt_t": {"reeval_ms_per_call": 1.5, "reeval_ms_per_step": 1.5,
-                                                                                         "reeval_share_of_step": 0.07}},
+    rb = {"timed": "k4q8_ckpt_t", "reference": "k4q8_ckpt", "isolated_ms_per_step": 1.5, "end_to_end_delta_ms_per_step": 0.4,
+          "ms_per_step_timed": 20.4, "ms_per_step_reference": 20.0}
+    lines = wrap_b.verdict_lines({"pairs": {}, "draft_state": ds, "reeval_bounds": rb,
+                                  "reeval": {"k4q8_ckpt_t": {"reeval_ms_per_call": 1.5, "reeval_ms_per_step": 1.5, "reeval_share_of_step": 0.07}},
                                   "ngram_cut": {"ngram": {"ngram-mod": {"resets": 2}}}, "paths": {}})
     assert any(l.startswith("draft state: alpha k4q8_ckpt 0.600") and "'k4q8': False" in l for l in lines)
-    assert any("1.500 ms per step" in l and "upper bound" in l for l in lines) and any("low-acceptance resets 2" in l for l in lines)
+    assert any("1.500 ms per step" in l and "isolated cost" in l and "at most 1.500 ms (isolated), at least 0.400 ms (end-to-end delta)" in l
+               for l in lines) and any("low-acceptance resets 2" in l for l in lines)
+    assert wrap_b.reeval_bounds({"k4q8_ckpt_t": {"reeval_ms_per_step": 1.5, "ms_per_step": 20.4}, "k4q8_ckpt": {"ms_per_step": 20.0}}) == dict(
+        rb, end_to_end_delta_ms_per_step=pytest.approx(0.4))
+    assert wrap_b.reeval_bounds({"k4q8_ckpt_t": {"ms_per_step": 20.4}, "k4q8_ckpt": {"ms_per_step": 20.0}}) is None
     assert lines[-1] == wrap_b.NOTE_EQ
 
 
@@ -457,7 +492,7 @@ def test_wrap_b_end_to_end_with_fakes(wpod):
     assert m["runs"]["k4q8_ckpt"]["blocks"][0]["exp_switches"] == [wrap_b.CKPT] and m["runs"]["k4q8"]["blocks"][0]["exp_switches"] == []
     assert m["runs"]["k4q8_ckpt_t"]["blocks"][0]["exp_switches"] == [wrap_b.CKPT, wrap_b.TIME]
     assert d["config"]["envs"]["ngram_rs64"] == {wrap_b.NGRAM_RS: "64"} and wrap_b.NOTE_EQ in d["notes"]
-    assert any(n.startswith("draft state: alpha") for n in d["notes"]) and any("ms per step" in n and "upper bound" in n for n in d["notes"])
+    assert any(n.startswith("draft state: alpha") for n in d["notes"]) and any("ms per step" in n and "at most" in n and "at least" in n for n in d["notes"])
     assert "rpa_secretsecret456" not in json.dumps(d)
 
 

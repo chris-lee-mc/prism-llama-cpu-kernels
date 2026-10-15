@@ -1,6 +1,7 @@
 // Rollback probe for recurrent / hybrid models (n_rs_seq > 0): is the state after llama_memory_seq_rm the state of the kept tokens?
 // Decode a prompt, then n extra tokens either one at a time (as draft-simple drafts) or as one batch (as a verify batch), roll back
 // to m kept tokens, decode one probe token and compare its logits with a context that decoded only the m kept tokens the same way.
+// n_extra may be n_rs + 1: a verify batch of K + 1 tokens with n_rs = K. Then kept 1 is the largest rollback the server does (K), kept 0 is out of the window.
 // Build: see exps/wrap_b.py build_probe(). Prints one JSON line.
 #include "llama.h"
 
@@ -73,8 +74,8 @@ int main(int argc, char ** argv) {
         else if (a == "--seed") seed = (unsigned) atoi(next());
         else { fprintf(stderr, "unknown arg %s\n", a.c_str()); return 2; }
     }
-    if (model.empty() || n_extra < 1 || n_extra > n_rs || (modes != "both" && modes != "single" && modes != "batch")) {
-        fprintf(stderr, "usage: %s -m model.gguf [-ngl N] [--n-rs 4] [--prompt 64] [--extra 4 (<= n-rs)] [--modes both|single|batch] [--seed S]\n", argv[0]);
+    if (model.empty() || n_extra < 1 || n_extra > n_rs + 1 || (modes != "both" && modes != "single" && modes != "batch")) {
+        fprintf(stderr, "usage: %s -m model.gguf [-ngl N] [--n-rs 4] [--prompt 64] [--extra 4 (<= n-rs + 1)] [--modes both|single|batch] [--seed S]\n", argv[0]);
         return 2;
     }
 
@@ -120,6 +121,7 @@ int main(int argc, char ** argv) {
     for (int m = 0; m < n_extra; ++m) {
         for (int single = 1; single >= 0; --single) {
             if ((single && modes == "batch") || (!single && modes == "single")) continue;
+            if (single && n_extra - m > n_rs) continue; // one-token decodes: draft-simple never rolls back more than n_rs
             bool ok_ref = true, ok_rm = true;
             const auto ref = run(m, m, single, ok_ref);
             const auto got = run(n_extra, m, single, ok_rm);

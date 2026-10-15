@@ -10,7 +10,7 @@ itself and the mid model (std 0.05) repeats with breaks: n-gram drafts that are 
 shape as an attention-only llama model (l, lnear: std 0.25 / 0.27) gives a draft context where seq_rm is exact (type PART).
 p  cr_rs_rollback_probe on the probe model (the target weights without the ASCII-only rows): logits after a seq_rm back over one-token
    decodes or one batch, against a context that decoded only the kept tokens: n_rs_seq 4 (both modes), 16 and 64 (batches), the runs of
-   wrap_b.PROBE_RUNS.
+   wrap_b.PROBE_RUNS (n_rs_seq + 1 extra tokens: the rollback == n_rs_seq row of a full rejection is the boundary).
 s  llama-server, greedy, 3 short prompts of 96 tokens, -c 512 (LLAMA_TRACE=1: the per-step accepted a/b lines give the rollback counts):
    hybrid target, draft-simple K=4 (k4), with GGML_EXP_DRAFT_CKPT=1 (k4_ckpt, the correct draft state), with GGML_EXP_SKIP_DRAFT_REEVAL=1
    (k4_skip: must be ignored, a recurrent draft inherits the stale rollback), with GGML_EXP_DRAFT_TIME=1 on top of the checkpoint
@@ -227,9 +227,7 @@ def run(args) -> int:
                     res["verdict"] = v = wrap_b.probe_verdict(res)
                     res["cmd"] = [pathlib.Path(c).name if os.sep in str(c) else c for c in res.get("cmd", [])]
                     doc["probe"]["runs"][label] = res
-                    parts = ["%s: max logit diff %.3g (logits up to %.3g), top-1 equal %d/%d, exact %s" % (
-                        m, v[m]["max_abs_diff"], v[m]["max_abs_ref"], v[m]["top1_equal"], v[m]["n"], v[m]["exact"]) for m in ("single", "batch") if m in v]
-                    notes.append(f"probe {label} (n_rs_seq {res.get('n_rs_seq')}): " + "; ".join(parts))
+                    notes.append(wrap_b.probe_notes(label, "probe", res))
         if "s" in args.parts and (bin_dir / "llama-server").exists():
             from infra.results import artifact_path
             cfgs = server_configs()

@@ -7,9 +7,12 @@ Experiment-only switches in this branch (env, default off, read once):
   and restores it after (the existing checkpoint path). Without it the draft context of a hybrid draft is rolled back with seq_rm after
   one-token decodes. The recurrent snapshot of a GDN layer is written only for the tokens of the last ubatch (gated_delta_net: "older
   slots are caller-owned"), so that seq_rm restores a stale state; part r measures this directly and k4q8 vs k4q8_ckpt shows it in alpha.
-- GGML_EXP_DRAFT_TIME=1 (B1, upstream TODO TAG_SPEC_AVOID_DRAFT_REEVAL): draft-simple process() times the decode of the verify batch on
-  the draft context (llama_synchronize after llama_decode) and prints it on the exp stats line (dur_p). With the correct state (k4q8_ckpt_t)
-  this is the upper bound of what skipping the re-eval can save per step. It does not skip anything.
+- GGML_EXP_DRAFT_TIME=1 (B1, upstream TODO TAG_SPEC_AVOID_DRAFT_REEVAL): draft-simple process() first waits for the target (llama_synchronize
+  of ctx_tgt: llama_decode is async and the server calls process() right after the target verify), then times the decode of the verify
+  batch on the draft context (llama_synchronize of ctx_dft after llama_decode) and prints it on the exp stats line (dur_p). With the correct
+  state (k4q8_ckpt_t) dur_p is the isolated draft-context cost of the re-eval. Without the instrumentation the re-eval overlaps the target
+  verify, so the saving of skipping it is at most the isolated cost and at least the end-to-end delta of k4q8_ckpt_t minus k4q8_ckpt
+  (the synchronizes remove the overlap). It does not skip anything.
 - GGML_EXP_SKIP_DRAFT_REEVAL=1 (B1 prototype, not in this matrix): the draft context keeps its drafted tokens and process() skips the verify
   batch. It is allowed only for one slot, draft-simple alone and an attention-only draft (seq_rm exact). A hybrid draft (the Qwen3.5-0.8B
   of this matrix) inherits the stale rollback above, so the switch is ignored there (warning in the server log). Not tested on a GPU.
@@ -19,23 +22,26 @@ Gate: the GPU tag must be a sm_120 card with enough memory (pro6000-*, rtx5090);
 not apply: every comparison here is paired inside one pod and is not PR evidence.
 r  rollback probe (exps/csrc/cr_rs_rollback_probe.cpp, built against libllama of the pod build): prompt of 64 tokens, then extra tokens
    decoded one at a time or as one batch, seq_rm back to the kept tokens, one probe token; logits against a context that decoded only
-   the kept tokens the same way. Runs: n4 (n_rs_seq 4, 4 extra, both decode modes) on the Qwen3.5-0.8B Q8_0 draft and the Bonsai 2 27B PQ2_0
-   target; n16 and n64 (n_rs_seq 16 / 64, 16 / 64 extra, batch mode only) on the target: the window sizes B2 uses, rollbacks of 1 to n-1
-   tokens of a verify batch. Untimed.
+   the kept tokens the same way. Runs: n4 (n_rs_seq 4, 5 extra, both decode modes) on the Qwen3.5-0.8B Q8_0 draft and the Bonsai 2 27B PQ2_0
+   target; n16 and n64 (n_rs_seq 16 / 64, 17 / 65 extra, batch mode only) on the target: the window sizes B2 uses. The batch has n_rs_seq + 1
+   tokens like a verify batch (K + 1 with K = n_rs_seq): rollbacks of 1 to n_rs_seq tokens, the last one (kept 1, a full rejection, snapshot
+   plane n_rs_seq) is reported as the boundary row. kept 0 (whole batch) is out of the window and not a server case. Untimed.
 m  matrix, the R2a balanced subset (24 prompts, 8 per category, same seed, ctx 16384, -lv 4), interleaved by prompt blocks (--blocks,
    default 2, a fresh server per block and config, config order changes per block):
    base         target alone
    k4q8         draft-simple K=4, Qwen3.5-0.8B Q8_0 draft (the CONFIG-GUIDANCE setting; stale draft state after partial acceptance)
    k4q8_ckpt    k4q8 with GGML_EXP_DRAFT_CKPT=1 (correct draft state, the reference)
-   k4q8_ckpt_t  k4q8_ckpt with GGML_EXP_DRAFT_TIME=1 (draft-context decode of the verify batch timed; the synchronize costs time, so it is
-                a separate config and k4q8_ckpt_t vs k4q8_ckpt is the cost of the instrumentation)
+   k4q8_ckpt_t  k4q8_ckpt with GGML_EXP_DRAFT_TIME=1 (target and draft synchronized, draft-context decode of the verify batch timed; this
+                removes the overlap with the target, so it is a separate config and k4q8_ckpt_t vs k4q8_ckpt is the end-to-end delta that
+                the overlap hides in k4q8_ckpt)
    ngram        --spec-type ngram-mod, fork defaults (checkpoint + replay on the hybrid target)
    ngram_rs16   ngram with GGML_EXP_NGRAM_RS=16 (drafts cut to 16: a draft-length setting as well as the rollback path)
    ngram_rs64   ngram with GGML_EXP_NGRAM_RS=64 (no cut at the fork default n_max 64: the clean rollback-path comparison with ngram)
    Reported: per config and category tok/s, speedup over base with bootstrap 95% CIs (prompts paired), r, alpha, greedy text equality
    vs base; the pairs k4q8_ckpt vs k4q8, k4q8_ckpt_t vs k4q8_ckpt, rs16 / rs64 vs ngram per category with paired bootstrap CIs; ms per
    step and its split from the server statistics (dur g of the drafting implementation vs the rest); the re-eval time per step of
-   k4q8_ckpt_t (reeval_ms_per_step, its share of the step); the low-acceptance resets of ngram-mod per config (ngram_cut.*.resets: the
+   k4q8_ckpt_t (reeval_ms_per_step, the isolated cost, and its share of the step) next to the end-to-end ms per step delta of k4q8_ckpt_t
+   over k4q8_ckpt (reeval_bounds); the low-acceptance resets of ngram-mod per config (ngram_cut.*.resets: the
    cut drafts of rs16 change the acceptance fraction and so the reset rule); path verification from the -lv 4 logs (n_rs_seq of the
    target and the draft, rollback path, the GGML_EXP_* switch lines, the cut counters).
    The draft state is checked by alpha, not by text: the target verifies every token, so a wrong draft state lowers alpha and leaves the
@@ -73,9 +79,10 @@ WB_TAGS = ("pro6000-ws", "pro6000-server", "pro6000-maxq", "rtx5090")        # s
 END_RESERVE_S = 25.0
 PROBE_SRC = common.EXP_DIR / "exps" / "csrc" / "cr_rs_rollback_probe.cpp"
 # (label, models, argv): n4 is the draft-simple window (both decode modes); n16 and n64 are the windows B2 gives the target (verify batches only)
-PROBE_RUNS = [("n4", ("draft_q8_0", "pq2"), ["--n-rs", "4", "--prompt", "64", "--extra", "4"]),
-              ("n16", ("pq2",), ["--n-rs", "16", "--prompt", "64", "--extra", "16", "--modes", "batch"]),
-              ("n64", ("pq2",), ["--n-rs", "64", "--prompt", "64", "--extra", "64", "--modes", "batch"])]
+# extra = n_rs + 1: a verify batch of K + 1 tokens with n_rs = K; kept 1 is the full rejection (rollback K = n_rs, the snapshot plane n_rs)
+PROBE_RUNS = [("n4", ("draft_q8_0", "pq2"), ["--n-rs", "4", "--prompt", "64", "--extra", "5"]),
+              ("n16", ("pq2",), ["--n-rs", "16", "--prompt", "64", "--extra", "17", "--modes", "batch"]),
+              ("n64", ("pq2",), ["--n-rs", "64", "--prompt", "64", "--extra", "65", "--modes", "batch"])]
 PROBE_ARGS = PROBE_RUNS[0][2]
 EXACT_REL = 1e-3          # a rollback is exact when the logits differ by less than this fraction of the largest logit
 REPO_ROOT = common.EXP_DIR.parent.parent
@@ -142,8 +149,19 @@ def matrix_summary(cfgs: list[dict], runs: dict) -> dict:
     split = {n: r.get("step_split") for n, r in runs.items()}
     return {"vs_base": vs_base, "pairs": {f"{a}_vs_{b}": sp.pair_by_category(runs, a, b) for a, b in PAIRS if a in runs and b in runs},
             "step_split": split, "paths": verify_paths(cfgs, runs), "ngram_cut": {n: v for n, v in cut.items() if v},
-            "draft_state": draft_state(vs_base), "reeval": {n: {k: v for k, v in (d or {}).items() if k.startswith(("reeval", "prefill"))}
+            "draft_state": draft_state(vs_base), "reeval_bounds": reeval_bounds(split), "reeval": {n: {k: v for k, v in (d or {}).items() if k.startswith(("reeval", "prefill"))}
                                                             for n, d in split.items() if d and "reeval_ms" in d}}
+
+
+def reeval_bounds(split: dict, timed: str = "k4q8_ckpt_t", ref: str = DRAFT_STATE_REF) -> dict | None:
+    """Bounds of the saving per step from skipping the draft re-eval. isolated: dur_p of the timed config (target synchronized first, so only
+    the draft-context cost). end_to_end_delta: ms per step of the timed config minus the reference (the synchronizes remove the overlap of
+    the re-eval with the target verify). Achievable saving: at most isolated, at least end_to_end_delta."""
+    a, b = (split.get(timed) or {}), (split.get(ref) or {})
+    if a.get("reeval_ms_per_step") is None or not a.get("ms_per_step") or not b.get("ms_per_step"):
+        return None
+    return {"timed": timed, "reference": ref, "isolated_ms_per_step": a["reeval_ms_per_step"], "end_to_end_delta_ms_per_step": a["ms_per_step"] - b["ms_per_step"],
+            "ms_per_step_timed": a["ms_per_step"], "ms_per_step_reference": b["ms_per_step"]}
 
 
 def draft_state(vs_base: dict) -> dict | None:
@@ -173,10 +191,16 @@ def verdict_lines(summ: dict) -> list[str]:
     if ds:
         out.append("draft state: alpha " + ", ".join("%s %s" % (n, _f(v)) for n, v in ds["alpha"].items()) + "; within %.2f of %s: %s" % (
             ds["tol"], ds["reference"], ds["matches_reference"]))
+    rb = summ.get("reeval_bounds")
     for n, d in (summ.get("reeval") or {}).items():
-        out.append("%s: draft-context decode of the verify batch %s ms per call, %s ms per step (%s of the step; synchronized, upper bound of "
-                   "the saving from skipping the re-eval)" % (n, _f(d.get("reeval_ms_per_call")), _f(d.get("reeval_ms_per_step")),
-                                                              _f(d.get("reeval_share_of_step"))))
+        line = "%s: draft-context decode of the verify batch, isolated cost (target synchronized first): %s ms per call, %s ms per step (%s of the step)" % (
+            n, _f(d.get("reeval_ms_per_call")), _f(d.get("reeval_ms_per_step")), _f(d.get("reeval_share_of_step")))
+        if rb and rb["timed"] == n:
+            line += ("; end-to-end %s minus %s: %s ms per step (the overlap with the target hides the rest in the untimed path); achievable "
+                     "saving of skipping the re-eval per step: at most %s ms (isolated), at least %s ms (end-to-end delta)" % (
+                         rb["timed"], rb["reference"], _f(rb["end_to_end_delta_ms_per_step"]), _f(rb["isolated_ms_per_step"]),
+                         _f(rb["end_to_end_delta_ms_per_step"])))
+        out.append(line)
     for n, v in (summ.get("ngram_cut") or {}).items():
         for impl, d in v.items():
             if "resets" in d:
@@ -230,20 +254,46 @@ def run_probe(exe, model: str, ngl: int, timeout: float, args: list | None = Non
 
 def probe_verdict(res: dict) -> dict:
     """Per decode mode: largest logit difference and top-1 agreement over the rollbacks. single: one-token decodes (draft-simple drafting),
-    rollback 1..n_extra; batch: one batch, rollback 1..n_extra - 1 (a verify batch keeps its first token); batch_whole: the whole batch.
-    exact: every case of the mode is within EXACT_REL of the largest logit and has the same top-1."""
+    rollbacks 1..n_rs; batch: one batch, kept >= 1 (rollback <= n_rs when n_extra <= n_rs + 1; with n_extra = n_rs + 1 this includes the
+    server's full rejection of a K + 1 token verify batch, rollback == n_rs, reported as boundary); batch_whole: kept 0, the whole batch
+    (never done by the server; with n_extra = n_rs + 1 it is out of the window and may fail to decode, then it has no entry).
+    exact: every case of the mode is within EXACT_REL of the largest logit, has the same top-1 and a seq_rm that returned true."""
     out = {}
-    n_extra = res.get("n_extra")
+    n_rs = res.get("n_rs_seq")
     for mode in ("single", "batch", "batch_whole"):
         dec = "single" if mode == "single" else "batch"
         cs = [c for c in res.get("cases", []) if c.get("decode") == dec and "max_abs_diff" in c
-              and (mode == "single" or (c.get("rollback") == n_extra) == (mode == "batch_whole"))]
+              and (mode == "single" and (n_rs is None or c.get("rollback", 0) <= n_rs) or mode == "batch" and c.get("kept", 0) >= 1
+                   or mode == "batch_whole" and c.get("kept") == 0)]
         if cs:
             out[mode] = {"max_abs_diff": max(c["max_abs_diff"] for c in cs), "max_abs_ref": max(c["max_abs_ref"] for c in cs),
                          "top1_equal": sum(1 for c in cs if c["top1_equal"]), "n": len(cs),
-                         "exact": all(c["max_abs_diff"] <= EXACT_REL * max(c["max_abs_ref"], 1.0) and c["top1_equal"] for c in cs),
+                         "exact": all(_case_exact(c) for c in cs), "max_rollback": max(c["rollback"] for c in cs),
                          "by_rollback": {str(c["rollback"]): c["max_abs_diff"] for c in cs}}
+    cb = [c for c in res.get("cases", []) if c.get("decode") == "batch" and "max_abs_diff" in c and n_rs and c.get("rollback") == n_rs
+          and c.get("kept", 0) >= 1]
+    if cb:
+        c = cb[0]
+        out["boundary"] = {"rollback": n_rs, "kept": c["kept"], "max_abs_diff": c["max_abs_diff"], "max_abs_ref": c["max_abs_ref"],
+                           "top1_equal": c["top1_equal"], "exact": _case_exact(c)}
     return out
+
+
+def _case_exact(c: dict) -> bool:
+    return c["max_abs_diff"] <= EXACT_REL * max(c["max_abs_ref"], 1.0) and c["top1_equal"] and c.get("seq_rm_ok", True)
+
+
+def probe_notes(label: str, name: str, res: dict) -> str:
+    """One console / notes line of a probe run: the modes and, when present, the rollback == n_rs row."""
+    v = res.get("verdict") or {}
+    parts = ["%s: max logit diff %.3g, exact %s" % (m, v[m]["max_abs_diff"], v[m]["exact"]) for m in ("single", "batch") if m in v]
+    b = v.get("boundary")
+    if b:
+        parts.append("rollback %d == n_rs_seq (kept %d): diff %.3g, top-1 equal %s, exact %s" % (b["rollback"], b["kept"], b["max_abs_diff"],
+                                                                                               b["top1_equal"], b["exact"]))
+    elif "batch" in v:
+        parts.append("rollback == n_rs_seq not probed (largest batch rollback %d)" % v["batch"]["max_rollback"])
+    return "r %s %s (n_rs_seq %s): " % (label, name, res.get("n_rs_seq")) + "; ".join(parts)
 
 
 def probe_part(bin_dir, models: dict, budget: common.Budget, notes: list) -> dict:
@@ -263,14 +313,13 @@ def probe_part(bin_dir, models: dict, budget: common.Budget, notes: list) -> dic
             res = run_probe(exe, models[name], 99, budget.timeout(240, reserve_s=10), argv)
             res["verdict"] = probe_verdict(res)
             ent["models"][name] = res
-            v = res["verdict"]
-            if v:
-                parts = ["%s: max logit diff %s, exact %s" % (m, _f(v[m]["max_abs_diff"]), v[m]["exact"]) for m in ("single", "batch") if m in v]
-                notes.append("r %s %s (n_rs_seq %s): " % (label, name, res.get("n_rs_seq")) + "; ".join(parts))
+            if res["verdict"]:
+                notes.append(probe_notes(label, name, res))
             elif res.get("error"):
                 notes.append(f"r {label} {name}: {res['error']}")
-    out["note"] = ("batch rows with rollback == n_extra roll back the whole batch: the snapshot before its first token was never written; "
-                   "the server never does that with a verify batch (K + 1 tokens, rollback <= K); single rows are the draft-simple drafting case")
+    out["note"] = ("batch rows with kept 0 roll back the whole batch: the snapshot before its first token was never written; the server never "
+                   "does that with a verify batch (K + 1 tokens, rollback <= K = n_rs_seq). The boundary row (kept 1, rollback == n_rs_seq) is "
+                   "the full rejection of a verify batch and reads snapshot plane n_rs_seq; single rows are the draft-simple drafting case")
     return out
 
 
